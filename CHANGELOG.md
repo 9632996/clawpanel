@@ -7,6 +7,18 @@
 
 ## [未发布]
 
+## [0.16.1] - 2026-05-21
+
+### 修复 (Fixes)
+
+- **兼容 OpenClaw 最新 hello payload** — 支持从新版 `hello.server.version` 读取 Gateway 版本，同时保留旧版 `hello.serverVersion` 兼容，避免 2026.5.18+ 内核连接成功后 Dashboard 版本显示和特性门控为空
+- **推荐 OpenClaw 内核更新** — 推荐目标更新到官方 `2026.5.19` 与汉化版 `2026.5.18-zh.1`
+
+### 测试与验证 (Testing)
+
+- **协议核对** — 已确认 OpenClaw `2026.5.18` / `2026.5.19` 仍为 Gateway WebSocket 协议 v4，无需实现 v5
+- **回归验证** — 已通过 `node --test tests/kernel.test.js` 和 `npm run build`
+
 ## [0.16.0] - 2026-05-16
 
 ### 新功能 (Features)
