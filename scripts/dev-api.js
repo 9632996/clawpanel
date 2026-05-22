@@ -2429,7 +2429,7 @@ function putWildcardAllowFromWhenOpen(entry, previousAllowFrom) {
 }
 
 function platformSupportsTopLevelRequireMention(platform) {
-  return ['feishu', 'slack', 'msteams'].includes(platformStorageKey(platform))
+  return ['feishu', 'slack', 'msteams', 'mattermost'].includes(platformStorageKey(platform))
 }
 
 export function normalizeMessagingPlatformForm(platform, form = {}) {
@@ -2438,7 +2438,7 @@ export function normalizeMessagingPlatformForm(platform, form = {}) {
   if (!Object.hasOwn(normalized, 'allowFrom') && Object.hasOwn(normalized, 'allowedUsers')) {
     normalized.allowFrom = normalized.allowedUsers
   }
-  const needsAccessDefaults = ['telegram', 'discord', 'feishu', 'slack', 'signal', 'msteams', 'whatsapp', 'zalo', 'zalouser'].includes(storageKey)
+  const needsAccessDefaults = ['telegram', 'discord', 'feishu', 'slack', 'signal', 'msteams', 'whatsapp', 'zalo', 'zalouser', 'line', 'mattermost'].includes(storageKey)
   const hasDmField = Object.hasOwn(normalized, 'dmPolicy') || needsAccessDefaults
   const hasGroupField = Object.hasOwn(normalized, 'groupPolicy') || needsAccessDefaults
 
@@ -2481,12 +2481,14 @@ export function normalizeMessagingPlatformForm(platform, form = {}) {
     }
   }
 
-  if (storageKey === 'zalouser' && Object.hasOwn(normalized, 'dangerouslyAllowNameMatching')) {
-    const value = String(normalized.dangerouslyAllowNameMatching || '').trim()
-    if (!value) {
-      delete normalized.dangerouslyAllowNameMatching
-    } else {
-      normalized.dangerouslyAllowNameMatching = value === 'true'
+  for (const key of ['dangerouslyAllowNameMatching', 'dangerouslyAllowPrivateNetwork']) {
+    if (Object.hasOwn(normalized, key)) {
+      const value = String(normalized[key] || '').trim()
+      if (!value) {
+        delete normalized[key]
+      } else {
+        normalized[key] = value === 'true'
+      }
     }
   }
 
@@ -2583,11 +2585,14 @@ const MESSAGING_CREDENTIAL_FIELDS = [
   'appSecret',
   'appToken',
   'botToken',
+  'channelAccessToken',
+  'channelSecret',
   'clientId',
   'clientSecret',
   'gatewayPassword',
   'gatewayToken',
   'password',
+  'secretFile',
   'signingSecret',
   'token',
   'tokenFile',
@@ -2613,6 +2618,17 @@ function channelAnyCredentialFields(platform) {
   return []
 }
 
+function channelAnyCredentialGroups(platform) {
+  const storageKey = platformStorageKey(platform)
+  if (storageKey === 'line') {
+    return [
+      { label: 'Channel Access Token 或 Token File', fields: [['channelAccessToken', 'Channel Access Token'], ['tokenFile', 'Token File']] },
+      { label: 'Channel Secret 或 Secret File', fields: [['channelSecret', 'Channel Secret'], ['secretFile', 'Secret File']] },
+    ]
+  }
+  return []
+}
+
 const CHANNEL_DIAG_REQUIRED_FIELDS = {
   telegram: [['botToken', 'Bot Token']],
   discord: [['token', 'Bot Token']],
@@ -2620,6 +2636,7 @@ const CHANNEL_DIAG_REQUIRED_FIELDS = {
   dingtalk: [['clientId', 'Client ID'], ['clientSecret', 'Client Secret']],
   'dingtalk-connector': [['clientId', 'Client ID'], ['clientSecret', 'Client Secret']],
   msteams: [['appId', 'App ID'], ['appPassword', 'App Password']],
+  mattermost: [['botToken', 'Bot Token'], ['baseUrl', 'Base URL']],
   signal: [['account', 'Signal 账号']],
 }
 
@@ -2644,6 +2661,10 @@ function channelDiagnosisCredentialsReady(platform, form = {}) {
   const requiredFields = requiredChannelCredentialFields(platform, form)
   if (requiredFields.length) {
     return requiredFields.every(([key]) => hasConfiguredMessagingValue(form?.[key]))
+  }
+  const anyGroups = channelAnyCredentialGroups(platform)
+  if (anyGroups.length) {
+    return anyGroups.every(group => group.fields.some(([key]) => hasConfiguredMessagingValue(form?.[key])))
   }
   const anyFields = channelAnyCredentialFields(platform)
   if (anyFields.length) {
@@ -2689,14 +2710,22 @@ export function buildOpenClawChannelDiagnosis({
 
   const requiredFields = requiredChannelCredentialFields(storageKey, form)
   const anyFields = channelAnyCredentialFields(storageKey)
+  const anyGroups = channelAnyCredentialGroups(storageKey)
   const missing = requiredFields
     .filter(([key]) => !hasConfiguredMessagingValue(form?.[key]))
     .map(([, label]) => label)
+  const missingGroups = anyGroups
+    .filter(group => !group.fields.some(([key]) => hasConfiguredMessagingValue(form?.[key])))
+    .map(group => group.label)
   const hasAnyCredential = channelRootHasMessagingCredential(form)
   const anyCredentialOk = anyFields.length ? anyFields.some(([key]) => hasConfiguredMessagingValue(form?.[key])) : false
   const credentialOk = storageKey === 'zalouser'
     ? !!configExists
-    : (requiredFields.length ? missing.length === 0 : (anyFields.length ? anyCredentialOk : hasAnyCredential))
+    : (requiredFields.length
+        ? missing.length === 0
+        : (anyGroups.length
+            ? missingGroups.length === 0
+            : (anyFields.length ? anyCredentialOk : hasAnyCredential)))
   const anyLabels = anyFields.map(([, label]) => label).join(' / ')
   checks.push({
     id: 'credentials',
@@ -2707,10 +2736,14 @@ export function buildOpenClawChannelDiagnosis({
       : (credentialOk
           ? (requiredFields.length
               ? `已填写 ${requiredFields.map(([, label]) => label).join(' / ')}。`
-              : (anyFields.length ? `已填写 ${anyLabels} 其中一项。` : '已检测到可用凭证字段。'))
+              : (anyGroups.length
+                  ? `已填写 ${anyGroups.map(group => group.label).join('；')}。`
+                  : (anyFields.length ? `已填写 ${anyLabels} 其中一项。` : '已检测到可用凭证字段。')))
           : (missing.length
               ? `缺少 ${missing.join(' / ')}，请补齐后保存。`
-              : (anyFields.length ? `缺少 ${anyLabels}，至少填写一项后保存。` : '未检测到可用凭证字段，请检查渠道配置。'))),
+              : (missingGroups.length
+                  ? `缺少 ${missingGroups.join('；')}，请补齐后保存。`
+                  : (anyFields.length ? `缺少 ${anyLabels}，至少填写一项后保存。` : '未检测到可用凭证字段，请检查渠道配置。')))),
   })
 
   if (verifyError) {
@@ -2859,6 +2892,29 @@ export function buildMessagingPlatformFormValues(platform, saved = {}, options =
     }
     putAccessPolicyFormValues(form, saved)
     putBoolFormValue(form, saved, 'requireMention')
+    return form
+  }
+
+  if (storageKey === 'line') {
+    for (const key of ['channelAccessToken', 'tokenFile', 'channelSecret', 'secretFile', 'webhookPath', 'responsePrefix']) {
+      putSecretAwareFormValue(form, saved, key)
+    }
+    putAccessPolicyFormValues(form, saved)
+    putCsvFormValue(form, saved, 'groupAllowFrom')
+    if (typeof saved.mediaMaxMb === 'number') form.mediaMaxMb = String(saved.mediaMaxMb)
+    return form
+  }
+
+  if (storageKey === 'mattermost') {
+    for (const key of ['botToken', 'baseUrl', 'name', 'replyToMode', 'responsePrefix']) {
+      putSecretAwareFormValue(form, saved, key)
+    }
+    putAccessPolicyFormValues(form, saved, { mentionCompat: true })
+    putCsvFormValue(form, saved, 'groupAllowFrom')
+    putBoolFormValue(form, saved, 'dangerouslyAllowNameMatching')
+    putBoolFormValue(form, saved?.network, 'dangerouslyAllowPrivateNetwork')
+    putStringFormValue(form, saved?.commands, 'callbackPath')
+    putStringFormValue(form, saved?.commands, 'callbackUrl')
     return form
   }
 
@@ -3334,6 +3390,19 @@ function applyMessagingPlatformEntry(cfg, storageKey, accountId, entry) {
   }
 }
 
+function ensureMessagingPluginAllowed(cfg, pluginId) {
+  if (!pluginId || !pluginId.trim()) return
+  const pid = pluginId.trim()
+  if (!cfg.plugins || typeof cfg.plugins !== 'object' || Array.isArray(cfg.plugins)) cfg.plugins = {}
+  if (!cfg.plugins.entries || typeof cfg.plugins.entries !== 'object' || Array.isArray(cfg.plugins.entries)) cfg.plugins.entries = {}
+  if (!Array.isArray(cfg.plugins.allow)) cfg.plugins.allow = []
+  if (!cfg.plugins.allow.includes(pid)) cfg.plugins.allow.push(pid)
+  if (!cfg.plugins.entries[pid] || typeof cfg.plugins.entries[pid] !== 'object' || Array.isArray(cfg.plugins.entries[pid])) {
+    cfg.plugins.entries[pid] = {}
+  }
+  cfg.plugins.entries[pid].enabled = true
+}
+
 function buildOpenClawMessagingPlatformEntry(platform, form, currentSaved = {}) {
   const entry = { enabled: true }
   const storageKey = platformStorageKey(platform)
@@ -3384,6 +3453,32 @@ function buildOpenClawMessagingPlatformEntry(platform, form, currentSaved = {}) 
     if (Array.isArray(form.groupAllowFrom) && form.groupAllowFrom.length) entry.groupAllowFrom = form.groupAllowFrom
     if (typeof form.historyLimit === 'number') entry.historyLimit = form.historyLimit
     if (typeof form.dangerouslyAllowNameMatching === 'boolean') entry.dangerouslyAllowNameMatching = form.dangerouslyAllowNameMatching
+  } else if (storageKey === 'line') {
+    for (const key of ['channelAccessToken', 'tokenFile', 'channelSecret', 'secretFile', 'webhookPath', 'responsePrefix']) {
+      if (form[key]) entry[key] = form[key]
+    }
+    entry.dmPolicy = form.dmPolicy
+    entry.groupPolicy = form.groupPolicy
+    if (Array.isArray(form.allowFrom) && form.allowFrom.length) entry.allowFrom = form.allowFrom
+    if (Array.isArray(form.groupAllowFrom) && form.groupAllowFrom.length) entry.groupAllowFrom = form.groupAllowFrom
+    if (typeof form.mediaMaxMb === 'number') entry.mediaMaxMb = form.mediaMaxMb
+  } else if (storageKey === 'mattermost') {
+    for (const key of ['botToken', 'baseUrl', 'name', 'replyToMode', 'responsePrefix']) {
+      if (form[key]) entry[key] = form[key]
+    }
+    entry.dmPolicy = form.dmPolicy
+    entry.groupPolicy = form.groupPolicy
+    if (Object.hasOwn(form, 'requireMention')) entry.requireMention = !!form.requireMention
+    if (Array.isArray(form.allowFrom) && form.allowFrom.length) entry.allowFrom = form.allowFrom
+    if (Array.isArray(form.groupAllowFrom) && form.groupAllowFrom.length) entry.groupAllowFrom = form.groupAllowFrom
+    if (typeof form.dangerouslyAllowNameMatching === 'boolean') entry.dangerouslyAllowNameMatching = form.dangerouslyAllowNameMatching
+    if (typeof form.dangerouslyAllowPrivateNetwork === 'boolean') {
+      entry.network = { ...(currentSaved?.network || {}), dangerouslyAllowPrivateNetwork: form.dangerouslyAllowPrivateNetwork }
+    }
+    const commands = {}
+    if (form.callbackPath) commands.callbackPath = form.callbackPath
+    if (form.callbackUrl) commands.callbackUrl = form.callbackUrl
+    if (Object.keys(commands).length) entry.commands = { ...(currentSaved?.commands || {}), ...commands }
   } else {
     Object.assign(entry, form)
   }
@@ -4866,12 +4961,16 @@ const handlers = {
       } else {
         setRootChannelEntry(entry)
       }
+    } else if (platform === 'line' || platform === 'mattermost') {
+      const built = buildOpenClawMessagingPlatformEntry(platform, form, currentSaved)
+      applyMessagingPlatformEntry(cfg, storageKey, normalizedAccountId, built)
+      ensureMessagingPluginAllowed(cfg, platform)
     } else {
       Object.assign(entry, form)
       preserveMessagingCredentialRefs(entry, form, currentSaved)
     }
 
-    if (platform !== 'qqbot' && platform !== 'feishu' && platform !== 'dingtalk' && platform !== 'dingtalk-connector') {
+    if (platform !== 'qqbot' && platform !== 'feishu' && platform !== 'dingtalk' && platform !== 'dingtalk-connector' && platform !== 'line' && platform !== 'mattermost') {
       preserveMessagingCredentialRefs(entry, form, currentSaved)
       // 合并模式：保留用户通过 CLI 或手动编辑的自定义字段
       applyMessagingPlatformEntry(cfg, storageKey, normalizedAccountId, entry)

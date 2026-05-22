@@ -195,6 +195,78 @@ const PLATFORM_REGISTRY = {
     pluginRequired: '@openclaw/zalouser@latest',
     pluginId: 'zalouser',
   },
+  line: {
+    label: 'LINE',
+    iconName: 'message-circle',
+    desc: t('channels.lineDesc'),
+    guide: [
+      t('channels.lineGuide1'),
+      t('channels.lineGuide2'),
+      t('channels.lineGuide3'),
+      t('channels.lineGuide4'),
+      t('channels.lineGuide5'),
+    ],
+    guideFooter: t('channels.lineGuideFooter'),
+    fields: [
+      { key: 'channelAccessToken', label: 'Channel Access Token', placeholder: t('channels.lineAccessTokenPh'), secret: true, required: false, hint: t('channels.lineAccessTokenHint') },
+      { key: 'tokenFile', label: 'Token File', placeholder: t('channels.lineTokenFilePh'), required: false, hint: t('channels.lineTokenFileHint') },
+      { key: 'channelSecret', label: 'Channel Secret', placeholder: t('channels.lineChannelSecretPh'), secret: true, required: false, hint: t('channels.lineChannelSecretHint') },
+      { key: 'secretFile', label: 'Secret File', placeholder: t('channels.lineSecretFilePh'), required: false, hint: t('channels.lineSecretFileHint') },
+      { key: 'webhookPath', label: 'Webhook Path', placeholder: '/line/webhook', required: false },
+      { key: 'dmPolicy', label: t('channels.dmPolicy'), type: 'select', options: DM_POLICY_OPTIONS, required: false },
+      { key: 'groupPolicy', label: t('channels.groupPolicy'), type: 'select', options: GROUP_POLICY_OPTIONS(t('channels.groupAllGroups')), required: false },
+      { key: 'allowFrom', label: 'Allow From', placeholder: t('channels.lineAllowFromPh'), required: false, hint: t('channels.lineAllowFromHint') },
+      { key: 'groupAllowFrom', label: 'Group Allow From', placeholder: t('channels.lineGroupAllowFromPh'), required: false, hint: t('channels.groupAllowFromHint') },
+      { key: 'mediaMaxMb', label: 'Media Max MB', placeholder: '50', required: false },
+      { key: 'responsePrefix', label: 'Response Prefix', placeholder: t('channels.optionalEg', { example: '[AI]' }), required: false },
+    ],
+    requiredAny: [
+      { keys: ['channelAccessToken', 'tokenFile'], label: t('channels.lineTokenOrFile') },
+      { keys: ['channelSecret', 'secretFile'], label: t('channels.lineSecretOrFile') },
+    ],
+    configKey: 'line',
+    pairingChannel: 'line',
+    pluginRequired: '@openclaw/line@latest',
+    pluginId: 'line',
+  },
+  mattermost: {
+    label: 'Mattermost',
+    iconName: 'message-square',
+    desc: t('channels.mattermostDesc'),
+    guide: [
+      t('channels.mattermostGuide1'),
+      t('channels.mattermostGuide2'),
+      t('channels.mattermostGuide3'),
+      t('channels.mattermostGuide4'),
+      t('channels.mattermostGuide5'),
+    ],
+    guideFooter: t('channels.mattermostGuideFooter'),
+    fields: [
+      { key: 'botToken', label: 'Bot Token', placeholder: t('channels.mattermostBotTokenPh'), secret: true, required: true },
+      { key: 'baseUrl', label: 'Base URL', placeholder: 'https://mattermost.example.com', required: true, hint: t('channels.mattermostBaseUrlHint') },
+      { key: 'name', label: t('channels.accountName'), placeholder: t('channels.optionalEg', { example: 'ops' }), required: false },
+      { key: 'dmPolicy', label: t('channels.dmPolicy'), type: 'select', options: DM_POLICY_OPTIONS, required: false },
+      { key: 'groupPolicy', label: t('channels.groupPolicy'), type: 'select', options: GROUP_POLICY_OPTIONS(t('channels.groupAllChannels'), { mention: true }), required: false },
+      { key: 'allowFrom', label: 'Allow From', placeholder: t('channels.mattermostAllowFromPh'), required: false, hint: t('channels.mattermostAllowFromHint') },
+      { key: 'groupAllowFrom', label: 'Group Allow From', placeholder: t('channels.mattermostGroupAllowFromPh'), required: false, hint: t('channels.groupAllowFromHint') },
+      { key: 'replyToMode', label: 'Reply To Mode', type: 'select', required: false, options: [
+        { value: '', label: t('channels.policyDefault') },
+        { value: 'off', label: t('channels.disable') },
+        { value: 'first', label: 'First' },
+        { value: 'all', label: 'All' },
+        { value: 'batched', label: 'Batched' },
+      ] },
+      { key: 'callbackPath', label: 'Slash Callback Path', placeholder: '/api/channels/mattermost/command', required: false, hint: t('channels.mattermostCallbackPathHint') },
+      { key: 'callbackUrl', label: 'Slash Callback URL', placeholder: 'https://panel.example.com/api/channels/mattermost/command', required: false },
+      { key: 'dangerouslyAllowNameMatching', label: t('channels.mattermostNameMatching'), type: 'select', options: BOOLEAN_OPTIONS, required: false, hint: t('channels.mattermostNameMatchingHint') },
+      { key: 'dangerouslyAllowPrivateNetwork', label: t('channels.mattermostPrivateNetwork'), type: 'select', options: BOOLEAN_OPTIONS, required: false, hint: t('channels.mattermostPrivateNetworkHint') },
+      { key: 'responsePrefix', label: 'Response Prefix', placeholder: t('channels.optionalEg', { example: '[AI]' }), required: false },
+    ],
+    configKey: 'mattermost',
+    pairingChannel: 'mattermost',
+    pluginRequired: '@openclaw/mattermost@latest',
+    pluginId: 'mattermost',
+  },
   discord: {
     label: 'Discord',
     iconName: 'hash',
@@ -505,7 +577,7 @@ function applyRouteIntent(page, state) {
 // ── 已配置平台渲染 ──
 
 // ── 多账号支持的平台：与 OpenClaw 的 accounts/defaultAccount 配置模型保持一致 ──
-const MULTI_INSTANCE_PLATFORMS = ['telegram', 'discord', 'slack', 'feishu', 'dingtalk', 'dingtalk-connector', 'qqbot', 'zalo', 'zalouser']
+const MULTI_INSTANCE_PLATFORMS = ['telegram', 'discord', 'slack', 'feishu', 'dingtalk', 'dingtalk-connector', 'qqbot', 'zalo', 'zalouser', 'line', 'mattermost']
 
 function supportsMessagingMultiAccount(pid) {
   return MULTI_INSTANCE_PLATFORMS.includes(pid)

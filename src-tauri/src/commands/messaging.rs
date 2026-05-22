@@ -140,11 +140,14 @@ fn preserve_messaging_credential_refs(
         "appSecret",
         "appToken",
         "botToken",
+        "channelAccessToken",
+        "channelSecret",
         "clientId",
         "clientSecret",
         "gatewayPassword",
         "gatewayToken",
         "password",
+        "secretFile",
         "signingSecret",
         "token",
         "tokenFile",
@@ -181,11 +184,14 @@ fn channel_root_has_messaging_credential(root: &Map<String, Value>) -> bool {
         "appSecret",
         "appToken",
         "botToken",
+        "channelAccessToken",
+        "channelSecret",
         "clientId",
         "clientSecret",
         "gatewayPassword",
         "gatewayToken",
         "password",
+        "secretFile",
         "signingSecret",
         "token",
         "tokenFile",
@@ -212,6 +218,7 @@ fn required_channel_credential_fields(
         "feishu" => vec![("appId", "App ID"), ("appSecret", "App Secret")],
         "dingtalk-connector" => vec![("clientId", "Client ID"), ("clientSecret", "Client Secret")],
         "msteams" => vec![("appId", "App ID"), ("appPassword", "App Password")],
+        "mattermost" => vec![("botToken", "Bot Token"), ("baseUrl", "Base URL")],
         "signal" => vec![("account", "Signal 账号")],
         "slack" => {
             let mode = form_string(form, "mode");
@@ -246,6 +253,30 @@ fn channel_any_credential_fields(platform: &str) -> Vec<(&'static str, &'static 
     }
 }
 
+fn channel_any_credential_groups(
+    platform: &str,
+) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
+    match platform_storage_key(platform) {
+        "line" => vec![
+            (
+                "Channel Access Token 或 Token File",
+                vec![
+                    ("channelAccessToken", "Channel Access Token"),
+                    ("tokenFile", "Token File"),
+                ],
+            ),
+            (
+                "Channel Secret 或 Secret File",
+                vec![
+                    ("channelSecret", "Channel Secret"),
+                    ("secretFile", "Secret File"),
+                ],
+            ),
+        ],
+        _ => vec![],
+    }
+}
+
 fn channel_diagnosis_credentials_ready(platform: &str, form: &Map<String, Value>) -> bool {
     if platform_storage_key(platform) == "zalouser" {
         return true;
@@ -255,6 +286,14 @@ fn channel_diagnosis_credentials_ready(platform: &str, form: &Map<String, Value>
         return required_fields
             .iter()
             .all(|(key, _)| has_configured_messaging_value(form.get(*key)));
+    }
+    let any_groups = channel_any_credential_groups(platform);
+    if !any_groups.is_empty() {
+        return any_groups.iter().all(|(_, fields)| {
+            fields
+                .iter()
+                .any(|(key, _)| has_configured_messaging_value(form.get(*key)))
+        });
     }
     let any_fields = channel_any_credential_fields(platform);
     if !any_fields.is_empty() {
@@ -341,10 +380,20 @@ fn build_openclaw_channel_diagnosis(
 
     let required_fields = required_channel_credential_fields(storage_key, form);
     let any_fields = channel_any_credential_fields(storage_key);
+    let any_groups = channel_any_credential_groups(storage_key);
     let missing: Vec<&str> = required_fields
         .iter()
         .filter(|(key, _)| !has_configured_messaging_value(form.get(*key)))
         .map(|(_, label)| *label)
+        .collect();
+    let missing_groups: Vec<&str> = any_groups
+        .iter()
+        .filter(|(_, fields)| {
+            !fields
+                .iter()
+                .any(|(key, _)| has_configured_messaging_value(form.get(*key)))
+        })
+        .map(|(label, _)| *label)
         .collect();
     let any_credential_ok = if any_fields.is_empty() {
         false
@@ -357,6 +406,8 @@ fn build_openclaw_channel_diagnosis(
         config_exists
     } else if !required_fields.is_empty() {
         missing.is_empty()
+    } else if !any_groups.is_empty() {
+        missing_groups.is_empty()
     } else if !any_fields.is_empty() {
         any_credential_ok
     } else {
@@ -373,6 +424,15 @@ fn build_openclaw_channel_diagnosis(
         } else if credential_ok {
             if !required_fields.is_empty() {
                 format!("已填写 {}。", required_labels)
+            } else if !any_groups.is_empty() {
+                format!(
+                    "已填写 {}。",
+                    any_groups
+                        .iter()
+                        .map(|(label, _)| *label)
+                        .collect::<Vec<_>>()
+                        .join("；")
+                )
             } else if !any_fields.is_empty() {
                 format!("已填写 {} 其中一项。", any_labels)
             } else {
@@ -380,6 +440,8 @@ fn build_openclaw_channel_diagnosis(
             }
         } else if !missing.is_empty() {
             format!("缺少 {}，请补齐后保存。", missing.join(" / "))
+        } else if !missing_groups.is_empty() {
+            format!("缺少 {}，请补齐后保存。", missing_groups.join("；"))
         } else if !any_fields.is_empty() {
             format!("缺少 {}，至少填写一项后保存。", any_labels)
         } else {
@@ -639,7 +701,7 @@ fn normalize_group_policy_value(raw: Option<&Value>, fallback: &str) -> String {
 fn platform_supports_top_level_require_mention(platform: &str) -> bool {
     matches!(
         platform_storage_key(platform),
-        "feishu" | "slack" | "msteams"
+        "feishu" | "slack" | "msteams" | "mattermost"
     )
 }
 
@@ -667,6 +729,8 @@ fn normalize_messaging_platform_form(
             | "whatsapp"
             | "zalo"
             | "zalouser"
+            | "line"
+            | "mattermost"
     );
     let has_dm_field = normalized.contains_key("dmPolicy") || needs_access_defaults;
     let has_group_field = normalized.contains_key("groupPolicy") || needs_access_defaults;
@@ -725,23 +789,28 @@ fn normalize_messaging_platform_form(
     normalize_numeric_form_value(&mut normalized, "mediaMaxMb");
     normalize_numeric_form_value(&mut normalized, "historyLimit");
 
-    if storage_key == "zalouser" && normalized.contains_key("dangerouslyAllowNameMatching") {
-        let value = match normalized.get("dangerouslyAllowNameMatching") {
-            Some(Value::Bool(v)) => Some(*v),
-            Some(Value::String(raw)) => {
-                let trimmed = raw.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(bool_from_form_value(trimmed).unwrap_or(false))
+    for key in [
+        "dangerouslyAllowNameMatching",
+        "dangerouslyAllowPrivateNetwork",
+    ] {
+        if normalized.contains_key(key) {
+            let value = match normalized.get(key) {
+                Some(Value::Bool(v)) => Some(*v),
+                Some(Value::String(raw)) => {
+                    let trimmed = raw.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(bool_from_form_value(trimmed).unwrap_or(false))
+                    }
                 }
+                _ => None,
+            };
+            if let Some(v) = value {
+                normalized.insert(key.into(), Value::Bool(v));
+            } else {
+                normalized.remove(key);
             }
-            _ => None,
-        };
-        if let Some(v) = value {
-            normalized.insert("dangerouslyAllowNameMatching".into(), Value::Bool(v));
-        } else {
-            normalized.remove("dangerouslyAllowNameMatching");
         }
     }
 
@@ -1344,6 +1413,44 @@ pub async fn read_platform_config(
             insert_string_if_present(&mut form, &saved, "webhookPath");
             insert_access_policy_form_values(&mut form, &saved, false, true);
             insert_bool_as_string(&mut form, &saved, "requireMention");
+        }
+        "line" => {
+            for key in [
+                "channelAccessToken",
+                "tokenFile",
+                "channelSecret",
+                "secretFile",
+                "webhookPath",
+                "responsePrefix",
+            ] {
+                insert_secret_aware_form_value(&mut form, &saved, key);
+            }
+            insert_access_policy_form_values(&mut form, &saved, false, false);
+            insert_array_as_csv(&mut form, &saved, "groupAllowFrom");
+            if let Some(v) = saved.get("mediaMaxMb").and_then(|v| v.as_i64()) {
+                form.insert("mediaMaxMb".into(), Value::String(v.to_string()));
+            }
+        }
+        "mattermost" => {
+            for key in [
+                "botToken",
+                "baseUrl",
+                "name",
+                "replyToMode",
+                "responsePrefix",
+            ] {
+                insert_secret_aware_form_value(&mut form, &saved, key);
+            }
+            insert_access_policy_form_values(&mut form, &saved, false, true);
+            insert_array_as_csv(&mut form, &saved, "groupAllowFrom");
+            insert_bool_as_string(&mut form, &saved, "dangerouslyAllowNameMatching");
+            if let Some(network) = saved.get("network") {
+                insert_bool_as_string(&mut form, network, "dangerouslyAllowPrivateNetwork");
+            }
+            if let Some(commands) = saved.get("commands") {
+                insert_string_if_present(&mut form, commands, "callbackPath");
+                insert_string_if_present(&mut form, commands, "callbackUrl");
+            }
         }
         _ => {
             if saved.is_null() {
@@ -1972,6 +2079,152 @@ pub async fn save_messaging_platform(
                 entry,
             )?;
             ensure_plugin_allowed(&mut cfg, "msteams")?;
+        }
+        "line" => {
+            let channel_access_token = form_string(form_obj, "channelAccessToken");
+            let token_file = form_string(form_obj, "tokenFile");
+            let channel_secret = form_string(form_obj, "channelSecret");
+            let secret_file = form_string(form_obj, "secretFile");
+            if channel_access_token.is_empty() && token_file.is_empty() {
+                return Err("Channel Access Token 或 Token File 至少填写一项".into());
+            }
+            if channel_secret.is_empty() && secret_file.is_empty() {
+                return Err("Channel Secret 或 Secret File 至少填写一项".into());
+            }
+
+            let mut entry = Map::new();
+            entry.insert("enabled".into(), Value::Bool(true));
+            put_string(&mut entry, "channelAccessToken", channel_access_token);
+            put_string(&mut entry, "tokenFile", token_file);
+            put_string(&mut entry, "channelSecret", channel_secret);
+            put_string(&mut entry, "secretFile", secret_file);
+            put_string(
+                &mut entry,
+                "webhookPath",
+                form_string(form_obj, "webhookPath"),
+            );
+            put_string(
+                &mut entry,
+                "responsePrefix",
+                form_string(form_obj, "responsePrefix"),
+            );
+            put_string(&mut entry, "dmPolicy", form_string(form_obj, "dmPolicy"));
+            put_string(
+                &mut entry,
+                "groupPolicy",
+                form_string(form_obj, "groupPolicy"),
+            );
+            put_array_from_form_value(&mut entry, "allowFrom", form_obj.get("allowFrom"));
+            put_array_from_form_value(&mut entry, "groupAllowFrom", form_obj.get("groupAllowFrom"));
+            if let Some(value) = form_obj.get("mediaMaxMb").and_then(|v| v.as_f64()) {
+                if let Some(number) = serde_json::Number::from_f64(value) {
+                    entry.insert("mediaMaxMb".into(), Value::Number(number));
+                }
+            } else {
+                put_number_from_form(
+                    &mut entry,
+                    "mediaMaxMb",
+                    &form_string(form_obj, "mediaMaxMb"),
+                );
+            }
+            preserve_messaging_credential_refs(&mut entry, form_obj, &current_saved);
+            merge_channel_entry_for_account(
+                channels_map,
+                &storage_key,
+                account_id.as_deref(),
+                entry,
+            )?;
+            ensure_plugin_allowed(&mut cfg, "line")?;
+        }
+        "mattermost" => {
+            let bot_token = form_string(form_obj, "botToken");
+            let base_url = form_string(form_obj, "baseUrl");
+            if bot_token.is_empty() {
+                return Err("Mattermost Bot Token 不能为空".into());
+            }
+            if base_url.is_empty() {
+                return Err("Mattermost Base URL 不能为空".into());
+            }
+
+            let mut entry = Map::new();
+            entry.insert("enabled".into(), Value::Bool(true));
+            put_string(&mut entry, "botToken", bot_token);
+            put_string(&mut entry, "baseUrl", base_url);
+            put_string(&mut entry, "name", form_string(form_obj, "name"));
+            put_string(
+                &mut entry,
+                "replyToMode",
+                form_string(form_obj, "replyToMode"),
+            );
+            put_string(
+                &mut entry,
+                "responsePrefix",
+                form_string(form_obj, "responsePrefix"),
+            );
+            put_string(&mut entry, "dmPolicy", form_string(form_obj, "dmPolicy"));
+            put_string(
+                &mut entry,
+                "groupPolicy",
+                form_string(form_obj, "groupPolicy"),
+            );
+            put_bool_value_if_present(&mut entry, "requireMention", form_obj.get("requireMention"));
+            put_array_from_form_value(&mut entry, "allowFrom", form_obj.get("allowFrom"));
+            put_array_from_form_value(&mut entry, "groupAllowFrom", form_obj.get("groupAllowFrom"));
+            put_bool_value_if_present(
+                &mut entry,
+                "dangerouslyAllowNameMatching",
+                form_obj.get("dangerouslyAllowNameMatching"),
+            );
+
+            if form_obj.contains_key("dangerouslyAllowPrivateNetwork") {
+                let mut network = current_saved
+                    .get("network")
+                    .and_then(|v| v.as_object())
+                    .cloned()
+                    .unwrap_or_default();
+                match form_obj.get("dangerouslyAllowPrivateNetwork") {
+                    Some(Value::Bool(v)) => {
+                        network.insert("dangerouslyAllowPrivateNetwork".into(), Value::Bool(*v));
+                    }
+                    Some(Value::String(raw)) => {
+                        if let Some(v) = bool_from_form_value(raw) {
+                            network.insert("dangerouslyAllowPrivateNetwork".into(), Value::Bool(v));
+                        }
+                    }
+                    _ => {}
+                }
+                if !network.is_empty() {
+                    entry.insert("network".into(), Value::Object(network));
+                }
+            }
+
+            let mut commands = current_saved
+                .get("commands")
+                .and_then(|v| v.as_object())
+                .cloned()
+                .unwrap_or_default();
+            put_string(
+                &mut commands,
+                "callbackPath",
+                form_string(form_obj, "callbackPath"),
+            );
+            put_string(
+                &mut commands,
+                "callbackUrl",
+                form_string(form_obj, "callbackUrl"),
+            );
+            if !commands.is_empty() {
+                entry.insert("commands".into(), Value::Object(commands));
+            }
+
+            preserve_messaging_credential_refs(&mut entry, form_obj, &current_saved);
+            merge_channel_entry_for_account(
+                channels_map,
+                &storage_key,
+                account_id.as_deref(),
+                entry,
+            )?;
+            ensure_plugin_allowed(&mut cfg, "mattermost")?;
         }
         _ => {
             // 通用平台：直接保存表单字段

@@ -460,6 +460,115 @@ test('Zalo Personal 保存和诊断按二维码会话型渠道处理', () => {
   assert.equal(result.checks.find(item => item.id === 'credentials')?.title, '登录/会话配置')
 })
 
+test('LINE 渠道保存会写入双凭证组合并支持多账号', () => {
+  const cfg = { channels: {} }
+
+  mergeOpenClawMessagingPlatformConfig(cfg, {
+    platform: 'line',
+    accountId: 'jp',
+    form: {
+      tokenFile: '/run/secrets/line-token',
+      secretFile: '/run/secrets/line-secret',
+      allowFrom: 'U123, U456',
+      groupAllowFrom: 'C123',
+      groupPolicy: 'open',
+      mediaMaxMb: '25',
+      webhookPath: '/line/webhook',
+    },
+  })
+
+  const account = cfg.channels.line.accounts.jp
+  assert.equal(cfg.channels.line.defaultAccount, 'jp')
+  assert.equal(account.tokenFile, '/run/secrets/line-token')
+  assert.equal(account.secretFile, '/run/secrets/line-secret')
+  assert.deepEqual(account.allowFrom, ['U123', 'U456'])
+  assert.deepEqual(account.groupAllowFrom, ['C123'])
+  assert.equal(account.groupPolicy, 'open')
+  assert.equal(account.mediaMaxMb, 25)
+  assert.equal(account.webhookPath, '/line/webhook')
+})
+
+test('LINE 诊断要求 token 与 secret 两组凭证各满足一项', () => {
+  const ready = buildOpenClawChannelDiagnosis({
+    platform: 'line',
+    configExists: true,
+    channelEnabled: true,
+    form: {
+      channelAccessToken: 'line-token',
+      secretFile: '/run/secrets/line-secret',
+    },
+  })
+  const missingSecret = buildOpenClawChannelDiagnosis({
+    platform: 'line',
+    configExists: true,
+    channelEnabled: true,
+    form: {
+      channelAccessToken: 'line-token',
+    },
+  })
+
+  assert.equal(ready.checks.find(item => item.id === 'credentials')?.ok, true)
+  assert.equal(missingSecret.checks.find(item => item.id === 'credentials')?.ok, false)
+  assert.match(missingSecret.checks.find(item => item.id === 'credentials')?.detail || '', /Channel Secret.*Secret File/)
+})
+
+test('Mattermost 渠道保存会写入嵌套命令和网络配置', () => {
+  const cfg = { channels: {} }
+
+  mergeOpenClawMessagingPlatformConfig(cfg, {
+    platform: 'mattermost',
+    accountId: 'ops',
+    form: {
+      botToken: 'mattermost-token',
+      baseUrl: 'https://mattermost.example.com/',
+      groupPolicy: 'mentioned',
+      allowFrom: '@alice, bob',
+      groupAllowFrom: 'town-square',
+      callbackPath: '/api/channels/mattermost/ops',
+      callbackUrl: 'https://panel.example.com/api/channels/mattermost/ops',
+      dangerouslyAllowNameMatching: 'true',
+      dangerouslyAllowPrivateNetwork: 'true',
+      replyToMode: 'all',
+    },
+  })
+
+  const account = cfg.channels.mattermost.accounts.ops
+  assert.equal(cfg.channels.mattermost.defaultAccount, 'ops')
+  assert.equal(account.botToken, 'mattermost-token')
+  assert.equal(account.baseUrl, 'https://mattermost.example.com/')
+  assert.equal(account.groupPolicy, 'open')
+  assert.equal(account.requireMention, true)
+  assert.deepEqual(account.allowFrom, ['@alice', 'bob'])
+  assert.deepEqual(account.groupAllowFrom, ['town-square'])
+  assert.equal(account.commands.callbackPath, '/api/channels/mattermost/ops')
+  assert.equal(account.commands.callbackUrl, 'https://panel.example.com/api/channels/mattermost/ops')
+  assert.equal(account.network.dangerouslyAllowPrivateNetwork, true)
+  assert.equal(account.dangerouslyAllowNameMatching, true)
+  assert.equal(account.replyToMode, 'all')
+})
+
+test('Mattermost 诊断要求 Bot Token 和 Base URL', () => {
+  const missingBaseUrl = buildOpenClawChannelDiagnosis({
+    platform: 'mattermost',
+    configExists: true,
+    channelEnabled: true,
+    form: { botToken: 'mattermost-token' },
+  })
+  const ready = buildOpenClawChannelDiagnosis({
+    platform: 'mattermost',
+    configExists: true,
+    channelEnabled: true,
+    form: {
+      botToken: 'mattermost-token',
+      baseUrl: 'https://mattermost.example.com',
+    },
+  })
+
+  assert.equal(missingBaseUrl.checks.find(item => item.id === 'credentials')?.ok, false)
+  assert.match(missingBaseUrl.checks.find(item => item.id === 'credentials')?.detail || '', /Base URL/)
+  assert.equal(ready.checks.find(item => item.id === 'credentials')?.ok, true)
+})
+
 test('Discord 渠道保存会保留运行时需要的 applicationId', () => {
   const cfg = { channels: {} }
 
