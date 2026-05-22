@@ -143,6 +143,7 @@ const PLATFORM_REGISTRY = {
     guideFooter: t('channels.discordGuideFooter'),
     fields: [
       { key: 'token', label: 'Bot Token', placeholder: 'MTExxxxxxxxx.Gxxxxxx.xxxxxxxx', secret: true, required: true },
+      { key: 'applicationId', label: 'Application ID', placeholder: '123456789012345678', required: false },
       { key: 'dmPolicy', label: t('channels.dmPolicy'), type: 'select', options: DM_POLICY_OPTIONS, required: false },
       { key: 'groupPolicy', label: t('channels.groupPolicy'), type: 'select', options: GROUP_POLICY_OPTIONS(t('channels.groupAllChannels')), required: false },
       { key: 'allowFrom', label: 'Allow From', placeholder: t('channels.allowFromPh'), required: false, hint: t('channels.allowFromHint') },

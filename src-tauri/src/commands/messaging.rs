@@ -731,6 +731,7 @@ pub async fn read_platform_config(
             // Discord 配置在 openclaw.json 中是展开的 guilds 结构
             // 需要反向提取成表单字段：token, guildId, channelId
             insert_secret_aware_form_value(&mut form, &saved, "token");
+            insert_string_if_present(&mut form, &saved, "applicationId");
             insert_access_policy_form_values(&mut form, &saved, false, false);
             if let Some(guilds) = saved.get("guilds").and_then(|v| v.as_object()) {
                 if let Some(gid) = guilds.keys().next() {
@@ -1083,6 +1084,11 @@ pub async fn save_messaging_platform(
             if let Some(t) = form_obj.get("token").and_then(|v| v.as_str()) {
                 entry.insert("token".into(), Value::String(t.trim().into()));
             }
+            put_string(
+                &mut entry,
+                "applicationId",
+                form_string(form_obj, "applicationId"),
+            );
             entry.insert("enabled".into(), Value::Bool(true));
             put_string(&mut entry, "dmPolicy", form_string(form_obj, "dmPolicy"));
             put_string(

@@ -2605,6 +2605,7 @@ export function buildMessagingPlatformFormValues(platform, saved = {}, options =
 
   if (storageKey === 'discord') {
     putSecretAwareFormValue(form, saved, 'token')
+    putStringFormValue(form, saved, 'applicationId')
     putAccessPolicyFormValues(form, saved)
     const guilds = saved.guilds && typeof saved.guilds === 'object' ? saved.guilds : null
     const guildId = guilds ? Object.keys(guilds)[0] : ''
@@ -3130,6 +3131,7 @@ function buildOpenClawMessagingPlatformEntry(platform, form, currentSaved = {}) 
     if (Array.isArray(form.allowFrom) && form.allowFrom.length) entry.allowFrom = form.allowFrom
   } else if (storageKey === 'discord') {
     entry.token = form.token
+    if (form.applicationId) entry.applicationId = form.applicationId
     entry.dmPolicy = form.dmPolicy
     entry.groupPolicy = form.groupPolicy
     if (Array.isArray(form.allowFrom) && form.allowFrom.length) entry.allowFrom = form.allowFrom
@@ -4597,6 +4599,7 @@ const handlers = {
       if (Array.isArray(form.allowFrom) && form.allowFrom.length) entry.allowFrom = form.allowFrom
     } else if (platform === 'discord') {
       entry.token = form.token
+      if (form.applicationId) entry.applicationId = form.applicationId
       entry.dmPolicy = form.dmPolicy
       entry.groupPolicy = form.groupPolicy
       if (Array.isArray(form.allowFrom) && form.allowFrom.length) entry.allowFrom = form.allowFrom

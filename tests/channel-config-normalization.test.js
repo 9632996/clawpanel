@@ -151,6 +151,16 @@ test('渠道读取会把 open + requireMention 反向回显为仅提及时策略
   assert.equal(values.requireMention, 'true')
 })
 
+test('Discord 渠道读取会回显 applicationId', () => {
+  const values = buildMessagingPlatformFormValues('discord', {
+    token: 'discord-token',
+    applicationId: '123456789012345678',
+  })
+
+  assert.equal(values.token, 'discord-token')
+  assert.equal(values.applicationId, '123456789012345678')
+})
+
 test('渠道保存会在用户改回所有群组时显式清除仅提及开关', () => {
   const form = normalizeMessagingPlatformForm('slack', {
     mode: 'socket',
@@ -274,6 +284,21 @@ test('OpenClaw 渠道保存带账号标识时会写入 accounts 而不是覆盖�
   assert.equal(cfg.channels.slack.botToken, 'root-slack')
   assert.equal(cfg.channels.slack.accounts['team-a'].botToken, 'team-slack')
   assert.equal(cfg.channels.slack.accounts['team-a'].appToken, 'team-app')
+})
+
+test('Discord 渠道保存会保留运行时需要的 applicationId', () => {
+  const cfg = { channels: {} }
+
+  mergeOpenClawMessagingPlatformConfig(cfg, {
+    platform: 'discord',
+    form: {
+      token: 'discord-token',
+      applicationId: '123456789012345678',
+    },
+  })
+
+  assert.equal(cfg.channels.discord.token, 'discord-token')
+  assert.equal(cfg.channels.discord.applicationId, '123456789012345678')
 })
 
 test('OpenClaw 渠道保存第一个命名账号时会固定 defaultAccount', () => {
