@@ -461,6 +461,13 @@ const PLATFORM_REGISTRY = {
       { key: 'dmPolicy', label: t('channels.dmPolicy'), type: 'select', options: DM_POLICY_OPTIONS, required: false },
       { key: 'groupPolicy', label: t('channels.groupPolicy'), type: 'select', options: GROUP_POLICY_OPTIONS(t('channels.groupAllGroups')), required: false },
       { key: 'allowFrom', label: 'Allow From', placeholder: t('channels.signalAllowFromPh'), required: false },
+      { key: 'groupAllowFrom', label: 'Group Allow From', placeholder: t('channels.signalGroupAllowFromPh'), required: false, hint: t('channels.groupAllowFromHint') },
+      { key: 'historyLimit', label: 'History Limit', placeholder: '80', required: false },
+      { key: 'dmHistoryLimit', label: 'DM History Limit', placeholder: '20', required: false },
+      { key: 'textChunkLimit', label: 'Text Chunk Limit', placeholder: '1800', required: false },
+      { key: 'mediaMaxMb', label: 'Media Max MB', placeholder: '25', required: false },
+      { key: 'blockStreaming', label: t('channels.signalBlockStreaming'), type: 'select', options: BOOLEAN_OPTIONS, required: false },
+      { key: 'responsePrefix', label: 'Response Prefix', placeholder: t('channels.optionalEg', { example: '[Signal]' }), required: false },
     ],
     configKey: 'signal',
   },
@@ -650,7 +657,7 @@ function applyRouteIntent(page, state) {
 // ── 已配置平台渲染 ──
 
 // ── 多账号支持的平台：与 OpenClaw 的 accounts/defaultAccount 配置模型保持一致 ──
-const MULTI_INSTANCE_PLATFORMS = ['telegram', 'discord', 'slack', 'feishu', 'dingtalk', 'dingtalk-connector', 'qqbot', 'zalo', 'zalouser', 'line', 'mattermost', 'synology-chat', 'googlechat']
+const MULTI_INSTANCE_PLATFORMS = ['telegram', 'discord', 'slack', 'feishu', 'dingtalk', 'dingtalk-connector', 'qqbot', 'zalo', 'zalouser', 'line', 'mattermost', 'synology-chat', 'googlechat', 'signal']
 
 function supportsMessagingMultiAccount(pid) {
   return MULTI_INSTANCE_PLATFORMS.includes(pid)

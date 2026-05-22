@@ -228,6 +228,8 @@ export default {
   signalCliPathLabel: _('signal-cli 路径', 'signal-cli Path', 'signal-cli 路徑'),
   signalCliPathPh: _('可选，默认从 PATH 查找', 'Optional, defaults to PATH lookup', '可選，預設從 PATH 尋找'),
   signalAllowFromPh: _('可选，逗号分隔', 'Optional, comma-separated', '可選，逗號分隔'),
+  signalGroupAllowFromPh: _('可选，逗号分隔群组 ID', 'Optional, comma-separated group IDs', '可選，逗號分隔群組 ID'),
+  signalBlockStreaming: _('阻止流式分块', 'Block streaming chunks', '阻止串流分塊'),
   matrixDesc: _('接入 Matrix 协议（Element 等客户端）', 'Connect via Matrix protocol (Element and other clients)', '接入 Matrix 协議（Element 等用戶端）', 'Matrix プロトコルに接続'),
   matrixGuide1: _('在 Matrix 服务器上注册 Bot 账号', 'Register a Bot account on a Matrix server', '在 Matrix 伺服器上註冊 Bot 账號'),
   matrixGuide2: _('获取 <strong>Access Token</strong>（或使用用户名密码）', 'Get an <strong>Access Token</strong> (or use username & password)', '取得 <strong>Access Token</strong>（或使用使用者名密碼）'),

@@ -832,14 +832,16 @@
     left: 0;
     top: 0;
     z-index: 900;
-    transform: translateX(-100%);
+    transform: translate3d(-100%, 0, 0) !important;
     transition: transform 250ms cubic-bezier(.22,1,.36,1);
     box-shadow: none;
     width: 260px;
+    pointer-events: none;
   }
   #sidebar.sidebar-open {
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0) !important;
     box-shadow: 4px 0 24px rgba(0,0,0,.15);
+    pointer-events: auto;
   }
   #main-col {
     width: 100vw;

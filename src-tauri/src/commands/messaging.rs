@@ -552,6 +552,12 @@ fn insert_array_as_csv(form: &mut Map<String, Value>, source: &Value, key: &str)
     }
 }
 
+fn insert_number_as_string(form: &mut Map<String, Value>, source: &Value, key: &str) {
+    if let Some(v) = source.get(key).and_then(|v| v.as_f64()) {
+        form.insert(key.into(), Value::String(v.to_string()));
+    }
+}
+
 fn insert_access_policy_form_values(
     form: &mut Map<String, Value>,
     source: &Value,
@@ -809,6 +815,7 @@ fn normalize_messaging_platform_form(
     normalize_numeric_form_value(&mut normalized, "dmHistoryLimit");
     normalize_numeric_form_value(&mut normalized, "textChunkLimit");
     normalize_numeric_form_value(&mut normalized, "rateLimitPerMinute");
+    normalize_numeric_form_value(&mut normalized, "httpPort");
 
     for key in [
         "dangerouslyAllowNameMatching",
@@ -1411,8 +1418,19 @@ pub async fn read_platform_config(
             insert_string_if_present(&mut form, &saved, "cliPath");
             insert_string_if_present(&mut form, &saved, "httpUrl");
             insert_string_if_present(&mut form, &saved, "httpHost");
-            insert_string_if_present(&mut form, &saved, "httpPort");
+            insert_number_as_string(&mut form, &saved, "httpPort");
+            insert_string_if_present(&mut form, &saved, "responsePrefix");
             insert_access_policy_form_values(&mut form, &saved, false, false);
+            insert_array_as_csv(&mut form, &saved, "groupAllowFrom");
+            insert_bool_as_string(&mut form, &saved, "blockStreaming");
+            for key in [
+                "historyLimit",
+                "dmHistoryLimit",
+                "textChunkLimit",
+                "mediaMaxMb",
+            ] {
+                insert_number_as_string(&mut form, &saved, key);
+            }
         }
         "matrix" => {
             insert_string_if_present(&mut form, &saved, "homeserver");
@@ -2067,7 +2085,12 @@ pub async fn save_messaging_platform(
             put_string(&mut entry, "cliPath", form_string(form_obj, "cliPath"));
             put_string(&mut entry, "httpUrl", form_string(form_obj, "httpUrl"));
             put_string(&mut entry, "httpHost", form_string(form_obj, "httpHost"));
-            put_string(&mut entry, "httpPort", form_string(form_obj, "httpPort"));
+            put_number_from_form(&mut entry, "httpPort", &form_string(form_obj, "httpPort"));
+            put_string(
+                &mut entry,
+                "responsePrefix",
+                form_string(form_obj, "responsePrefix"),
+            );
             put_string(&mut entry, "dmPolicy", form_string(form_obj, "dmPolicy"));
             put_string(
                 &mut entry,
@@ -2075,6 +2098,16 @@ pub async fn save_messaging_platform(
                 form_string(form_obj, "groupPolicy"),
             );
             put_array_from_form_value(&mut entry, "allowFrom", form_obj.get("allowFrom"));
+            put_array_from_form_value(&mut entry, "groupAllowFrom", form_obj.get("groupAllowFrom"));
+            put_bool_value_if_present(&mut entry, "blockStreaming", form_obj.get("blockStreaming"));
+            for key in [
+                "historyLimit",
+                "dmHistoryLimit",
+                "textChunkLimit",
+                "mediaMaxMb",
+            ] {
+                put_number_from_form(&mut entry, key, &form_string(form_obj, key));
+            }
             preserve_messaging_credential_refs(&mut entry, form_obj, &current_saved);
             merge_channel_entry_for_account(
                 channels_map,

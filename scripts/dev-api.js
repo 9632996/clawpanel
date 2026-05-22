@@ -2472,7 +2472,7 @@ export function normalizeMessagingPlatformForm(platform, form = {}) {
     normalized.allowedUserIds = csvToStringArray(normalized.allowedUserIds)
   }
 
-  for (const key of ['mediaMaxMb', 'historyLimit', 'dmHistoryLimit', 'textChunkLimit', 'rateLimitPerMinute']) {
+  for (const key of ['mediaMaxMb', 'historyLimit', 'dmHistoryLimit', 'textChunkLimit', 'rateLimitPerMinute', 'httpPort']) {
     if (!Object.hasOwn(normalized, key)) continue
     const value = String(normalized[key] || '').trim()
     if (!value) {
@@ -2883,10 +2883,15 @@ export function buildMessagingPlatformFormValues(platform, saved = {}, options =
   }
 
   if (storageKey === 'signal') {
-    for (const key of ['account', 'cliPath', 'httpUrl', 'httpHost', 'httpPort']) {
+    for (const key of ['account', 'cliPath', 'httpUrl', 'httpHost', 'httpPort', 'responsePrefix']) {
       putSecretAwareFormValue(form, saved, key)
     }
     putAccessPolicyFormValues(form, saved)
+    putCsvFormValue(form, saved, 'groupAllowFrom')
+    putBoolFormValue(form, saved, 'blockStreaming')
+    for (const key of ['historyLimit', 'dmHistoryLimit', 'textChunkLimit', 'mediaMaxMb']) {
+      if (typeof saved[key] === 'number') form[key] = String(saved[key])
+    }
     return form
   }
 
@@ -3494,6 +3499,19 @@ function buildOpenClawMessagingPlatformEntry(platform, form, currentSaved = {}) 
     if (Array.isArray(form.allowFrom) && form.allowFrom.length) entry.allowFrom = form.allowFrom
     if (Array.isArray(form.groupAllowFrom) && form.groupAllowFrom.length) entry.groupAllowFrom = form.groupAllowFrom
     if (typeof form.mediaMaxMb === 'number') entry.mediaMaxMb = form.mediaMaxMb
+  } else if (storageKey === 'signal') {
+    for (const key of ['account', 'cliPath', 'httpUrl', 'httpHost', 'responsePrefix']) {
+      if (form[key]) entry[key] = form[key]
+    }
+    if (typeof form.httpPort === 'number') entry.httpPort = form.httpPort
+    entry.dmPolicy = form.dmPolicy
+    entry.groupPolicy = form.groupPolicy
+    if (Array.isArray(form.allowFrom) && form.allowFrom.length) entry.allowFrom = form.allowFrom
+    if (Array.isArray(form.groupAllowFrom) && form.groupAllowFrom.length) entry.groupAllowFrom = form.groupAllowFrom
+    if (typeof form.blockStreaming === 'boolean') entry.blockStreaming = form.blockStreaming
+    for (const key of ['historyLimit', 'dmHistoryLimit', 'textChunkLimit', 'mediaMaxMb']) {
+      if (typeof form[key] === 'number') entry[key] = form[key]
+    }
   } else if (storageKey === 'zalouser') {
     for (const key of ['profile', 'messagePrefix', 'responsePrefix']) {
       if (form[key]) entry[key] = form[key]
