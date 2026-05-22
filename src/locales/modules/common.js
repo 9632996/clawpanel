@@ -67,6 +67,7 @@ export default {
   upgradeOpenClaw: _('升级 OpenClaw', 'Upgrade OpenClaw', '升級 OpenClaw', 'OpenClaw をアップグレード', 'OpenClaw 업그레이드', 'Nâng cấp OpenClaw'),
   upgradeCompleted: _('升级完成', 'Upgrade completed', '升級完成', 'アップグレード完了', '업그레이드 완료', 'Nâng cấp hoàn tất'),
   upgradeFailed: _('升级失败', 'Upgrade failed', '升級失敗', 'アップグレード失敗', '업그레이드 실패', 'Nâng cấp thất bại'),
+  recommended: _('推荐版本', 'recommended version', '推薦版本', '推奨バージョン', '권장 버전', 'phiên bản khuyến nghị', 'versión recomendada', 'versão recomendada', 'рекомендуемая версия', 'version recommandée', 'empfohlene Version'),
   unknownCommand: _('未知命令', 'Unknown command', '未知命令', '不明なコマンド', '알 수 없는 명령', 'Lệnh không xác định'),
   processing: _('处理中...', 'Processing...', '處理中...', '処理中...', '처리 중...', 'Đang xử lý...', 'Procesando...', 'Processando...', 'Обработка...', 'Traitement...', 'Verarbeitung...'),
   // ---------------------------------------------------------------------

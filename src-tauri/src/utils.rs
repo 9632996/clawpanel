@@ -14,11 +14,7 @@ fn bound_cli_path() -> Option<std::path::PathBuf> {
         return None;
     }
     let p = std::path::PathBuf::from(raw);
-    if p.exists() && !is_rejected_cli_path(&p.to_string_lossy()) {
-        Some(p)
-    } else {
-        None
-    }
+    crate::commands::config::resolve_openclaw_cli_input_path(&p)
 }
 
 fn apply_openclaw_dir_env(cmd: &mut std::process::Command) {

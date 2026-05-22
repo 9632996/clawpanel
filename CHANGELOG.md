@@ -7,6 +7,18 @@
 
 ## [未发布]
 
+## [0.16.3] - 2026-05-22
+
+### 修复 (Fixes)
+
+- **Windows Gateway 启动路径兼容** — 启动 Gateway 可见终端时不再手工给 `cmd /c start` 的窗口标题嵌套引号，降低 Windows `start` 在路径含空格 / `Gateway` 片段时误把 `Gateway\` 当作可执行文件的风险
+- **绑定 CLI 路径更稳健** — 用户绑定到 OpenClaw 安装目录时，会解析到目录下的 `openclaw.cmd` / `openclaw.exe`，不再把目录本身写入 Gateway 启动脚本执行
+- **内核升级弹窗多语言修复** — 新增运行时 `kernel` 模块语言包并注册聚合入口，修复升级弹窗、侧边栏内核升级提示、内核徽章等位置显示 `kernel.upgrade.title` / `kernel.upgrade.starting` 原始 key 的问题
+
+### 测试与验证 (Testing)
+
+- **回归验证** — 已通过 Rust fmt / check / clippy、模块化 i18n key 解析检查和 `npm run build`
+
 ## [0.16.2] - 2026-05-21
 
 ### 修复 (Fixes)

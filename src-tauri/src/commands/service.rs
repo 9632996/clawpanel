@@ -1664,7 +1664,6 @@ mod platform {
         let runner_path = write_gateway_terminal_runner(&openclaw_dir, &cli)?;
         let runner_path_str = runner_path.to_string_lossy().to_string();
         let openclaw_dir_str = openclaw_dir.to_string_lossy().to_string();
-        let title_arg = format!("\"{GATEWAY_WINDOW_TITLE}\"");
 
         // 外层 cmd /c 自身用 CREATE_NO_WINDOW 隐藏（短命桥接进程），
         // 内部 `start` 会创建一个真正可见的新控制台窗口运行 runner.cmd。
@@ -1672,7 +1671,7 @@ mod platform {
         cmd.args([
             "/c",
             "start",
-            title_arg.as_str(),
+            GATEWAY_WINDOW_TITLE,
             "/D",
             openclaw_dir_str.as_str(),
             "cmd",
