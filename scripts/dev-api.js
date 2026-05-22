@@ -3091,6 +3091,22 @@ function hermesEnvValue(envValues, key) {
   return typeof value === 'string' && value.trim() ? value.trim() : ''
 }
 
+function hermesEnvBoolValue(envValues, key) {
+  const value = hermesEnvValue(envValues, key)
+  if (!value) return undefined
+  return ['true', '1', 'yes', 'on'].includes(value.toLowerCase())
+}
+
+function putHermesEnvString(form, envValues, envKey, formKey) {
+  const value = hermesEnvValue(envValues, envKey)
+  if (value) form[formKey] = value
+}
+
+function putHermesEnvBool(form, envValues, envKey, formKey) {
+  const value = hermesEnvBoolValue(envValues, envKey)
+  if (value !== undefined) form[formKey] = value
+}
+
 function readHermesEnvValues() {
   const envPath = path.join(hermesHome(), '.env')
   const values = {}
@@ -3136,6 +3152,30 @@ export function buildHermesChannelConfigValues(config = {}, envValues = {}) {
       form.botToken = hermesEnvValue(envValues, 'TELEGRAM_BOT_TOKEN') || (typeof entry.token === 'string' ? entry.token : '')
     } else if (platform === 'discord') {
       form.token = hermesEnvValue(envValues, 'DISCORD_BOT_TOKEN') || (typeof entry.token === 'string' ? entry.token : '')
+      for (const [yamlKey, formKey] of [
+        ['free_response_channels', 'freeResponseChannels'],
+        ['allowed_channels', 'allowedChannels'],
+        ['ignored_channels', 'ignoredChannels'],
+        ['no_thread_channels', 'noThreadChannels'],
+      ]) {
+        putHermesCsv(form, extra, yamlKey)
+        putHermesEnvString(form, envValues, `DISCORD_${yamlKey.toUpperCase()}`, formKey)
+      }
+      for (const [yamlKey, formKey] of [
+        ['auto_thread', 'autoThread'],
+        ['reactions', 'reactions'],
+        ['thread_require_mention', 'threadRequireMention'],
+        ['history_backfill', 'historyBackfill'],
+      ]) {
+        putHermesBool(form, extra, yamlKey)
+        putHermesEnvBool(form, envValues, `DISCORD_${yamlKey.toUpperCase()}`, formKey)
+      }
+      putHermesString(form, extra, 'history_backfill_limit')
+      putHermesEnvString(form, envValues, 'DISCORD_HISTORY_BACKFILL_LIMIT', 'historyBackfillLimit')
+      putHermesString(form, extra, 'reply_to_mode')
+      putHermesEnvString(form, envValues, 'DISCORD_REPLY_TO_MODE', 'replyToMode')
+      putHermesEnvString(form, envValues, 'DISCORD_HOME_CHANNEL', 'homeChannel')
+      putHermesEnvString(form, envValues, 'DISCORD_HOME_CHANNEL_NAME', 'homeChannelName')
     } else if (platform === 'slack') {
       form.botToken = hermesEnvValue(envValues, 'SLACK_BOT_TOKEN') || (typeof entry.token === 'string' ? entry.token : '')
       putHermesString(form, extra, 'app_token')
@@ -3214,6 +3254,16 @@ function normalizeHermesChannelForm(platform, form = {}) {
   if (platform === 'slack') {
     normalized.webhookPath = String(normalized.webhookPath || '').trim() || '/slack/events'
   }
+  if (platform === 'discord') {
+    for (const key of ['freeResponseChannels', 'allowedChannels', 'ignoredChannels', 'noThreadChannels']) {
+      if (Object.hasOwn(normalized, key)) normalized[key] = csvToStringArray(normalized[key])
+    }
+    for (const key of ['autoThread', 'reactions', 'threadRequireMention', 'historyBackfill']) {
+      if (Object.hasOwn(normalized, key)) normalized[key] = normalized[key] === true || normalized[key] === 'true' || normalized[key] === 'on'
+    }
+    normalized.historyBackfillLimit = String(normalized.historyBackfillLimit || '').trim()
+    normalized.replyToMode = String(normalized.replyToMode || '').trim()
+  }
   return normalized
 }
 
@@ -3232,6 +3282,24 @@ export function mergeHermesChannelConfig(config = {}, platform, form = {}) {
     deleteHermesEntryKey(entry, 'token')
   } else if (normalizedPlatform === 'discord') {
     deleteHermesEntryKey(entry, 'token')
+    for (const [formKey, extraKey] of [
+      ['freeResponseChannels', 'free_response_channels'],
+      ['allowedChannels', 'allowed_channels'],
+      ['ignoredChannels', 'ignored_channels'],
+      ['noThreadChannels', 'no_thread_channels'],
+    ]) {
+      if (Array.isArray(normalized[formKey])) setHermesExtra(entry, extraKey, normalized[formKey])
+    }
+    for (const [formKey, extraKey] of [
+      ['autoThread', 'auto_thread'],
+      ['reactions', 'reactions'],
+      ['threadRequireMention', 'thread_require_mention'],
+      ['historyBackfill', 'history_backfill'],
+    ]) {
+      if (Object.hasOwn(normalized, formKey)) setHermesExtra(entry, extraKey, !!normalized[formKey])
+    }
+    setHermesExtra(entry, 'history_backfill_limit', normalized.historyBackfillLimit)
+    setHermesExtra(entry, 'reply_to_mode', normalized.replyToMode)
   } else if (normalizedPlatform === 'slack') {
     deleteHermesEntryKey(entry, 'token')
     deleteHermesExtraKey(entry, 'app_token')
@@ -3340,6 +3408,18 @@ export function buildHermesChannelEnvUpdates(platform, form = {}) {
     updates.DISCORD_BOT_TOKEN = String(form.token || '').trim()
     updates.DISCORD_ALLOWED_USERS = csvEnvValue(form.allowFrom)
     if (Object.hasOwn(form, 'requireMention')) updates.DISCORD_REQUIRE_MENTION = boolEnvValue(form.requireMention)
+    updates.DISCORD_FREE_RESPONSE_CHANNELS = csvEnvValue(form.freeResponseChannels)
+    updates.DISCORD_ALLOWED_CHANNELS = csvEnvValue(form.allowedChannels)
+    updates.DISCORD_IGNORED_CHANNELS = csvEnvValue(form.ignoredChannels)
+    updates.DISCORD_NO_THREAD_CHANNELS = csvEnvValue(form.noThreadChannels)
+    if (Object.hasOwn(form, 'autoThread')) updates.DISCORD_AUTO_THREAD = boolEnvValue(form.autoThread)
+    if (Object.hasOwn(form, 'reactions')) updates.DISCORD_REACTIONS = boolEnvValue(form.reactions)
+    if (Object.hasOwn(form, 'threadRequireMention')) updates.DISCORD_THREAD_REQUIRE_MENTION = boolEnvValue(form.threadRequireMention)
+    if (Object.hasOwn(form, 'historyBackfill')) updates.DISCORD_HISTORY_BACKFILL = boolEnvValue(form.historyBackfill)
+    updates.DISCORD_HISTORY_BACKFILL_LIMIT = String(form.historyBackfillLimit || '').trim()
+    updates.DISCORD_REPLY_TO_MODE = String(form.replyToMode || '').trim()
+    updates.DISCORD_HOME_CHANNEL = String(form.homeChannel || '').trim()
+    updates.DISCORD_HOME_CHANNEL_NAME = String(form.homeChannelName || '').trim()
   } else if (platform === 'slack') {
     updates.SLACK_BOT_TOKEN = String(form.botToken || '').trim()
     updates.SLACK_APP_TOKEN = String(form.appToken || '').trim()

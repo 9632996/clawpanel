@@ -183,6 +183,129 @@ test('Hermes 渠道保存会生成运行时仍会读取的环境变量', () => {
   assert.equal(dingTalkEnv.DINGTALK_REQUIRE_MENTION, 'true')
 })
 
+test('Hermes Discord 读取会回显新版插件运行字段并优先使用环境变量', () => {
+  const values = buildHermesChannelConfigValues({
+    platforms: {
+      discord: {
+        enabled: true,
+        extra: {
+          require_mention: true,
+          thread_require_mention: true,
+          free_response_channels: ['free-a', 'free-b'],
+          allowed_channels: ['allow-a'],
+          ignored_channels: ['ignore-a'],
+          no_thread_channels: ['plain-a'],
+          auto_thread: true,
+          reactions: false,
+          history_backfill: true,
+          history_backfill_limit: '12',
+          reply_to_mode: 'all',
+        },
+      },
+    },
+  }, {
+    DISCORD_BOT_TOKEN: 'env-discord-token',
+    DISCORD_HOME_CHANNEL: 'home-1',
+    DISCORD_HOME_CHANNEL_NAME: 'ops-home',
+    DISCORD_FREE_RESPONSE_CHANNELS: 'env-free',
+    DISCORD_AUTO_THREAD: 'false',
+  })
+
+  assert.equal(values.discord.enabled, true)
+  assert.equal(values.discord.token, 'env-discord-token')
+  assert.equal(values.discord.freeResponseChannels, 'env-free')
+  assert.equal(values.discord.allowedChannels, 'allow-a')
+  assert.equal(values.discord.ignoredChannels, 'ignore-a')
+  assert.equal(values.discord.noThreadChannels, 'plain-a')
+  assert.equal(values.discord.autoThread, false)
+  assert.equal(values.discord.reactions, false)
+  assert.equal(values.discord.threadRequireMention, true)
+  assert.equal(values.discord.historyBackfill, true)
+  assert.equal(values.discord.historyBackfillLimit, '12')
+  assert.equal(values.discord.replyToMode, 'all')
+  assert.equal(values.discord.homeChannel, 'home-1')
+  assert.equal(values.discord.homeChannelName, 'ops-home')
+})
+
+test('Hermes Discord 保存会写入新版插件 YAML 字段和运行时环境变量', () => {
+  const next = mergeHermesChannelConfig({
+    platforms: {
+      discord: {
+        enabled: true,
+        token: 'old-token',
+        extra: {
+          unknown_option: 'keep-me',
+        },
+      },
+    },
+  }, 'discord', {
+    enabled: true,
+    token: 'discord-token',
+    allowFrom: '1001, 1002',
+    requireMention: true,
+    freeResponseChannels: 'free-a\nfree-b',
+    allowedChannels: 'allow-a',
+    ignoredChannels: 'ignore-a',
+    noThreadChannels: 'plain-a',
+    autoThread: false,
+    reactions: true,
+    threadRequireMention: true,
+    historyBackfill: true,
+    historyBackfillLimit: '12',
+    replyToMode: 'off',
+    homeChannel: 'home-1',
+    homeChannelName: 'ops-home',
+  })
+
+  assert.equal(next.platforms.discord.enabled, true)
+  assert.equal(next.platforms.discord.token, undefined)
+  assert.deepEqual(next.platforms.discord.extra.allow_from, ['1001', '1002'])
+  assert.deepEqual(next.platforms.discord.extra.free_response_channels, ['free-a', 'free-b'])
+  assert.deepEqual(next.platforms.discord.extra.allowed_channels, ['allow-a'])
+  assert.deepEqual(next.platforms.discord.extra.ignored_channels, ['ignore-a'])
+  assert.deepEqual(next.platforms.discord.extra.no_thread_channels, ['plain-a'])
+  assert.equal(next.platforms.discord.extra.auto_thread, false)
+  assert.equal(next.platforms.discord.extra.reactions, true)
+  assert.equal(next.platforms.discord.extra.thread_require_mention, true)
+  assert.equal(next.platforms.discord.extra.history_backfill, true)
+  assert.equal(next.platforms.discord.extra.history_backfill_limit, '12')
+  assert.equal(next.platforms.discord.extra.reply_to_mode, 'off')
+  assert.equal(next.platforms.discord.extra.unknown_option, 'keep-me')
+
+  const env = buildHermesChannelEnvUpdates('discord', {
+    token: 'discord-token',
+    allowFrom: '1001, 1002',
+    requireMention: true,
+    freeResponseChannels: 'free-a\nfree-b',
+    allowedChannels: 'allow-a',
+    ignoredChannels: 'ignore-a',
+    noThreadChannels: 'plain-a',
+    autoThread: false,
+    reactions: true,
+    threadRequireMention: true,
+    historyBackfill: true,
+    historyBackfillLimit: '12',
+    replyToMode: 'off',
+    homeChannel: 'home-1',
+    homeChannelName: 'ops-home',
+  })
+
+  assert.equal(env.DISCORD_BOT_TOKEN, 'discord-token')
+  assert.equal(env.DISCORD_ALLOWED_USERS, '1001,1002')
+  assert.equal(env.DISCORD_FREE_RESPONSE_CHANNELS, 'free-a,free-b')
+  assert.equal(env.DISCORD_ALLOWED_CHANNELS, 'allow-a')
+  assert.equal(env.DISCORD_IGNORED_CHANNELS, 'ignore-a')
+  assert.equal(env.DISCORD_NO_THREAD_CHANNELS, 'plain-a')
+  assert.equal(env.DISCORD_AUTO_THREAD, 'false')
+  assert.equal(env.DISCORD_REACTIONS, 'true')
+  assert.equal(env.DISCORD_THREAD_REQUIRE_MENTION, 'true')
+  assert.equal(env.DISCORD_HISTORY_BACKFILL, 'true')
+  assert.equal(env.DISCORD_HISTORY_BACKFILL_LIMIT, '12')
+  assert.equal(env.DISCORD_REPLY_TO_MODE, 'off')
+  assert.equal(env.DISCORD_HOME_CHANNEL, 'home-1')
+  assert.equal(env.DISCORD_HOME_CHANNEL_NAME, 'ops-home')
+})
+
 test('Hermes 渠道保存会从 YAML 清理旧凭证，避免覆盖 .env 运行时值', () => {
   const next = mergeHermesChannelConfig({
     platforms: {

@@ -26,6 +26,22 @@ const CHANNELS = [
     secretFields: ['token'],
     fields: [
       { key: 'token', labelKey: 'engine.hermesChannelBotToken', type: 'password', placeholder: 'MTA...' },
+      { key: 'homeChannel', labelKey: 'engine.hermesChannelDiscordHomeChannel', type: 'text', placeholder: '123456789012345678' },
+      { key: 'homeChannelName', labelKey: 'engine.hermesChannelDiscordHomeChannelName', type: 'text', placeholder: 'ops' },
+    ],
+    advancedFields: [
+      { key: 'freeResponseChannels', labelKey: 'engine.hermesChannelDiscordFreeResponseChannels', type: 'textarea', placeholderKey: 'engine.hermesChannelDiscordFreeResponseChannelsPh' },
+      { key: 'allowedChannels', labelKey: 'engine.hermesChannelDiscordAllowedChannels', type: 'textarea', placeholderKey: 'engine.hermesChannelDiscordChannelListPh' },
+      { key: 'ignoredChannels', labelKey: 'engine.hermesChannelDiscordIgnoredChannels', type: 'textarea', placeholderKey: 'engine.hermesChannelDiscordChannelListPh' },
+      { key: 'noThreadChannels', labelKey: 'engine.hermesChannelDiscordNoThreadChannels', type: 'textarea', placeholderKey: 'engine.hermesChannelDiscordChannelListPh' },
+      { key: 'historyBackfillLimit', labelKey: 'engine.hermesChannelDiscordHistoryBackfillLimit', type: 'text', placeholder: '12' },
+      { key: 'replyToMode', labelKey: 'engine.hermesChannelDiscordReplyToMode', type: 'select', options: [['first', 'engine.hermesChannelDiscordReplyFirst'], ['all', 'engine.hermesChannelDiscordReplyAll'], ['off', 'engine.hermesChannelDiscordReplyOff']] },
+    ],
+    advancedToggles: [
+      { key: 'autoThread', labelKey: 'engine.hermesChannelDiscordAutoThread' },
+      { key: 'reactions', labelKey: 'engine.hermesChannelDiscordReactions' },
+      { key: 'threadRequireMention', labelKey: 'engine.hermesChannelDiscordThreadRequireMention' },
+      { key: 'historyBackfill', labelKey: 'engine.hermesChannelDiscordHistoryBackfill' },
     ],
   },
   {
@@ -108,6 +124,13 @@ function defaultForm(platform) {
     form.reactionNotifications = 'off'
     form.typingIndicator = true
     form.resolveSenderNames = true
+  }
+  if (platform === 'discord') {
+    form.autoThread = true
+    form.reactions = true
+    form.threadRequireMention = false
+    form.historyBackfill = false
+    form.replyToMode = 'first'
   }
   if (platform === 'slack') form.webhookPath = '/slack/events'
   return form
@@ -283,6 +306,25 @@ export function render() {
                   ${COMMON_FIELDS.slice(2).map(field => renderField(field, form, disabled)).join('')}
                 </div>
               </div>
+
+              ${(channel.advancedFields || []).length ? `
+                <div class="hm-channel-section">
+                  <div class="hm-channel-section-title">${esc(t('engine.hermesChannelRuntimeBehavior'))}</div>
+                  ${(channel.advancedToggles || []).length ? `
+                    <div class="hm-channel-toggle-grid">
+                      ${channel.advancedToggles.map(toggle => `
+                        <label class="hm-channel-check">
+                          <input class="hm-channel-input" data-key="${esc(toggle.key)}" type="checkbox" ${form[toggle.key] ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+                          <span>${esc(t(toggle.labelKey))}</span>
+                        </label>
+                      `).join('')}
+                    </div>
+                  ` : ''}
+                  <div class="hm-field-row">
+                    ${channel.advancedFields.map(field => renderField(field, form, disabled)).join('')}
+                  </div>
+                </div>
+              ` : ''}
 
               <div class="hm-channel-footnote">
                 ${icon('info', 14)}

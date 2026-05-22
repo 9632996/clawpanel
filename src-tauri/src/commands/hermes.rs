@@ -2279,6 +2279,21 @@ fn put_json_string_from_env(
     }
 }
 
+fn put_json_bool_from_env(
+    form: &mut serde_json::Map<String, Value>,
+    env_values: &std::collections::HashMap<String, String>,
+    env_key: &str,
+    json_key: &str,
+) {
+    if let Some(value) = hermes_env_value(env_values, env_key) {
+        let enabled = matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "true" | "1" | "yes" | "on"
+        );
+        form.insert(json_key.to_string(), Value::Bool(enabled));
+    }
+}
+
 fn build_hermes_channel_config_values(
     config: &serde_yaml::Value,
     env_values: &std::collections::HashMap<String, String>,
@@ -2313,6 +2328,79 @@ fn build_hermes_channel_config_values(
                     .or_else(|| yaml_string_field(&entry, "token"))
                     .unwrap_or_default();
                 form.insert("token".to_string(), Value::String(token));
+                for (yaml_key_name, json_key_name, env_key_name) in [
+                    (
+                        "free_response_channels",
+                        "freeResponseChannels",
+                        "DISCORD_FREE_RESPONSE_CHANNELS",
+                    ),
+                    (
+                        "allowed_channels",
+                        "allowedChannels",
+                        "DISCORD_ALLOWED_CHANNELS",
+                    ),
+                    (
+                        "ignored_channels",
+                        "ignoredChannels",
+                        "DISCORD_IGNORED_CHANNELS",
+                    ),
+                    (
+                        "no_thread_channels",
+                        "noThreadChannels",
+                        "DISCORD_NO_THREAD_CHANNELS",
+                    ),
+                ] {
+                    insert_json_csv_if_present(&mut form, &extra, yaml_key_name, json_key_name);
+                    put_json_string_from_env(&mut form, env_values, env_key_name, json_key_name);
+                }
+                for (yaml_key_name, json_key_name, env_key_name) in [
+                    ("auto_thread", "autoThread", "DISCORD_AUTO_THREAD"),
+                    ("reactions", "reactions", "DISCORD_REACTIONS"),
+                    (
+                        "thread_require_mention",
+                        "threadRequireMention",
+                        "DISCORD_THREAD_REQUIRE_MENTION",
+                    ),
+                    (
+                        "history_backfill",
+                        "historyBackfill",
+                        "DISCORD_HISTORY_BACKFILL",
+                    ),
+                ] {
+                    insert_json_bool_if_present(&mut form, &extra, yaml_key_name, json_key_name);
+                    put_json_bool_from_env(&mut form, env_values, env_key_name, json_key_name);
+                }
+                insert_json_string_if_present(
+                    &mut form,
+                    &extra,
+                    "history_backfill_limit",
+                    "historyBackfillLimit",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "DISCORD_HISTORY_BACKFILL_LIMIT",
+                    "historyBackfillLimit",
+                );
+                insert_json_string_if_present(&mut form, &extra, "reply_to_mode", "replyToMode");
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "DISCORD_REPLY_TO_MODE",
+                    "replyToMode",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "DISCORD_HOME_CHANNEL",
+                    "homeChannel",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "DISCORD_HOME_CHANNEL_NAME",
+                    "homeChannelName",
+                );
             }
             "slack" => {
                 let bot_token = hermes_env_value(env_values, "SLACK_BOT_TOKEN")
@@ -2568,7 +2656,35 @@ fn merge_hermes_channel_config(
 
     match platform {
         "telegram" => delete_yaml_key(entry, "token"),
-        "discord" => delete_yaml_key(entry, "token"),
+        "discord" => {
+            delete_yaml_key(entry, "token");
+            for (form_key_name, extra_key_name) in [
+                ("freeResponseChannels", "free_response_channels"),
+                ("allowedChannels", "allowed_channels"),
+                ("ignoredChannels", "ignored_channels"),
+                ("noThreadChannels", "no_thread_channels"),
+            ] {
+                if let Some(values) = form_string_array(form, form_key_name) {
+                    set_extra_string_array(entry, extra_key_name, values);
+                }
+            }
+            for (form_key_name, extra_key_name) in [
+                ("autoThread", "auto_thread"),
+                ("reactions", "reactions"),
+                ("threadRequireMention", "thread_require_mention"),
+                ("historyBackfill", "history_backfill"),
+            ] {
+                if let Some(value) = form_bool(form, form_key_name) {
+                    set_extra_bool(entry, extra_key_name, value);
+                }
+            }
+            set_extra_string_if_present(
+                entry,
+                "history_backfill_limit",
+                form_string(form, "historyBackfillLimit"),
+            );
+            set_extra_string_if_present(entry, "reply_to_mode", form_string(form, "replyToMode"));
+        }
         "slack" => {
             delete_yaml_key(entry, "token");
             delete_extra_key(entry, "app_token");
@@ -2740,6 +2856,50 @@ fn build_hermes_channel_env_updates(platform: &str, form: &Value) -> Vec<(String
             if let Some(value) = form_bool(form, "requireMention") {
                 push("DISCORD_REQUIRE_MENTION", bool_env_value(value));
             }
+            push(
+                "DISCORD_FREE_RESPONSE_CHANNELS",
+                csv_env_value(form, "freeResponseChannels"),
+            );
+            push(
+                "DISCORD_ALLOWED_CHANNELS",
+                csv_env_value(form, "allowedChannels"),
+            );
+            push(
+                "DISCORD_IGNORED_CHANNELS",
+                csv_env_value(form, "ignoredChannels"),
+            );
+            push(
+                "DISCORD_NO_THREAD_CHANNELS",
+                csv_env_value(form, "noThreadChannels"),
+            );
+            if let Some(value) = form_bool(form, "autoThread") {
+                push("DISCORD_AUTO_THREAD", bool_env_value(value));
+            }
+            if let Some(value) = form_bool(form, "reactions") {
+                push("DISCORD_REACTIONS", bool_env_value(value));
+            }
+            if let Some(value) = form_bool(form, "threadRequireMention") {
+                push("DISCORD_THREAD_REQUIRE_MENTION", bool_env_value(value));
+            }
+            if let Some(value) = form_bool(form, "historyBackfill") {
+                push("DISCORD_HISTORY_BACKFILL", bool_env_value(value));
+            }
+            push(
+                "DISCORD_HISTORY_BACKFILL_LIMIT",
+                form_string(form, "historyBackfillLimit").unwrap_or_default(),
+            );
+            push(
+                "DISCORD_REPLY_TO_MODE",
+                form_string(form, "replyToMode").unwrap_or_default(),
+            );
+            push(
+                "DISCORD_HOME_CHANNEL",
+                form_string(form, "homeChannel").unwrap_or_default(),
+            );
+            push(
+                "DISCORD_HOME_CHANNEL_NAME",
+                form_string(form, "homeChannelName").unwrap_or_default(),
+            );
         }
         "slack" => {
             push(
@@ -2837,6 +2997,18 @@ fn write_hermes_channel_env(platform: &str, form: &Value) -> Result<(), String> 
             "DISCORD_BOT_TOKEN",
             "DISCORD_ALLOWED_USERS",
             "DISCORD_REQUIRE_MENTION",
+            "DISCORD_FREE_RESPONSE_CHANNELS",
+            "DISCORD_ALLOWED_CHANNELS",
+            "DISCORD_IGNORED_CHANNELS",
+            "DISCORD_NO_THREAD_CHANNELS",
+            "DISCORD_AUTO_THREAD",
+            "DISCORD_REACTIONS",
+            "DISCORD_THREAD_REQUIRE_MENTION",
+            "DISCORD_HISTORY_BACKFILL",
+            "DISCORD_HISTORY_BACKFILL_LIMIT",
+            "DISCORD_REPLY_TO_MODE",
+            "DISCORD_HOME_CHANNEL",
+            "DISCORD_HOME_CHANNEL_NAME",
         ],
         "slack" => vec![
             "SLACK_BOT_TOKEN",
@@ -7946,6 +8118,150 @@ platforms:
             "FEISHU_WEBHOOK_PATH".to_string(),
             "/feishu/webhook".to_string()
         )));
+    }
+
+    #[test]
+    fn discord_channel_supports_plugin_runtime_fields() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+platforms:
+  discord:
+    enabled: true
+    token: old-token
+    extra:
+      unknown_option: keep-me
+      free_response_channels: ["yaml-free"]
+      auto_thread: true
+"#,
+        )
+        .unwrap();
+        let mut env = HashMap::new();
+        env.insert(
+            "DISCORD_BOT_TOKEN".to_string(),
+            "env-discord-token".to_string(),
+        );
+        env.insert(
+            "DISCORD_FREE_RESPONSE_CHANNELS".to_string(),
+            "env-free".to_string(),
+        );
+        env.insert("DISCORD_AUTO_THREAD".to_string(), "false".to_string());
+        env.insert("DISCORD_HOME_CHANNEL".to_string(), "home-1".to_string());
+
+        let values = build_hermes_channel_config_values(&config, &env);
+        assert_eq!(values["discord"]["token"], "env-discord-token");
+        assert_eq!(values["discord"]["freeResponseChannels"], "env-free");
+        assert_eq!(values["discord"]["autoThread"], false);
+        assert_eq!(values["discord"]["homeChannel"], "home-1");
+
+        merge_hermes_channel_config(
+            &mut config,
+            "discord",
+            &json!({
+                "enabled": true,
+                "token": "discord-token",
+                "allowFrom": "1001, 1002",
+                "requireMention": true,
+                "freeResponseChannels": "free-a\nfree-b",
+                "allowedChannels": "allow-a",
+                "ignoredChannels": "ignore-a",
+                "noThreadChannels": "plain-a",
+                "autoThread": false,
+                "reactions": true,
+                "threadRequireMention": true,
+                "historyBackfill": true,
+                "historyBackfillLimit": "12",
+                "replyToMode": "off",
+                "homeChannel": "home-1",
+                "homeChannelName": "ops-home",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(
+            config["platforms"]["discord"]["token"],
+            serde_yaml::Value::Null
+        );
+        assert_eq!(
+            config["platforms"]["discord"]["extra"]["free_response_channels"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>(),
+            vec!["free-a", "free-b"]
+        );
+        assert_eq!(
+            config["platforms"]["discord"]["extra"]["allowed_channels"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>(),
+            vec!["allow-a"]
+        );
+        assert_eq!(
+            config["platforms"]["discord"]["extra"]["auto_thread"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            config["platforms"]["discord"]["extra"]["reactions"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            config["platforms"]["discord"]["extra"]["thread_require_mention"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            config["platforms"]["discord"]["extra"]["history_backfill"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            config["platforms"]["discord"]["extra"]["history_backfill_limit"].as_str(),
+            Some("12")
+        );
+        assert_eq!(
+            config["platforms"]["discord"]["extra"]["reply_to_mode"].as_str(),
+            Some("off")
+        );
+        assert_eq!(
+            config["platforms"]["discord"]["extra"]["unknown_option"].as_str(),
+            Some("keep-me")
+        );
+
+        let env_updates = build_hermes_channel_env_updates(
+            "discord",
+            &json!({
+                "token": "discord-token",
+                "allowFrom": "1001, 1002",
+                "requireMention": true,
+                "freeResponseChannels": "free-a\nfree-b",
+                "allowedChannels": "allow-a",
+                "ignoredChannels": "ignore-a",
+                "noThreadChannels": "plain-a",
+                "autoThread": false,
+                "reactions": true,
+                "threadRequireMention": true,
+                "historyBackfill": true,
+                "historyBackfillLimit": "12",
+                "replyToMode": "off",
+                "homeChannel": "home-1",
+                "homeChannelName": "ops-home",
+            }),
+        );
+
+        assert!(
+            env_updates.contains(&("DISCORD_BOT_TOKEN".to_string(), "discord-token".to_string()))
+        );
+        assert!(env_updates.contains(&(
+            "DISCORD_FREE_RESPONSE_CHANNELS".to_string(),
+            "free-a,free-b".to_string()
+        )));
+        assert!(env_updates.contains(&("DISCORD_AUTO_THREAD".to_string(), "false".to_string())));
+        assert!(env_updates.contains(&(
+            "DISCORD_THREAD_REQUIRE_MENTION".to_string(),
+            "true".to_string()
+        )));
+        assert!(env_updates.contains(&("DISCORD_HOME_CHANNEL".to_string(), "home-1".to_string())));
     }
 
     #[test]

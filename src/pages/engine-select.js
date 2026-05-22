@@ -146,6 +146,19 @@ function bindClick(page) {
     if (option) chooseWithAnimation(page, panel, option, engine)
   })
 
+  // CTA 按钮本身位于内容层，不一定会命中背景三角形面板；
+  // 单独绑定可以保证移动端和键盘操作都能真正完成引擎选择。
+  page.querySelectorAll('[data-engine-cta]').forEach(btn => {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation()
+      if (_busy) return
+      const engine = btn.dataset.engineCta
+      const option = PRIMARY_OPTIONS.find(o => o.id === engine)
+      const panel = page.querySelector(`.es-panel[data-engine="${engine}"]`)
+      if (option && panel) chooseWithAnimation(page, panel, option, engine)
+    })
+  })
+
   // 次级链接：两个都要 / 稍后再说（无对角线动画，直接走选择）
   page.querySelectorAll('[data-secondary]').forEach(btn => {
     btn.addEventListener('click', async (event) => {
