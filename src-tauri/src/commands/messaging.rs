@@ -193,6 +193,13 @@ fn channel_root_has_messaging_credential(root: &Map<String, Value>) -> bool {
     .any(|key| has_configured_messaging_value(root.get(*key)))
 }
 
+fn value_has_messaging_credential(value: &Value) -> bool {
+    value
+        .as_object()
+        .map(channel_root_has_messaging_credential)
+        .unwrap_or(false)
+}
+
 fn insert_bool_as_string(form: &mut Map<String, Value>, source: &Value, key: &str) {
     if let Some(v) = source.get(key).and_then(|v| v.as_bool()) {
         form.insert(
@@ -3996,21 +4003,14 @@ pub async fn save_agent_binding(
                 let has_account = ch
                     .get("accounts")
                     .and_then(|a| a.get(acct.as_str()))
-                    .map(|acct_val| {
-                        acct_val
-                            .get("appId")
-                            .and_then(|v| v.as_str())
-                            .filter(|s| !s.is_empty())
-                            .is_some()
-                    })
+                    .map(value_has_messaging_credential)
                     .unwrap_or(false);
 
                 if !has_account {
                     let has_root = ch
-                        .get("appId")
-                        .and_then(|v| v.as_str())
-                        .filter(|s| !s.is_empty())
-                        .is_some();
+                        .as_object()
+                        .map(channel_root_has_messaging_credential)
+                        .unwrap_or(false);
                     if has_root {
                         warnings.push(format!(
                             "账号「{}」在 channels.{}.accounts 下未找到对应配置，\
@@ -4022,7 +4022,7 @@ pub async fn save_agent_binding(
                         warnings.push(format!(
                             "账号「{}」在 channels.{}.accounts 下未找到对应配置，\
                          该绑定可能无法正常路由消息。\
-                         请先在渠道列表中为账号「{}」接入飞书应用。",
+                         请先在渠道列表中为账号「{}」接入对应渠道账号。",
                             acct, channel, acct
                         ));
                     }
@@ -4594,5 +4594,35 @@ mod tests {
         );
 
         assert_eq!(value, Some(Value::String("new-discord-token".into())));
+    }
+
+    #[test]
+    fn messaging_credential_detection_accepts_non_app_id_channels() {
+        for account in [
+            json!({ "botToken": "telegram-token" }),
+            json!({ "token": "discord-token" }),
+            json!({ "botToken": "xoxb-token", "appToken": "xapp-token" }),
+            json!({ "clientId": "teams-client-id" }),
+        ] {
+            assert!(value_has_messaging_credential(&account));
+        }
+
+        assert!(!value_has_messaging_credential(&json!({
+            "enabled": true,
+            "dmPolicy": "pairing"
+        })));
+    }
+
+    #[test]
+    fn messaging_credential_detection_accepts_secret_refs() {
+        let account = json!({
+            "token": {
+                "source": "env",
+                "provider": "default",
+                "id": "DISCORD_BOT_TOKEN"
+            }
+        });
+
+        assert!(value_has_messaging_credential(&account));
     }
 }
