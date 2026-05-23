@@ -139,3 +139,25 @@ test('Twitch 渠道 UI 会暴露聊天账号和访问控制配置字段', () => 
   assert.match(twitchBlock, /pluginRequired:\s*'@openclaw\/twitch@latest'/)
   assert.match(twitchBlock, /pluginId:\s*'twitch'/)
 })
+
+test('Nostr 渠道 UI 会暴露私钥、Relay、访问控制和 Profile 配置字段', () => {
+  const nostrBlock = getRegistryBlock('nostr')
+
+  for (const field of [
+    'privateKey',
+    'relays',
+    'dmPolicy',
+    'allowFrom',
+    'profileName',
+    'profileDisplayName',
+    'profileAbout',
+    'profilePicture',
+    'profileWebsite',
+    'profileNip05',
+    'profileLud16',
+  ]) {
+    assert.match(nostrBlock, new RegExp(`key:\\s*'${field}'`))
+  }
+  assert.match(nostrBlock, /pluginRequired:\s*'@openclaw\/nostr@latest'/)
+  assert.match(nostrBlock, /pluginId:\s*'nostr'/)
+})

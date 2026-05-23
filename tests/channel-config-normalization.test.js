@@ -439,6 +439,97 @@ test('Twitch 读取和诊断会回显访问控制与刷新 Token 字段', () => 
   assert.equal(ready.checks.find(item => item.id === 'credentials')?.ok, true)
 })
 
+test('Nostr 渠道保存会写入上游根节点配置并启用插件', () => {
+  const cfg = { channels: {} }
+
+  mergeOpenClawMessagingPlatformConfig(cfg, {
+    platform: 'nostr',
+    form: {
+      enabled: 'true',
+      name: 'nostr-bot',
+      defaultAccount: 'default',
+      privateKey: 'nsec1example',
+      relays: 'wss://relay.damus.io, wss://nos.lol',
+      dmPolicy: 'allowlist',
+      allowFrom: 'npub1sender, 0123456789abcdef',
+      profileName: 'openclaw',
+      profileDisplayName: 'OpenClaw Bot',
+      profileAbout: 'Nostr DM assistant',
+      profilePicture: 'https://example.com/avatar.png',
+      profileWebsite: 'https://example.com',
+      profileNip05: 'openclaw@example.com',
+      profileLud16: 'openclaw@example.com',
+    },
+  })
+
+  const root = cfg.channels.nostr
+  assert.equal(root.enabled, true)
+  assert.equal(root.name, 'nostr-bot')
+  assert.equal(root.defaultAccount, 'default')
+  assert.equal(root.privateKey, 'nsec1example')
+  assert.deepEqual(root.relays, ['wss://relay.damus.io', 'wss://nos.lol'])
+  assert.equal(root.dmPolicy, 'allowlist')
+  assert.deepEqual(root.allowFrom, ['npub1sender', '0123456789abcdef'])
+  assert.equal(root.profile.name, 'openclaw')
+  assert.equal(root.profile.displayName, 'OpenClaw Bot')
+  assert.equal(root.profile.about, 'Nostr DM assistant')
+  assert.equal(root.profile.picture, 'https://example.com/avatar.png')
+  assert.equal(root.profile.website, 'https://example.com')
+  assert.equal(root.profile.nip05, 'openclaw@example.com')
+  assert.equal(root.profile.lud16, 'openclaw@example.com')
+  assert.equal(Object.hasOwn(root, 'accounts'), false)
+  assert.equal(cfg.plugins.entries.nostr.enabled, true)
+})
+
+test('Nostr 读取和诊断会回显 relay、访问控制和 profile 字段', () => {
+  const values = buildMessagingPlatformFormValues('nostr', {
+    enabled: true,
+    name: 'nostr-bot',
+    privateKey: 'nsec1example',
+    relays: ['wss://relay.damus.io', 'wss://nos.lol'],
+    dmPolicy: 'allowlist',
+    allowFrom: ['npub1sender'],
+    profile: {
+      name: 'openclaw',
+      displayName: 'OpenClaw Bot',
+      about: 'Nostr DM assistant',
+      picture: 'https://example.com/avatar.png',
+      website: 'https://example.com',
+      nip05: 'openclaw@example.com',
+      lud16: 'openclaw@example.com',
+    },
+  })
+  const missingKey = buildOpenClawChannelDiagnosis({
+    platform: 'nostr',
+    configExists: true,
+    channelEnabled: true,
+    form: { relays: 'wss://relay.damus.io' },
+  })
+  const ready = buildOpenClawChannelDiagnosis({
+    platform: 'nostr',
+    configExists: true,
+    channelEnabled: true,
+    form: values,
+  })
+
+  assert.equal(values.enabled, 'true')
+  assert.equal(values.name, 'nostr-bot')
+  assert.equal(values.privateKey, 'nsec1example')
+  assert.equal(values.relays, 'wss://relay.damus.io, wss://nos.lol')
+  assert.equal(values.dmPolicy, 'allowlist')
+  assert.equal(values.allowFrom, 'npub1sender')
+  assert.equal(values.profileName, 'openclaw')
+  assert.equal(values.profileDisplayName, 'OpenClaw Bot')
+  assert.equal(values.profileAbout, 'Nostr DM assistant')
+  assert.equal(values.profilePicture, 'https://example.com/avatar.png')
+  assert.equal(values.profileWebsite, 'https://example.com')
+  assert.equal(values.profileNip05, 'openclaw@example.com')
+  assert.equal(values.profileLud16, 'openclaw@example.com')
+  assert.equal(missingKey.checks.find(item => item.id === 'credentials')?.ok, false)
+  assert.match(missingKey.checks.find(item => item.id === 'credentials')?.detail || '', /Private Key/)
+  assert.equal(ready.checks.find(item => item.id === 'credentials')?.ok, true)
+})
+
 test('Signal 渠道保存会保留多账号和上游运行字段', () => {
   const cfg = { channels: {} }
 

@@ -152,6 +152,7 @@ fn preserve_messaging_credential_refs(
         "gatewayPassword",
         "gatewayToken",
         "password",
+        "privateKey",
         "secretFile",
         "serviceAccount",
         "serviceAccountFile",
@@ -239,6 +240,7 @@ fn channel_root_has_messaging_credential(root: &Map<String, Value>) -> bool {
         "gatewayPassword",
         "gatewayToken",
         "password",
+        "privateKey",
         "secretFile",
         "serviceAccount",
         "serviceAccountFile",
@@ -276,6 +278,7 @@ fn required_channel_credential_fields(
             ("workspace", "Workspace"),
         ],
         "nextcloud-talk" => vec![("baseUrl", "Base URL")],
+        "nostr" => vec![("privateKey", "Private Key")],
         "twitch" => vec![
             ("username", "Username"),
             ("accessToken", "Access Token"),
@@ -964,6 +967,7 @@ fn normalize_messaging_platform_form(
         "remoteAttachmentRoots",
         "toolsAllow",
         "allowedRoles",
+        "relays",
     ] {
         if normalized.contains_key(key) {
             let items = json_array_from_csv_value(normalized.get(key));
@@ -1885,6 +1889,31 @@ pub async fn read_platform_config(
             insert_bool_as_string(&mut form, &saved, "requireMention");
             insert_number_as_string(&mut form, &saved, "expiresIn");
             insert_number_as_string(&mut form, &saved, "obtainmentTimestamp");
+        }
+        "nostr" => {
+            insert_secret_aware_form_value(&mut form, &saved, "privateKey");
+            for key in ["name", "defaultAccount", "dmPolicy"] {
+                insert_string_if_present(&mut form, &saved, key);
+            }
+            insert_bool_as_string(&mut form, &saved, "enabled");
+            insert_array_as_csv(&mut form, &saved, "relays");
+            insert_array_as_csv(&mut form, &saved, "allowFrom");
+            if let Some(profile) = saved.get("profile") {
+                for (source_key, form_key) in [
+                    ("name", "profileName"),
+                    ("displayName", "profileDisplayName"),
+                    ("about", "profileAbout"),
+                    ("picture", "profilePicture"),
+                    ("banner", "profileBanner"),
+                    ("website", "profileWebsite"),
+                    ("nip05", "profileNip05"),
+                    ("lud16", "profileLud16"),
+                ] {
+                    if let Some(v) = profile.get(source_key).and_then(|v| v.as_str()) {
+                        form.insert(form_key.into(), Value::String(v.into()));
+                    }
+                }
+            }
         }
         "synology-chat" => {
             for key in ["token", "incomingUrl", "nasHost", "webhookPath", "botName"] {
@@ -3083,6 +3112,47 @@ pub async fn save_messaging_platform(
             )?;
             ensure_plugin_allowed(&mut cfg, "twitch")?;
         }
+        "nostr" => {
+            let private_key = form_string(form_obj, "privateKey");
+            if private_key.is_empty() && !has_configured_messaging_value(form_obj.get("privateKey"))
+            {
+                return Err("Nostr Private Key 不能为空".into());
+            }
+
+            let root_saved = channels_map
+                .get(storage_key.as_str())
+                .cloned()
+                .unwrap_or(Value::Null);
+            let mut entry = Map::new();
+            entry.insert("enabled".into(), Value::Bool(true));
+            put_bool_value_if_present(&mut entry, "enabled", form_obj.get("enabled"));
+            for key in ["name", "defaultAccount", "privateKey", "dmPolicy"] {
+                put_string(&mut entry, key, form_string(form_obj, key));
+            }
+            put_array_from_form_value(&mut entry, "relays", form_obj.get("relays"));
+            put_array_from_form_value(&mut entry, "allowFrom", form_obj.get("allowFrom"));
+
+            let mut profile = Map::new();
+            for (form_key, target_key) in [
+                ("profileName", "name"),
+                ("profileDisplayName", "displayName"),
+                ("profileAbout", "about"),
+                ("profilePicture", "picture"),
+                ("profileBanner", "banner"),
+                ("profileWebsite", "website"),
+                ("profileNip05", "nip05"),
+                ("profileLud16", "lud16"),
+            ] {
+                put_string(&mut profile, target_key, form_string(form_obj, form_key));
+            }
+            if !profile.is_empty() {
+                entry.insert("profile".into(), Value::Object(profile));
+            }
+
+            preserve_messaging_credential_refs(&mut entry, form_obj, &root_saved);
+            merge_channel_entry_for_account(channels_map, &storage_key, None, entry)?;
+            ensure_plugin_allowed(&mut cfg, "nostr")?;
+        }
         "synology-chat" => {
             let token = form_string(form_obj, "token");
             let incoming_url = form_string(form_obj, "incomingUrl");
@@ -3391,6 +3461,10 @@ pub async fn verify_bot_token(platform: String, form: Value) -> Result<Value, St
         "twitch" => Ok(json!({
             "valid": true,
             "warnings": ["Twitch 面板已完成基础字段校验；实际连通性请通过 Gateway 启动日志或 openclaw channels status --probe 验证"]
+        })),
+        "nostr" => Ok(json!({
+            "valid": true,
+            "warnings": ["Nostr 面板已完成基础字段校验；实际连通性请通过 Gateway 启动日志或 openclaw channels status --probe 验证"]
         })),
         _ => Ok(json!({
             "valid": true,
@@ -6725,6 +6799,74 @@ mod tests {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .contains("Access Token"));
+    }
+
+    #[test]
+    fn normalize_nostr_form_preserves_relay_access_and_profile_fields() {
+        let form = json!({
+            "enabled": "true",
+            "name": "nostr-bot",
+            "defaultAccount": "default",
+            "privateKey": "nsec1example",
+            "relays": "wss://relay.damus.io, wss://nos.lol",
+            "dmPolicy": "allowlist",
+            "allowFrom": "npub1sender, 0123456789abcdef",
+            "profileName": "openclaw",
+            "profileDisplayName": "OpenClaw Bot",
+            "profileAbout": "Nostr DM assistant",
+            "profilePicture": "https://example.com/avatar.png",
+            "profileWebsite": "https://example.com",
+            "profileNip05": "openclaw@example.com",
+            "profileLud16": "openclaw@example.com"
+        });
+        let normalized =
+            normalize_messaging_platform_form("nostr", form.as_object().expect("object"));
+
+        assert_eq!(
+            normalized.get("enabled").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            normalized.get("dmPolicy").and_then(|v| v.as_str()),
+            Some("allowlist")
+        );
+        assert_eq!(
+            normalized
+                .get("relays")
+                .and_then(|v| v.as_array())
+                .map(|items| items.len()),
+            Some(2)
+        );
+        assert_eq!(
+            normalized
+                .get("allowFrom")
+                .and_then(|v| v.as_array())
+                .map(|items| items.len()),
+            Some(2)
+        );
+        assert!(channel_diagnosis_credentials_ready("nostr", &normalized));
+
+        let missing = normalize_messaging_platform_form(
+            "nostr",
+            json!({
+                "relays": "wss://relay.damus.io"
+            })
+            .as_object()
+            .expect("object"),
+        );
+        assert!(!channel_diagnosis_credentials_ready("nostr", &missing));
+        let diagnosis =
+            build_openclaw_channel_diagnosis("nostr", None, true, true, &missing, None, None);
+        assert!(diagnosis
+            .get("checks")
+            .and_then(|v| v.as_array())
+            .and_then(|items| items
+                .iter()
+                .find(|item| { item.get("id").and_then(|v| v.as_str()) == Some("credentials") }))
+            .and_then(|item| item.get("detail"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .contains("Private Key"));
     }
 
     #[test]

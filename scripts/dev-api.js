@@ -2472,7 +2472,7 @@ export function normalizeMessagingPlatformForm(platform, form = {}) {
     normalized.allowedUserIds = csvToStringArray(normalized.allowedUserIds)
   }
 
-  for (const key of ['promptStarters', 'delegatedAuthScopes', 'attachmentRoots', 'remoteAttachmentRoots', 'toolsAllow', 'allowedRoles']) {
+  for (const key of ['promptStarters', 'delegatedAuthScopes', 'attachmentRoots', 'remoteAttachmentRoots', 'toolsAllow', 'allowedRoles', 'relays']) {
     if (Object.hasOwn(normalized, key)) normalized[key] = csvToStringArray(normalized[key])
   }
 
@@ -2607,6 +2607,7 @@ const MESSAGING_CREDENTIAL_FIELDS = [
   'gatewayPassword',
   'gatewayToken',
   'password',
+  'privateKey',
   'secretFile',
   'serviceAccount',
   'serviceAccountFile',
@@ -2696,6 +2697,7 @@ const CHANNEL_DIAG_REQUIRED_FIELDS = {
   'synology-chat': [['token', 'Token'], ['incomingUrl', 'Incoming URL']],
   clickclack: [['baseUrl', 'Base URL'], ['token', 'Token'], ['workspace', 'Workspace']],
   'nextcloud-talk': [['baseUrl', 'Base URL']],
+  nostr: [['privateKey', 'Private Key']],
   twitch: [['username', 'Username'], ['accessToken', 'Access Token'], ['clientId', 'Client ID'], ['channel', 'Channel']],
   signal: [['account', 'Signal 账号']],
 }
@@ -3102,6 +3104,31 @@ export function buildMessagingPlatformFormValues(platform, saved = {}, options =
     putBoolFormValue(form, saved, 'requireMention')
     for (const key of ['expiresIn', 'obtainmentTimestamp']) {
       if (typeof saved[key] === 'number') form[key] = String(saved[key])
+    }
+    return form
+  }
+
+  if (storageKey === 'nostr') {
+    putSecretAwareFormValue(form, saved, 'privateKey')
+    for (const key of ['name', 'defaultAccount', 'dmPolicy']) {
+      putStringFormValue(form, saved, key)
+    }
+    putBoolFormValue(form, saved, 'enabled')
+    putCsvFormValue(form, saved, 'relays')
+    putCsvFormValue(form, saved, 'allowFrom')
+    const profile = saved.profile && typeof saved.profile === 'object' ? saved.profile : {}
+    const profileMap = {
+      name: 'profileName',
+      displayName: 'profileDisplayName',
+      about: 'profileAbout',
+      picture: 'profilePicture',
+      banner: 'profileBanner',
+      website: 'profileWebsite',
+      nip05: 'profileNip05',
+      lud16: 'profileLud16',
+    }
+    for (const [sourceKey, formKey] of Object.entries(profileMap)) {
+      if (typeof profile[sourceKey] === 'string') form[formKey] = profile[sourceKey]
     }
     return form
   }
@@ -3898,6 +3925,28 @@ function buildOpenClawMessagingPlatformEntry(platform, form, currentSaved = {}) 
     for (const key of ['expiresIn', 'obtainmentTimestamp']) {
       if (typeof form[key] === 'number') entry[key] = form[key]
     }
+  } else if (storageKey === 'nostr') {
+    entry.enabled = typeof form.enabled === 'boolean' ? form.enabled : true
+    for (const key of ['name', 'defaultAccount', 'privateKey', 'dmPolicy']) {
+      if (form[key]) entry[key] = form[key]
+    }
+    if (Array.isArray(form.relays) && form.relays.length) entry.relays = form.relays
+    if (Array.isArray(form.allowFrom) && form.allowFrom.length) entry.allowFrom = form.allowFrom
+    const profileMap = {
+      profileName: 'name',
+      profileDisplayName: 'displayName',
+      profileAbout: 'about',
+      profilePicture: 'picture',
+      profileBanner: 'banner',
+      profileWebsite: 'website',
+      profileNip05: 'nip05',
+      profileLud16: 'lud16',
+    }
+    const profile = {}
+    for (const [formKey, targetKey] of Object.entries(profileMap)) {
+      if (form[formKey]) profile[targetKey] = form[formKey]
+    }
+    if (Object.keys(profile).length) entry.profile = profile
   } else if (storageKey === 'synology-chat') {
     for (const key of ['token', 'incomingUrl', 'nasHost', 'webhookPath', 'botName']) {
       if (form[key]) entry[key] = form[key]
@@ -3938,8 +3987,8 @@ export function mergeOpenClawMessagingPlatformConfig(cfg, { platform, form, acco
   const normalizedAccountId = typeof accountId === 'string' ? accountId.trim() : ''
   const currentSaved = resolvePlatformConfigEntry(cfg.channels?.[storageKey], platform, normalizedAccountId) || {}
   const entry = buildOpenClawMessagingPlatformEntry(platform, normalizedForm, currentSaved)
-  applyMessagingPlatformEntry(cfg, storageKey, normalizedAccountId, entry)
-  if (['zalo', 'zalouser', 'line', 'mattermost', 'clickclack', 'nextcloud-talk', 'twitch', 'synology-chat', 'googlechat', 'msteams', 'imessage', 'whatsapp'].includes(storageKey)) {
+  applyMessagingPlatformEntry(cfg, storageKey, storageKey === 'nostr' ? '' : normalizedAccountId, entry)
+  if (['zalo', 'zalouser', 'line', 'mattermost', 'clickclack', 'nextcloud-talk', 'twitch', 'nostr', 'synology-chat', 'googlechat', 'msteams', 'imessage', 'whatsapp'].includes(storageKey)) {
     ensureMessagingPluginAllowed(cfg, storageKey)
   }
   return { entry, accountId: normalizedAccountId, storageKey }
@@ -5409,16 +5458,16 @@ const handlers = {
       } else {
         setRootChannelEntry(entry)
       }
-    } else if (['line', 'mattermost', 'clickclack', 'nextcloud-talk', 'twitch', 'synology-chat', 'googlechat', 'msteams', 'whatsapp'].includes(storageKey)) {
+    } else if (['line', 'mattermost', 'clickclack', 'nextcloud-talk', 'twitch', 'nostr', 'synology-chat', 'googlechat', 'msteams', 'whatsapp'].includes(storageKey)) {
       const built = buildOpenClawMessagingPlatformEntry(platform, form, currentSaved)
-      applyMessagingPlatformEntry(cfg, storageKey, normalizedAccountId, built)
+      applyMessagingPlatformEntry(cfg, storageKey, storageKey === 'nostr' ? '' : normalizedAccountId, built)
       ensureMessagingPluginAllowed(cfg, storageKey)
     } else {
       Object.assign(entry, form)
       preserveMessagingCredentialRefs(entry, form, currentSaved)
     }
 
-    if (platform !== 'qqbot' && platform !== 'feishu' && platform !== 'dingtalk' && platform !== 'dingtalk-connector' && !['line', 'mattermost', 'clickclack', 'nextcloud-talk', 'twitch', 'synology-chat', 'googlechat', 'msteams', 'whatsapp'].includes(storageKey)) {
+    if (platform !== 'qqbot' && platform !== 'feishu' && platform !== 'dingtalk' && platform !== 'dingtalk-connector' && !['line', 'mattermost', 'clickclack', 'nextcloud-talk', 'twitch', 'nostr', 'synology-chat', 'googlechat', 'msteams', 'whatsapp'].includes(storageKey)) {
       preserveMessagingCredentialRefs(entry, form, currentSaved)
       // 合并模式：保留用户通过 CLI 或手动编辑的自定义字段
       applyMessagingPlatformEntry(cfg, storageKey, normalizedAccountId, entry)
@@ -5551,6 +5600,9 @@ const handlers = {
     }
     if (platform === 'twitch') {
       return { valid: true, warnings: ['Twitch 面板已完成基础字段校验；实际连通性请通过 Gateway 启动日志或 openclaw channels status --probe 验证。'] }
+    }
+    if (platform === 'nostr') {
+      return { valid: true, warnings: ['Nostr 面板已完成基础字段校验；实际连通性请通过 Gateway 启动日志或 openclaw channels status --probe 验证。'] }
     }
     if (platform === 'discord') {
       try {
