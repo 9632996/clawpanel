@@ -23,6 +23,17 @@ const COMPRESSION_DEFAULTS = {
   abortOnSummaryFailure: false,
 }
 
+const TOOL_GUARDRAILS_DEFAULTS = {
+  warningsEnabled: true,
+  hardStopEnabled: false,
+  warnExactFailure: 2,
+  warnSameToolFailure: 3,
+  warnNoProgress: 2,
+  hardStopExactFailure: 5,
+  hardStopSameToolFailure: 8,
+  hardStopNoProgress: 5,
+}
+
 const SESSION_RESET_MODES = ['both', 'idle', 'daily', 'none']
 
 export function render() {
@@ -32,15 +43,19 @@ export function render() {
   let yaml = ''
   let runtimeValues = { ...SESSION_RUNTIME_DEFAULTS }
   let compressionValues = { ...COMPRESSION_DEFAULTS }
+  let toolGuardrailsValues = { ...TOOL_GUARDRAILS_DEFAULTS }
   let loading = true
   let runtimeLoading = true
   let compressionLoading = true
+  let toolGuardrailsLoading = true
   let saving = false
   let runtimeSaving = false
   let compressionSaving = false
+  let toolGuardrailsSaving = false
   let error = null
   let runtimeError = null
   let compressionError = null
+  let toolGuardrailsError = null
 
   function esc(value) {
     return String(value || '')
@@ -51,7 +66,7 @@ export function render() {
   }
 
   function isBusy() {
-    return loading || runtimeLoading || compressionLoading || saving || runtimeSaving || compressionSaving
+    return loading || runtimeLoading || compressionLoading || toolGuardrailsLoading || saving || runtimeSaving || compressionSaving || toolGuardrailsSaving
   }
 
   function option(labelKey, value, selected) {
@@ -68,7 +83,7 @@ export function render() {
   }
 
   function renderRuntimePanel() {
-    const disabled = loading || saving || runtimeLoading || runtimeSaving || compressionSaving
+    const disabled = loading || saving || runtimeLoading || runtimeSaving || compressionSaving || toolGuardrailsSaving
     return `
       <div class="hm-panel hm-config-runtime-panel">
         <div class="hm-panel-header">
@@ -116,7 +131,7 @@ export function render() {
   }
 
   function renderCompressionPanel() {
-    const disabled = loading || saving || compressionLoading || compressionSaving || runtimeSaving
+    const disabled = loading || saving || compressionLoading || compressionSaving || runtimeSaving || toolGuardrailsSaving
     return `
       <div class="hm-panel hm-config-runtime-panel hm-config-compression-panel">
         <div class="hm-panel-header">
@@ -165,6 +180,68 @@ export function render() {
     `
   }
 
+  function renderToolGuardrailsPanel() {
+    const disabled = loading || saving || toolGuardrailsLoading || toolGuardrailsSaving || runtimeSaving || compressionSaving
+    return `
+      <div class="hm-panel hm-config-runtime-panel hm-config-guardrails-panel">
+        <div class="hm-panel-header">
+          <div>
+            <div class="hm-panel-title">${t('engine.hermesToolGuardrailsTitle')}</div>
+            <div class="hm-channel-panel-desc">${t('engine.hermesToolGuardrailsDesc')}</div>
+          </div>
+          <div class="hm-panel-actions">
+            <span class="hm-muted">${toolGuardrailsSaving ? t('engine.hermesConfigStatusSaving') : toolGuardrailsLoading ? t('engine.hermesConfigStatusLoading') : t('engine.hermesToolGuardrailsStatusReady')}</span>
+            <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-tool-guardrails-save" ${disabled ? 'disabled' : ''}>${t('engine.hermesToolGuardrailsSave')}</button>
+          </div>
+        </div>
+        <div class="hm-panel-body">
+          ${renderError(toolGuardrailsError)}
+          <div class="hm-config-check-grid">
+            <label class="hm-channel-check">
+              <input id="hm-tool-guardrails-warnings-enabled" type="checkbox" ${toolGuardrailsValues.warningsEnabled ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesToolGuardrailsWarningsEnabled')}</span>
+            </label>
+            <label class="hm-channel-check">
+              <input id="hm-tool-guardrails-hard-stop-enabled" type="checkbox" ${toolGuardrailsValues.hardStopEnabled ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesToolGuardrailsHardStopEnabled')}</span>
+            </label>
+          </div>
+          <div class="hm-config-subtitle">${t('engine.hermesToolGuardrailsWarnAfterTitle')}</div>
+          <div class="hm-config-runtime-grid hm-config-guardrails-grid">
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesToolGuardrailsWarnExactFailure')}</span>
+              <input id="hm-tool-guardrails-warn-exact-failure" class="hm-input" type="number" inputmode="numeric" min="1" max="100" step="1" value="${esc(toolGuardrailsValues.warnExactFailure)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesToolGuardrailsWarnSameToolFailure')}</span>
+              <input id="hm-tool-guardrails-warn-same-tool-failure" class="hm-input" type="number" inputmode="numeric" min="1" max="100" step="1" value="${esc(toolGuardrailsValues.warnSameToolFailure)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesToolGuardrailsWarnNoProgress')}</span>
+              <input id="hm-tool-guardrails-warn-no-progress" class="hm-input" type="number" inputmode="numeric" min="1" max="100" step="1" value="${esc(toolGuardrailsValues.warnNoProgress)}" ${disabled ? 'disabled' : ''}>
+            </label>
+          </div>
+          <div class="hm-config-subtitle">${t('engine.hermesToolGuardrailsHardStopAfterTitle')}</div>
+          <div class="hm-config-runtime-grid hm-config-guardrails-grid">
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesToolGuardrailsHardStopExactFailure')}</span>
+              <input id="hm-tool-guardrails-hard-stop-exact-failure" class="hm-input" type="number" inputmode="numeric" min="1" max="100" step="1" value="${esc(toolGuardrailsValues.hardStopExactFailure)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesToolGuardrailsHardStopSameToolFailure')}</span>
+              <input id="hm-tool-guardrails-hard-stop-same-tool-failure" class="hm-input" type="number" inputmode="numeric" min="1" max="100" step="1" value="${esc(toolGuardrailsValues.hardStopSameToolFailure)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesToolGuardrailsHardStopNoProgress')}</span>
+              <input id="hm-tool-guardrails-hard-stop-no-progress" class="hm-input" type="number" inputmode="numeric" min="1" max="100" step="1" value="${esc(toolGuardrailsValues.hardStopNoProgress)}" ${disabled ? 'disabled' : ''}>
+            </label>
+          </div>
+          <div class="hm-channel-footnote">${t('engine.hermesToolGuardrailsFootnote')}</div>
+        </div>
+      </div>
+    `
+  }
+
   function draw() {
     el.innerHTML = `
       <div class="hm-hero">
@@ -181,6 +258,7 @@ export function render() {
 
       ${renderRuntimePanel()}
       ${renderCompressionPanel()}
+      ${renderToolGuardrailsPanel()}
 
       <div class="hm-panel">
         <div class="hm-panel-header">
@@ -202,6 +280,7 @@ export function render() {
     el.querySelector('#hm-config-save')?.addEventListener('click', save)
     el.querySelector('#hm-runtime-save')?.addEventListener('click', saveRuntime)
     el.querySelector('#hm-compression-save')?.addEventListener('click', saveCompression)
+    el.querySelector('#hm-tool-guardrails-save')?.addEventListener('click', saveToolGuardrails)
   }
 
   async function loadRaw() {
@@ -219,13 +298,20 @@ export function render() {
     compressionValues = { ...COMPRESSION_DEFAULTS, ...(data?.values || {}) }
   }
 
+  async function loadToolGuardrails() {
+    const data = await api.hermesToolLoopGuardrailsConfigRead()
+    toolGuardrailsValues = { ...TOOL_GUARDRAILS_DEFAULTS, ...(data?.values || {}) }
+  }
+
   async function load() {
     loading = true
     runtimeLoading = true
     compressionLoading = true
+    toolGuardrailsLoading = true
     error = null
     runtimeError = null
     compressionError = null
+    toolGuardrailsError = null
     draw()
     try {
       await loadRaw()
@@ -248,6 +334,14 @@ export function render() {
       compressionError = humanizeError(err, t('engine.hermesCompressionLoadFailed') || 'Load compression config failed')
     } finally {
       compressionLoading = false
+      draw()
+    }
+    try {
+      await loadToolGuardrails()
+    } catch (err) {
+      toolGuardrailsError = humanizeError(err, t('engine.hermesToolGuardrailsLoadFailed') || 'Load tool guardrail config failed')
+    } finally {
+      toolGuardrailsLoading = false
       draw()
     }
   }
@@ -276,6 +370,9 @@ export function render() {
       } catch {}
       try {
         await loadCompression()
+      } catch {}
+      try {
+        await loadToolGuardrails()
       } catch {}
     } catch (err) {
       error = humanizeError(err, t('engine.hermesConfigSaveFailed') || 'Save failed')
@@ -341,6 +438,38 @@ export function render() {
       toast(compressionError, 'error')
     } finally {
       compressionSaving = false
+      draw()
+    }
+  }
+
+  async function saveToolGuardrails() {
+    const form = {
+      warningsEnabled: !!el.querySelector('#hm-tool-guardrails-warnings-enabled')?.checked,
+      hardStopEnabled: !!el.querySelector('#hm-tool-guardrails-hard-stop-enabled')?.checked,
+      warnExactFailure: el.querySelector('#hm-tool-guardrails-warn-exact-failure')?.value || '2',
+      warnSameToolFailure: el.querySelector('#hm-tool-guardrails-warn-same-tool-failure')?.value || '3',
+      warnNoProgress: el.querySelector('#hm-tool-guardrails-warn-no-progress')?.value || '2',
+      hardStopExactFailure: el.querySelector('#hm-tool-guardrails-hard-stop-exact-failure')?.value || '5',
+      hardStopSameToolFailure: el.querySelector('#hm-tool-guardrails-hard-stop-same-tool-failure')?.value || '8',
+      hardStopNoProgress: el.querySelector('#hm-tool-guardrails-hard-stop-no-progress')?.value || '5',
+    }
+    toolGuardrailsSaving = true
+    toolGuardrailsError = null
+    draw()
+    try {
+      const result = await api.hermesToolLoopGuardrailsConfigSave(form)
+      toolGuardrailsValues = { ...TOOL_GUARDRAILS_DEFAULTS, ...(result?.values || form) }
+      await refreshRawAfterStructuredSave()
+      const backup = result?.backup || ''
+      toast({
+        message: t('engine.hermesToolGuardrailsSaveSuccess'),
+        hint: backup ? t('engine.hermesConfigBackupHint', { path: backup }) : '',
+      }, 'success')
+    } catch (err) {
+      toolGuardrailsError = humanizeError(err, t('engine.hermesToolGuardrailsSaveFailed') || 'Save tool guardrail config failed')
+      toast(toolGuardrailsError, 'error')
+    } finally {
+      toolGuardrailsSaving = false
       draw()
     }
   }

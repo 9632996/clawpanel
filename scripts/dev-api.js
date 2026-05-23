@@ -3403,6 +3403,56 @@ export function mergeHermesCompressionConfig(config = {}, form = {}) {
   return next
 }
 
+export function buildHermesToolLoopGuardrailsConfigValues(config = {}) {
+  const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
+  const guardrails = root.tool_loop_guardrails && typeof root.tool_loop_guardrails === 'object' && !Array.isArray(root.tool_loop_guardrails)
+    ? root.tool_loop_guardrails
+    : {}
+  const warnAfter = guardrails.warn_after && typeof guardrails.warn_after === 'object' && !Array.isArray(guardrails.warn_after)
+    ? guardrails.warn_after
+    : {}
+  const hardStopAfter = guardrails.hard_stop_after && typeof guardrails.hard_stop_after === 'object' && !Array.isArray(guardrails.hard_stop_after)
+    ? guardrails.hard_stop_after
+    : {}
+  return {
+    warningsEnabled: readHermesBool(guardrails.warnings_enabled, true),
+    hardStopEnabled: readHermesBool(guardrails.hard_stop_enabled, false),
+    warnExactFailure: parseHermesInteger(warnAfter.exact_failure ?? guardrails.exact_failure_warn_after, 'tool_loop_guardrails.warn_after.exact_failure', 2, 1, 100, false),
+    warnSameToolFailure: parseHermesInteger(warnAfter.same_tool_failure ?? guardrails.same_tool_failure_warn_after, 'tool_loop_guardrails.warn_after.same_tool_failure', 3, 1, 100, false),
+    warnNoProgress: parseHermesInteger(warnAfter.idempotent_no_progress ?? guardrails.no_progress_warn_after, 'tool_loop_guardrails.warn_after.idempotent_no_progress', 2, 1, 100, false),
+    hardStopExactFailure: parseHermesInteger(hardStopAfter.exact_failure ?? guardrails.exact_failure_block_after, 'tool_loop_guardrails.hard_stop_after.exact_failure', 5, 1, 100, false),
+    hardStopSameToolFailure: parseHermesInteger(hardStopAfter.same_tool_failure ?? guardrails.same_tool_failure_halt_after, 'tool_loop_guardrails.hard_stop_after.same_tool_failure', 8, 1, 100, false),
+    hardStopNoProgress: parseHermesInteger(hardStopAfter.idempotent_no_progress ?? guardrails.no_progress_block_after, 'tool_loop_guardrails.hard_stop_after.idempotent_no_progress', 5, 1, 100, false),
+  }
+}
+
+export function mergeHermesToolLoopGuardrailsConfig(config = {}, form = {}) {
+  const next = mergeConfigsPreservingFields({}, config && typeof config === 'object' && !Array.isArray(config) ? config : {})
+  const currentValues = buildHermesToolLoopGuardrailsConfigValues(next)
+  const guardrails = next.tool_loop_guardrails && typeof next.tool_loop_guardrails === 'object' && !Array.isArray(next.tool_loop_guardrails)
+    ? mergeConfigsPreservingFields(next.tool_loop_guardrails, {})
+    : {}
+  const warnAfter = guardrails.warn_after && typeof guardrails.warn_after === 'object' && !Array.isArray(guardrails.warn_after)
+    ? mergeConfigsPreservingFields(guardrails.warn_after, {})
+    : {}
+  const hardStopAfter = guardrails.hard_stop_after && typeof guardrails.hard_stop_after === 'object' && !Array.isArray(guardrails.hard_stop_after)
+    ? mergeConfigsPreservingFields(guardrails.hard_stop_after, {})
+    : {}
+
+  guardrails.warnings_enabled = formHermesBool(form, 'warningsEnabled', currentValues.warningsEnabled)
+  guardrails.hard_stop_enabled = formHermesBool(form, 'hardStopEnabled', currentValues.hardStopEnabled)
+  warnAfter.exact_failure = parseHermesInteger(Object.hasOwn(form, 'warnExactFailure') ? form.warnExactFailure : currentValues.warnExactFailure, 'tool_loop_guardrails.warn_after.exact_failure', 2, 1, 100, true)
+  warnAfter.same_tool_failure = parseHermesInteger(Object.hasOwn(form, 'warnSameToolFailure') ? form.warnSameToolFailure : currentValues.warnSameToolFailure, 'tool_loop_guardrails.warn_after.same_tool_failure', 3, 1, 100, true)
+  warnAfter.idempotent_no_progress = parseHermesInteger(Object.hasOwn(form, 'warnNoProgress') ? form.warnNoProgress : currentValues.warnNoProgress, 'tool_loop_guardrails.warn_after.idempotent_no_progress', 2, 1, 100, true)
+  hardStopAfter.exact_failure = parseHermesInteger(Object.hasOwn(form, 'hardStopExactFailure') ? form.hardStopExactFailure : currentValues.hardStopExactFailure, 'tool_loop_guardrails.hard_stop_after.exact_failure', 5, 1, 100, true)
+  hardStopAfter.same_tool_failure = parseHermesInteger(Object.hasOwn(form, 'hardStopSameToolFailure') ? form.hardStopSameToolFailure : currentValues.hardStopSameToolFailure, 'tool_loop_guardrails.hard_stop_after.same_tool_failure', 8, 1, 100, true)
+  hardStopAfter.idempotent_no_progress = parseHermesInteger(Object.hasOwn(form, 'hardStopNoProgress') ? form.hardStopNoProgress : currentValues.hardStopNoProgress, 'tool_loop_guardrails.hard_stop_after.idempotent_no_progress', 5, 1, 100, true)
+  guardrails.warn_after = warnAfter
+  guardrails.hard_stop_after = hardStopAfter
+  next.tool_loop_guardrails = guardrails
+  return next
+}
+
 export function buildHermesSessionRuntimeConfigValues(config = {}) {
   const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
   const sessionReset = root.session_reset && typeof root.session_reset === 'object' && !Array.isArray(root.session_reset)
@@ -9643,6 +9693,27 @@ const handlers = {
       configPath,
       backup,
       values: buildHermesCompressionConfigValues(next),
+    }
+  },
+
+  hermes_tool_loop_guardrails_config_read() {
+    const { configPath, exists, config } = readHermesConfigYamlObject()
+    return {
+      exists,
+      configPath,
+      values: buildHermesToolLoopGuardrailsConfigValues(config),
+    }
+  },
+
+  hermes_tool_loop_guardrails_config_save({ form } = {}) {
+    const { configPath, config } = readHermesConfigYamlObject()
+    const next = mergeHermesToolLoopGuardrailsConfig(config, form || {})
+    const backup = writeHermesConfigYamlObject(configPath, next)
+    return {
+      ok: true,
+      configPath,
+      backup,
+      values: buildHermesToolLoopGuardrailsConfigValues(next),
     }
   },
 

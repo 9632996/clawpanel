@@ -3163,6 +3163,164 @@ fn merge_hermes_compression_config(
     Ok(())
 }
 
+fn build_hermes_tool_loop_guardrails_config_values(config: &serde_yaml::Value) -> Value {
+    let root = config.as_mapping();
+    let guardrails = root.and_then(|map| yaml_get_mapping(map, "tool_loop_guardrails"));
+    let warn_after = guardrails.and_then(|map| yaml_get_mapping(map, "warn_after"));
+    let hard_stop_after = guardrails.and_then(|map| yaml_get_mapping(map, "hard_stop_after"));
+
+    let warnings_enabled = guardrails
+        .and_then(|map| yaml_bool_field(map, "warnings_enabled"))
+        .unwrap_or(true);
+    let hard_stop_enabled = guardrails
+        .and_then(|map| yaml_bool_field(map, "hard_stop_enabled"))
+        .unwrap_or(false);
+    let warn_exact_failure = warn_after
+        .and_then(|map| yaml_i64_field(map, "exact_failure"))
+        .or_else(|| guardrails.and_then(|map| yaml_i64_field(map, "exact_failure_warn_after")));
+    let warn_same_tool_failure = warn_after
+        .and_then(|map| yaml_i64_field(map, "same_tool_failure"))
+        .or_else(|| guardrails.and_then(|map| yaml_i64_field(map, "same_tool_failure_warn_after")));
+    let warn_no_progress = warn_after
+        .and_then(|map| yaml_i64_field(map, "idempotent_no_progress"))
+        .or_else(|| guardrails.and_then(|map| yaml_i64_field(map, "no_progress_warn_after")));
+    let hard_stop_exact_failure = hard_stop_after
+        .and_then(|map| yaml_i64_field(map, "exact_failure"))
+        .or_else(|| guardrails.and_then(|map| yaml_i64_field(map, "exact_failure_block_after")));
+    let hard_stop_same_tool_failure = hard_stop_after
+        .and_then(|map| yaml_i64_field(map, "same_tool_failure"))
+        .or_else(|| guardrails.and_then(|map| yaml_i64_field(map, "same_tool_failure_halt_after")));
+    let hard_stop_no_progress = hard_stop_after
+        .and_then(|map| yaml_i64_field(map, "idempotent_no_progress"))
+        .or_else(|| guardrails.and_then(|map| yaml_i64_field(map, "no_progress_block_after")));
+
+    serde_json::json!({
+        "warningsEnabled": warnings_enabled,
+        "hardStopEnabled": hard_stop_enabled,
+        "warnExactFailure": bounded_hermes_i64(warn_exact_failure, 2, 1, 100),
+        "warnSameToolFailure": bounded_hermes_i64(warn_same_tool_failure, 3, 1, 100),
+        "warnNoProgress": bounded_hermes_i64(warn_no_progress, 2, 1, 100),
+        "hardStopExactFailure": bounded_hermes_i64(hard_stop_exact_failure, 5, 1, 100),
+        "hardStopSameToolFailure": bounded_hermes_i64(hard_stop_same_tool_failure, 8, 1, 100),
+        "hardStopNoProgress": bounded_hermes_i64(hard_stop_no_progress, 5, 1, 100),
+    })
+}
+
+fn merge_hermes_tool_loop_guardrails_config(
+    config: &mut serde_yaml::Value,
+    form: &Value,
+) -> Result<(), String> {
+    let current = build_hermes_tool_loop_guardrails_config_values(config);
+    let warnings_enabled = form_bool(form, "warningsEnabled")
+        .unwrap_or_else(|| current["warningsEnabled"].as_bool().unwrap_or(true));
+    let hard_stop_enabled = form_bool(form, "hardStopEnabled")
+        .unwrap_or_else(|| current["hardStopEnabled"].as_bool().unwrap_or(false));
+    let warn_exact_failure = validate_hermes_i64(
+        if form.get("warnExactFailure").is_some() {
+            form_i64(form, "warnExactFailure")
+        } else {
+            Some(current["warnExactFailure"].as_i64().unwrap_or(2))
+        },
+        "tool_loop_guardrails.warn_after.exact_failure",
+        2,
+        1,
+        100,
+    )?;
+    let warn_same_tool_failure = validate_hermes_i64(
+        if form.get("warnSameToolFailure").is_some() {
+            form_i64(form, "warnSameToolFailure")
+        } else {
+            Some(current["warnSameToolFailure"].as_i64().unwrap_or(3))
+        },
+        "tool_loop_guardrails.warn_after.same_tool_failure",
+        3,
+        1,
+        100,
+    )?;
+    let warn_no_progress = validate_hermes_i64(
+        if form.get("warnNoProgress").is_some() {
+            form_i64(form, "warnNoProgress")
+        } else {
+            Some(current["warnNoProgress"].as_i64().unwrap_or(2))
+        },
+        "tool_loop_guardrails.warn_after.idempotent_no_progress",
+        2,
+        1,
+        100,
+    )?;
+    let hard_stop_exact_failure = validate_hermes_i64(
+        if form.get("hardStopExactFailure").is_some() {
+            form_i64(form, "hardStopExactFailure")
+        } else {
+            Some(current["hardStopExactFailure"].as_i64().unwrap_or(5))
+        },
+        "tool_loop_guardrails.hard_stop_after.exact_failure",
+        5,
+        1,
+        100,
+    )?;
+    let hard_stop_same_tool_failure = validate_hermes_i64(
+        if form.get("hardStopSameToolFailure").is_some() {
+            form_i64(form, "hardStopSameToolFailure")
+        } else {
+            Some(current["hardStopSameToolFailure"].as_i64().unwrap_or(8))
+        },
+        "tool_loop_guardrails.hard_stop_after.same_tool_failure",
+        8,
+        1,
+        100,
+    )?;
+    let hard_stop_no_progress = validate_hermes_i64(
+        if form.get("hardStopNoProgress").is_some() {
+            form_i64(form, "hardStopNoProgress")
+        } else {
+            Some(current["hardStopNoProgress"].as_i64().unwrap_or(5))
+        },
+        "tool_loop_guardrails.hard_stop_after.idempotent_no_progress",
+        5,
+        1,
+        100,
+    )?;
+
+    let root = ensure_yaml_object(config)?;
+    let guardrails = yaml_child_object(root, "tool_loop_guardrails")?;
+    guardrails.insert(
+        yaml_key("warnings_enabled"),
+        serde_yaml::Value::Bool(warnings_enabled),
+    );
+    guardrails.insert(
+        yaml_key("hard_stop_enabled"),
+        serde_yaml::Value::Bool(hard_stop_enabled),
+    );
+    let warn_after = yaml_child_object(guardrails, "warn_after")?;
+    warn_after.insert(
+        yaml_key("exact_failure"),
+        serde_yaml::Value::Number(warn_exact_failure.into()),
+    );
+    warn_after.insert(
+        yaml_key("same_tool_failure"),
+        serde_yaml::Value::Number(warn_same_tool_failure.into()),
+    );
+    warn_after.insert(
+        yaml_key("idempotent_no_progress"),
+        serde_yaml::Value::Number(warn_no_progress.into()),
+    );
+    let hard_stop_after = yaml_child_object(guardrails, "hard_stop_after")?;
+    hard_stop_after.insert(
+        yaml_key("exact_failure"),
+        serde_yaml::Value::Number(hard_stop_exact_failure.into()),
+    );
+    hard_stop_after.insert(
+        yaml_key("same_tool_failure"),
+        serde_yaml::Value::Number(hard_stop_same_tool_failure.into()),
+    );
+    hard_stop_after.insert(
+        yaml_key("idempotent_no_progress"),
+        serde_yaml::Value::Number(hard_stop_no_progress.into()),
+    );
+    Ok(())
+}
+
 fn build_hermes_session_runtime_config_values(config: &serde_yaml::Value) -> Value {
     let root = config.as_mapping();
     let session_reset = root.and_then(|map| yaml_get_mapping(map, "session_reset"));
@@ -3994,6 +4152,30 @@ pub fn hermes_compression_config_save(form: Value) -> Result<Value, String> {
         "configPath": config_path.to_string_lossy(),
         "backup": backup,
         "values": build_hermes_compression_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_tool_loop_guardrails_config_read() -> Result<Value, String> {
+    let (config_path, exists, config) = read_hermes_channel_yaml_config()?;
+    ensure_yaml_object(&mut config.clone())?;
+    Ok(serde_json::json!({
+        "exists": exists,
+        "configPath": config_path.to_string_lossy(),
+        "values": build_hermes_tool_loop_guardrails_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_tool_loop_guardrails_config_save(form: Value) -> Result<Value, String> {
+    let (config_path, _exists, mut config) = read_hermes_channel_yaml_config()?;
+    merge_hermes_tool_loop_guardrails_config(&mut config, &form)?;
+    let backup = write_hermes_yaml_config(&config_path, &config)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "configPath": config_path.to_string_lossy(),
+        "backup": backup,
+        "values": build_hermes_tool_loop_guardrails_config_values(&config),
     }))
 }
 
@@ -9052,6 +9234,134 @@ streaming:
         let err = merge_hermes_compression_config(&mut config, &json!({ "protectFirstN": -1 }))
             .unwrap_err();
         assert!(err.contains("compression.protect_first_n"));
+    }
+}
+
+#[cfg(test)]
+mod hermes_tool_loop_guardrails_config_tests {
+    use super::{
+        build_hermes_tool_loop_guardrails_config_values, merge_hermes_tool_loop_guardrails_config,
+    };
+    use serde_json::json;
+
+    #[test]
+    fn tool_loop_guardrails_values_have_upstream_defaults() {
+        let config: serde_yaml::Value = serde_yaml::from_str("{}").unwrap();
+        let values = build_hermes_tool_loop_guardrails_config_values(&config);
+        assert_eq!(values["warningsEnabled"], true);
+        assert_eq!(values["hardStopEnabled"], false);
+        assert_eq!(values["warnExactFailure"], 2);
+        assert_eq!(values["warnSameToolFailure"], 3);
+        assert_eq!(values["warnNoProgress"], 2);
+        assert_eq!(values["hardStopExactFailure"], 5);
+        assert_eq!(values["hardStopSameToolFailure"], 8);
+        assert_eq!(values["hardStopNoProgress"], 5);
+    }
+
+    #[test]
+    fn merge_tool_loop_guardrails_config_preserves_unrelated_yaml() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+model:
+  provider: anthropic
+tool_loop_guardrails:
+  warnings_enabled: true
+  custom_flag: keep-me
+  warn_after:
+    exact_failure: 2
+    custom_warn: 99
+streaming:
+  enabled: true
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_tool_loop_guardrails_config(
+            &mut config,
+            &json!({
+                "warningsEnabled": false,
+                "hardStopEnabled": true,
+                "warnExactFailure": "3",
+                "warnSameToolFailure": "4",
+                "warnNoProgress": "5",
+                "hardStopExactFailure": "6",
+                "hardStopSameToolFailure": "7",
+                "hardStopNoProgress": "8",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(config["model"]["provider"].as_str(), Some("anthropic"));
+        assert_eq!(config["streaming"]["enabled"].as_bool(), Some(true));
+        assert_eq!(
+            config["tool_loop_guardrails"]["warnings_enabled"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            config["tool_loop_guardrails"]["hard_stop_enabled"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            config["tool_loop_guardrails"]["custom_flag"].as_str(),
+            Some("keep-me")
+        );
+        assert_eq!(
+            config["tool_loop_guardrails"]["warn_after"]["exact_failure"].as_i64(),
+            Some(3)
+        );
+        assert_eq!(
+            config["tool_loop_guardrails"]["warn_after"]["same_tool_failure"].as_i64(),
+            Some(4)
+        );
+        assert_eq!(
+            config["tool_loop_guardrails"]["warn_after"]["idempotent_no_progress"].as_i64(),
+            Some(5)
+        );
+        assert_eq!(
+            config["tool_loop_guardrails"]["warn_after"]["custom_warn"].as_i64(),
+            Some(99)
+        );
+        assert_eq!(
+            config["tool_loop_guardrails"]["hard_stop_after"]["exact_failure"].as_i64(),
+            Some(6)
+        );
+        assert_eq!(
+            config["tool_loop_guardrails"]["hard_stop_after"]["same_tool_failure"].as_i64(),
+            Some(7)
+        );
+        assert_eq!(
+            config["tool_loop_guardrails"]["hard_stop_after"]["idempotent_no_progress"].as_i64(),
+            Some(8)
+        );
+    }
+
+    #[test]
+    fn merge_tool_loop_guardrails_config_rejects_invalid_values() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str("{}").unwrap();
+        let err = merge_hermes_tool_loop_guardrails_config(
+            &mut config,
+            &json!({ "warnExactFailure": 0 }),
+        )
+        .unwrap_err();
+        assert!(err.contains("tool_loop_guardrails.warn_after.exact_failure"));
+        let err = merge_hermes_tool_loop_guardrails_config(
+            &mut config,
+            &json!({ "warnSameToolFailure": 101 }),
+        )
+        .unwrap_err();
+        assert!(err.contains("tool_loop_guardrails.warn_after.same_tool_failure"));
+        let err = merge_hermes_tool_loop_guardrails_config(
+            &mut config,
+            &json!({ "hardStopExactFailure": 0 }),
+        )
+        .unwrap_err();
+        assert!(err.contains("tool_loop_guardrails.hard_stop_after.exact_failure"));
+        let err = merge_hermes_tool_loop_guardrails_config(
+            &mut config,
+            &json!({ "hardStopNoProgress": 101 }),
+        )
+        .unwrap_err();
+        assert!(err.contains("tool_loop_guardrails.hard_stop_after.idempotent_no_progress"));
     }
 }
 
