@@ -869,7 +869,7 @@ fn put_number_value_if_present(entry: &mut Map<String, Value>, key: &str, value:
         }
         return;
     }
-    put_number_from_form(entry, key, &value.and_then(|v| v.as_str()).unwrap_or(""));
+    put_number_from_form(entry, key, value.and_then(|v| v.as_str()).unwrap_or(""));
 }
 
 fn normalize_numeric_form_value(map: &mut Map<String, Value>, key: &str) {

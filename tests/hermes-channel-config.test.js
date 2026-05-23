@@ -366,3 +366,288 @@ test('Hermes 钉钉保存会使用运行时实际读取的字段', () => {
   assert.equal(next.platforms.dingtalk.extra.require_mention, true)
   assert.equal(next.platforms.dingtalk.extra.unknown_option, 'keep-me')
 })
+
+test('Hermes 插件平台读取会回显上游运行字段并优先使用环境变量', () => {
+  const values = buildHermesChannelConfigValues({
+    platforms: {
+      teams: {
+        enabled: true,
+        extra: {
+          client_id: 'yaml-teams-client',
+          client_secret: 'yaml-teams-secret',
+          tenant_id: 'yaml-tenant',
+          port: 3978,
+          service_url: 'https://smba.trafficmanager.net/teams/',
+          allow_from: ['aad-1'],
+        },
+      },
+      google_chat: {
+        enabled: true,
+        extra: {
+          project_id: 'yaml-project',
+          subscription_name: 'projects/yaml-project/subscriptions/hermes',
+          service_account_json: 'yaml-sa.json',
+          allow_from: ['user@example.com'],
+        },
+      },
+      irc: {
+        enabled: true,
+        extra: {
+          server: 'irc.libera.chat',
+          channel: '#hermes',
+          nickname: 'hermes-bot',
+          use_tls: true,
+          allowed_users: ['alice'],
+        },
+      },
+      line: {
+        enabled: true,
+        extra: {
+          channel_access_token: 'yaml-line-token',
+          channel_secret: 'yaml-line-secret',
+          host: '0.0.0.0',
+          port: 8646,
+          public_url: 'https://line.example.com',
+          allowed_users: ['U1'],
+          allowed_groups: ['C1'],
+          allowed_rooms: ['R1'],
+          slow_response_threshold: '45',
+        },
+      },
+      simplex: {
+        enabled: true,
+        extra: {
+          ws_url: 'ws://127.0.0.1:5225',
+          allowed_users: ['contact-1'],
+        },
+      },
+    },
+  }, {
+    TEAMS_CLIENT_ID: 'env-teams-client',
+    TEAMS_CLIENT_SECRET: 'env-teams-secret',
+    TEAMS_TENANT_ID: 'env-tenant',
+    TEAMS_HOME_CHANNEL: 'teams-home',
+    TEAMS_HOME_CHANNEL_NAME: 'Ops',
+    GOOGLE_CHAT_PROJECT_ID: 'env-project',
+    GOOGLE_CHAT_SUBSCRIPTION_NAME: 'projects/env-project/subscriptions/hermes',
+    GOOGLE_CHAT_SERVICE_ACCOUNT_JSON: 'env-sa.json',
+    GOOGLE_CHAT_HOME_CHANNEL: 'spaces/AAA',
+    IRC_SERVER: 'irc.oftc.net',
+    IRC_CHANNEL: '#ops',
+    IRC_NICKNAME: 'ops-bot',
+    IRC_HOME_CHANNEL: '#reports',
+    LINE_CHANNEL_ACCESS_TOKEN: 'env-line-token',
+    LINE_CHANNEL_SECRET: 'env-line-secret',
+    LINE_HOME_CHANNEL: 'U-home',
+    SIMPLEX_WS_URL: 'ws://127.0.0.1:5226',
+    SIMPLEX_HOME_CHANNEL: 'contact-home',
+  })
+
+  assert.equal(values.teams.clientId, 'env-teams-client')
+  assert.equal(values.teams.clientSecret, 'env-teams-secret')
+  assert.equal(values.teams.tenantId, 'env-tenant')
+  assert.equal(values.teams.homeChannel, 'teams-home')
+  assert.equal(values.teams.allowFrom, 'aad-1')
+  assert.equal(values.google_chat.projectId, 'env-project')
+  assert.equal(values.google_chat.subscriptionName, 'projects/env-project/subscriptions/hermes')
+  assert.equal(values.google_chat.serviceAccountJson, 'env-sa.json')
+  assert.equal(values.google_chat.homeChannel, 'spaces/AAA')
+  assert.equal(values.irc.server, 'irc.oftc.net')
+  assert.equal(values.irc.channel, '#ops')
+  assert.equal(values.irc.nickname, 'ops-bot')
+  assert.equal(values.irc.homeChannel, '#reports')
+  assert.equal(values.irc.useTls, true)
+  assert.equal(values.irc.allowFrom, 'alice')
+  assert.equal(values.line.channelAccessToken, 'env-line-token')
+  assert.equal(values.line.channelSecret, 'env-line-secret')
+  assert.equal(values.line.homeChannel, 'U-home')
+  assert.equal(values.line.allowedGroups, 'C1')
+  assert.equal(values.line.allowedRooms, 'R1')
+  assert.equal(values.simplex.wsUrl, 'ws://127.0.0.1:5226')
+  assert.equal(values.simplex.homeChannel, 'contact-home')
+  assert.equal(values.simplex.allowFrom, 'contact-1')
+})
+
+test('Hermes 插件平台保存会写入运行时读取的 YAML 字段和环境变量', () => {
+  const teams = mergeHermesChannelConfig({
+    platforms: {
+      teams: {
+        enabled: true,
+        extra: {
+          client_id: 'old-client',
+          client_secret: 'old-secret',
+          tenant_id: 'old-tenant',
+          unknown_option: 'keep-me',
+        },
+      },
+    },
+  }, 'teams', {
+    enabled: true,
+    clientId: 'teams-client',
+    clientSecret: 'teams-secret',
+    tenantId: 'tenant-1',
+    port: '3978',
+    serviceUrl: 'https://smba.trafficmanager.net/teams/',
+    allowFrom: 'aad-1, aad-2',
+    allowAllUsers: false,
+    homeChannel: '19:abc@thread.tacv2',
+    homeChannelName: 'Ops',
+  })
+
+  assert.equal(teams.platforms.teams.extra.client_id, undefined)
+  assert.equal(teams.platforms.teams.extra.client_secret, undefined)
+  assert.equal(teams.platforms.teams.extra.tenant_id, undefined)
+  assert.equal(teams.platforms.teams.extra.port, 3978)
+  assert.equal(teams.platforms.teams.extra.service_url, 'https://smba.trafficmanager.net/teams/')
+  assert.deepEqual(teams.platforms.teams.extra.allow_from, ['aad-1', 'aad-2'])
+  assert.equal(teams.platforms.teams.extra.unknown_option, 'keep-me')
+
+  const googleChat = mergeHermesChannelConfig({}, 'google_chat', {
+    enabled: true,
+    projectId: 'project-1',
+    subscriptionName: 'projects/project-1/subscriptions/hermes',
+    serviceAccountJson: 'C:\\keys\\sa.json',
+    allowFrom: 'user@example.com',
+    allowAllUsers: true,
+    homeChannel: 'spaces/AAA',
+    homeChannelName: 'Ops Space',
+  })
+
+  assert.equal(googleChat.platforms.google_chat.enabled, true)
+  assert.equal(googleChat.platforms.google_chat.extra.project_id, 'project-1')
+  assert.equal(googleChat.platforms.google_chat.extra.subscription_name, 'projects/project-1/subscriptions/hermes')
+  assert.equal(googleChat.platforms.google_chat.extra.service_account_json, undefined)
+  assert.deepEqual(googleChat.platforms.google_chat.extra.allow_from, ['user@example.com'])
+
+  const irc = mergeHermesChannelConfig({}, 'irc', {
+    enabled: true,
+    server: 'irc.libera.chat',
+    port: '6697',
+    nickname: 'hermes-bot',
+    channel: '#hermes',
+    useTls: true,
+    serverPassword: 'server-secret',
+    nickservPassword: 'nick-secret',
+    allowFrom: 'alice, bob',
+    allowAllUsers: false,
+    homeChannel: '#reports',
+    homeChannelName: 'reports',
+  })
+
+  assert.equal(irc.platforms.irc.extra.server, 'irc.libera.chat')
+  assert.equal(irc.platforms.irc.extra.port, 6697)
+  assert.equal(irc.platforms.irc.extra.nickname, 'hermes-bot')
+  assert.equal(irc.platforms.irc.extra.channel, '#hermes')
+  assert.equal(irc.platforms.irc.extra.use_tls, true)
+  assert.equal(irc.platforms.irc.extra.server_password, undefined)
+  assert.equal(irc.platforms.irc.extra.nickserv_password, undefined)
+  assert.deepEqual(irc.platforms.irc.extra.allowed_users, ['alice', 'bob'])
+
+  const line = mergeHermesChannelConfig({}, 'line', {
+    enabled: true,
+    channelAccessToken: 'line-token',
+    channelSecret: 'line-secret',
+    port: '8646',
+    host: '0.0.0.0',
+    publicUrl: 'https://line.example.com',
+    allowFrom: 'U1',
+    allowedGroups: 'C1',
+    allowedRooms: 'R1',
+    allowAllUsers: false,
+    homeChannel: 'U-home',
+    slowResponseThreshold: '45',
+  })
+
+  assert.equal(line.platforms.line.extra.channel_access_token, undefined)
+  assert.equal(line.platforms.line.extra.channel_secret, undefined)
+  assert.equal(line.platforms.line.extra.port, 8646)
+  assert.equal(line.platforms.line.extra.host, '0.0.0.0')
+  assert.equal(line.platforms.line.extra.public_url, 'https://line.example.com')
+  assert.deepEqual(line.platforms.line.extra.allowed_users, ['U1'])
+  assert.deepEqual(line.platforms.line.extra.allowed_groups, ['C1'])
+  assert.deepEqual(line.platforms.line.extra.allowed_rooms, ['R1'])
+  assert.equal(line.platforms.line.extra.slow_response_threshold, '45')
+
+  const simplex = mergeHermesChannelConfig({}, 'simplex', {
+    enabled: true,
+    wsUrl: 'ws://127.0.0.1:5225',
+    allowFrom: 'contact-1',
+    allowAllUsers: true,
+    homeChannel: 'group:ops',
+    homeChannelName: 'Ops',
+  })
+
+  assert.equal(simplex.platforms.simplex.extra.ws_url, 'ws://127.0.0.1:5225')
+  assert.deepEqual(simplex.platforms.simplex.extra.allowed_users, ['contact-1'])
+
+  const env = {
+    ...buildHermesChannelEnvUpdates('teams', {
+      clientId: 'teams-client',
+      clientSecret: 'teams-secret',
+      tenantId: 'tenant-1',
+      port: '3978',
+      serviceUrl: 'https://smba.trafficmanager.net/teams/',
+      allowFrom: 'aad-1, aad-2',
+      allowAllUsers: false,
+      homeChannel: '19:abc@thread.tacv2',
+      homeChannelName: 'Ops',
+    }),
+    ...buildHermesChannelEnvUpdates('google_chat', {
+      projectId: 'project-1',
+      subscriptionName: 'projects/project-1/subscriptions/hermes',
+      serviceAccountJson: 'C:\\keys\\sa.json',
+      allowFrom: 'user@example.com',
+      allowAllUsers: true,
+      homeChannel: 'spaces/AAA',
+      homeChannelName: 'Ops Space',
+    }),
+    ...buildHermesChannelEnvUpdates('irc', {
+      server: 'irc.libera.chat',
+      port: '6697',
+      nickname: 'hermes-bot',
+      channel: '#hermes',
+      useTls: true,
+      serverPassword: 'server-secret',
+      nickservPassword: 'nick-secret',
+      allowFrom: 'alice, bob',
+      allowAllUsers: false,
+      homeChannel: '#reports',
+      homeChannelName: 'reports',
+    }),
+    ...buildHermesChannelEnvUpdates('line', {
+      channelAccessToken: 'line-token',
+      channelSecret: 'line-secret',
+      port: '8646',
+      host: '0.0.0.0',
+      publicUrl: 'https://line.example.com',
+      allowFrom: 'U1',
+      allowedGroups: 'C1',
+      allowedRooms: 'R1',
+      allowAllUsers: false,
+      homeChannel: 'U-home',
+      slowResponseThreshold: '45',
+    }),
+    ...buildHermesChannelEnvUpdates('simplex', {
+      wsUrl: 'ws://127.0.0.1:5225',
+      allowFrom: 'contact-1',
+      allowAllUsers: true,
+      homeChannel: 'group:ops',
+      homeChannelName: 'Ops',
+    }),
+  }
+
+  assert.equal(env.TEAMS_CLIENT_ID, 'teams-client')
+  assert.equal(env.TEAMS_CLIENT_SECRET, 'teams-secret')
+  assert.equal(env.TEAMS_TENANT_ID, 'tenant-1')
+  assert.equal(env.TEAMS_ALLOWED_USERS, 'aad-1,aad-2')
+  assert.equal(env.TEAMS_ALLOW_ALL_USERS, 'false')
+  assert.equal(env.GOOGLE_CHAT_SERVICE_ACCOUNT_JSON, 'C:\\keys\\sa.json')
+  assert.equal(env.GOOGLE_CHAT_ALLOW_ALL_USERS, 'true')
+  assert.equal(env.IRC_USE_TLS, 'true')
+  assert.equal(env.IRC_SERVER_PASSWORD, 'server-secret')
+  assert.equal(env.IRC_NICKSERV_PASSWORD, 'nick-secret')
+  assert.equal(env.LINE_CHANNEL_ACCESS_TOKEN, 'line-token')
+  assert.equal(env.LINE_ALLOWED_GROUPS, 'C1')
+  assert.equal(env.SIMPLEX_WS_URL, 'ws://127.0.0.1:5225')
+  assert.equal(env.SIMPLEX_ALLOW_ALL_USERS, 'true')
+})

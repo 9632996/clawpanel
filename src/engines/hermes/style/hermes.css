@@ -558,7 +558,8 @@
   justify-content: center;
   gap: 7px;
   padding: 9px 18px;
-  height: 38px;
+  min-height: 44px;
+  height: 44px;
   border-radius: var(--hm-radius-sm);
   border: 1px solid var(--hm-border-strong);
   background: transparent;
@@ -585,8 +586,9 @@
 }
 
 [data-engine="hermes"] .hm-btn--sm {
-  height: 30px;
-  padding: 4px 12px;
+  min-height: 44px;
+  height: 44px;
+  padding: 8px 14px;
   font-size: 12px;
 }
 
@@ -742,7 +744,8 @@
   font-size: 13px;
   line-height: 1.5;
   padding: 10px 14px;
-  height: 40px;
+  min-height: 44px;
+  height: 44px;
   border: 1px solid var(--hm-border);
   background: var(--hm-surface-0);
   color: var(--hm-text-primary);
@@ -1061,6 +1064,8 @@ body[data-active-engine="hermes"] .sidebar-title {
 }
 body[data-active-engine="hermes"] .sidebar-collapse-btn,
 body[data-active-engine="hermes"] .sidebar-close-btn {
+  min-width: 44px;
+  min-height: 44px;
   color: #A8A29E;
   background: transparent;
   border: none;
@@ -1089,6 +1094,7 @@ body[data-active-engine="hermes"] .engine-switcher-label {
   padding: 0 4px 8px;
 }
 body[data-active-engine="hermes"] .engine-current {
+  min-height: 44px;
   padding: 10px 12px;
   border: 1px solid rgba(202, 138, 4, 0.25);
   border-radius: 6px;
@@ -1142,6 +1148,7 @@ body[data-active-engine="hermes"] .sidebar-nav {
   padding: 4px 10px;
 }
 body[data-active-engine="hermes"] .nav-item {
+  min-height: 44px;
   padding: 9px 14px;
   border-radius: 6px;
   color: #44403C;
@@ -1190,6 +1197,7 @@ body[data-active-engine="hermes"] .sidebar-footer {
 }
 body[data-active-engine="hermes"] #btn-theme-toggle,
 body[data-active-engine="hermes"] .lang-trigger {
+  min-height: 44px;
   padding: 8px 14px;
   border-radius: 6px;
   color: #78716C;
@@ -1206,6 +1214,9 @@ body[data-active-engine="hermes"] .lang-dropdown {
   border: 1px solid rgba(28, 25, 23, 0.08);
   box-shadow: 0 -4px 16px rgba(28, 25, 23, 0.08);
   border-radius: 8px;
+}
+body[data-active-engine="hermes"] .lang-search {
+  min-height: 44px;
 }
 body[data-active-engine="hermes"] .lang-option {
   padding: 8px 12px;

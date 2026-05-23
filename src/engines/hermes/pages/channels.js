@@ -87,11 +87,112 @@ const CHANNELS = [
       { key: 'clientSecret', labelKey: 'engine.hermesChannelDingTalkClientSecret', type: 'password', placeholder: 'client secret' },
     ],
   },
+  {
+    id: 'teams',
+    icon: 'users',
+    titleKey: 'engine.hermesChannelTeams',
+    descKey: 'engine.hermesChannelTeamsDesc',
+    secretFields: ['clientId', 'clientSecret', 'tenantId'],
+    fields: [
+      { key: 'clientId', labelKey: 'engine.hermesChannelTeamsClientId', type: 'text', placeholder: '00000000-0000-0000-0000-000000000000' },
+      { key: 'clientSecret', labelKey: 'engine.hermesChannelTeamsClientSecret', type: 'password', placeholder: 'client secret' },
+      { key: 'tenantId', labelKey: 'engine.hermesChannelTeamsTenantId', type: 'text', placeholder: '00000000-0000-0000-0000-000000000000' },
+      { key: 'port', labelKey: 'engine.hermesChannelPort', type: 'number', placeholder: '3978' },
+      { key: 'serviceUrl', labelKey: 'engine.hermesChannelServiceUrl', type: 'url', placeholder: 'https://smba.trafficmanager.net/teams/' },
+    ],
+    policyFields: [
+      { key: 'allowFrom', labelKey: 'engine.hermesChannelAllowedUsers', type: 'textarea', placeholderKey: 'engine.hermesChannelTeamsAllowedUsersPh' },
+      { key: 'allowAllUsers', labelKey: 'engine.hermesChannelAllowAllUsers', type: 'checkbox' },
+      { key: 'homeChannel', labelKey: 'engine.hermesChannelHomeChannel', type: 'text', placeholder: '19:xxx@thread.tacv2' },
+      { key: 'homeChannelName', labelKey: 'engine.hermesChannelHomeChannelName', type: 'text', placeholder: 'ops' },
+    ],
+  },
+  {
+    id: 'google_chat',
+    icon: 'message-square',
+    titleKey: 'engine.hermesChannelGoogleChat',
+    descKey: 'engine.hermesChannelGoogleChatDesc',
+    secretFields: ['projectId', 'serviceAccountJson'],
+    fields: [
+      { key: 'projectId', labelKey: 'engine.hermesChannelGoogleProjectId', type: 'text', placeholder: 'my-gcp-project' },
+      { key: 'subscriptionName', labelKey: 'engine.hermesChannelGoogleSubscriptionName', type: 'text', placeholder: 'projects/my-gcp-project/subscriptions/hermes' },
+      { key: 'serviceAccountJson', labelKey: 'engine.hermesChannelGoogleServiceAccount', type: 'password', placeholderKey: 'engine.hermesChannelGoogleServiceAccountPh' },
+    ],
+    policyFields: [
+      { key: 'allowFrom', labelKey: 'engine.hermesChannelAllowedUsers', type: 'textarea', placeholderKey: 'engine.hermesChannelGoogleAllowedUsersPh' },
+      { key: 'allowAllUsers', labelKey: 'engine.hermesChannelAllowAllUsers', type: 'checkbox' },
+      { key: 'homeChannel', labelKey: 'engine.hermesChannelHomeChannel', type: 'text', placeholder: 'spaces/AAAA...' },
+      { key: 'homeChannelName', labelKey: 'engine.hermesChannelHomeChannelName', type: 'text', placeholder: 'ops-space' },
+    ],
+  },
+  {
+    id: 'irc',
+    icon: 'hash',
+    titleKey: 'engine.hermesChannelIrc',
+    descKey: 'engine.hermesChannelIrcDesc',
+    secretFields: ['server', 'serverPassword', 'nickservPassword'],
+    fields: [
+      { key: 'server', labelKey: 'engine.hermesChannelIrcServer', type: 'text', placeholder: 'irc.libera.chat' },
+      { key: 'port', labelKey: 'engine.hermesChannelPort', type: 'number', placeholder: '6697' },
+      { key: 'nickname', labelKey: 'engine.hermesChannelIrcNickname', type: 'text', placeholder: 'hermes-bot' },
+      { key: 'channel', labelKey: 'engine.hermesChannelIrcChannel', type: 'text', placeholder: '#hermes' },
+      { key: 'serverPassword', labelKey: 'engine.hermesChannelIrcServerPassword', type: 'password', placeholder: 'optional' },
+      { key: 'nickservPassword', labelKey: 'engine.hermesChannelIrcNickservPassword', type: 'password', placeholder: 'optional' },
+    ],
+    toggles: [
+      { key: 'useTls', labelKey: 'engine.hermesChannelIrcUseTls' },
+    ],
+    policyFields: [
+      { key: 'allowFrom', labelKey: 'engine.hermesChannelAllowedUsers', type: 'textarea', placeholderKey: 'engine.hermesChannelIrcAllowedUsersPh' },
+      { key: 'allowAllUsers', labelKey: 'engine.hermesChannelAllowAllUsers', type: 'checkbox' },
+      { key: 'homeChannel', labelKey: 'engine.hermesChannelHomeChannel', type: 'text', placeholder: '#reports' },
+      { key: 'homeChannelName', labelKey: 'engine.hermesChannelHomeChannelName', type: 'text', placeholder: 'reports' },
+    ],
+  },
+  {
+    id: 'line',
+    icon: 'message-circle',
+    titleKey: 'engine.hermesChannelLine',
+    descKey: 'engine.hermesChannelLineDesc',
+    secretFields: ['channelAccessToken', 'channelSecret'],
+    fields: [
+      { key: 'channelAccessToken', labelKey: 'engine.hermesChannelLineAccessToken', type: 'password', placeholder: 'LINE channel access token' },
+      { key: 'channelSecret', labelKey: 'engine.hermesChannelLineSecret', type: 'password', placeholder: 'LINE channel secret' },
+      { key: 'port', labelKey: 'engine.hermesChannelPort', type: 'number', placeholder: '8646' },
+      { key: 'host', labelKey: 'engine.hermesChannelHost', type: 'text', placeholder: '0.0.0.0' },
+      { key: 'publicUrl', labelKey: 'engine.hermesChannelPublicUrl', type: 'url', placeholder: 'https://line.example.com' },
+    ],
+    policyFields: [
+      { key: 'allowFrom', labelKey: 'engine.hermesChannelAllowedUsers', type: 'textarea', placeholderKey: 'engine.hermesChannelLineAllowedUsersPh' },
+      { key: 'allowedGroups', labelKey: 'engine.hermesChannelLineAllowedGroups', type: 'textarea', placeholderKey: 'engine.hermesChannelLineAllowedGroupsPh' },
+      { key: 'allowedRooms', labelKey: 'engine.hermesChannelLineAllowedRooms', type: 'textarea', placeholderKey: 'engine.hermesChannelLineAllowedRoomsPh' },
+      { key: 'allowAllUsers', labelKey: 'engine.hermesChannelAllowAllUsers', type: 'checkbox' },
+      { key: 'homeChannel', labelKey: 'engine.hermesChannelHomeChannel', type: 'text', placeholder: 'Uxxxxxxxx' },
+      { key: 'slowResponseThreshold', labelKey: 'engine.hermesChannelLineSlowResponse', type: 'number', placeholder: '45' },
+    ],
+  },
+  {
+    id: 'simplex',
+    icon: 'radio',
+    titleKey: 'engine.hermesChannelSimpleX',
+    descKey: 'engine.hermesChannelSimpleXDesc',
+    secretFields: ['wsUrl'],
+    fields: [
+      { key: 'wsUrl', labelKey: 'engine.hermesChannelSimpleXWsUrl', type: 'url', placeholder: 'ws://127.0.0.1:5225' },
+    ],
+    policyFields: [
+      { key: 'allowFrom', labelKey: 'engine.hermesChannelAllowedUsers', type: 'textarea', placeholderKey: 'engine.hermesChannelSimpleXAllowedUsersPh' },
+      { key: 'allowAllUsers', labelKey: 'engine.hermesChannelAllowAllUsers', type: 'checkbox' },
+      { key: 'homeChannel', labelKey: 'engine.hermesChannelHomeChannel', type: 'text', placeholder: 'group:ops' },
+      { key: 'homeChannelName', labelKey: 'engine.hermesChannelHomeChannelName', type: 'text', placeholder: 'Ops' },
+    ],
+  },
 ]
 
-const COMMON_FIELDS = [
+const LEGACY_POLICY_FIELDS = [
   { key: 'dmPolicy', labelKey: 'engine.hermesChannelDmPolicy', type: 'select', options: [['pair', 'engine.hermesChannelPolicyPair'], ['open', 'engine.hermesChannelPolicyOpen'], ['allowlist', 'engine.hermesChannelPolicyAllowlist'], ['disabled', 'engine.hermesChannelPolicyDisabled']] },
   { key: 'groupPolicy', labelKey: 'engine.hermesChannelGroupPolicy', type: 'select', options: [['allowlist', 'engine.hermesChannelPolicyAllowlist'], ['open', 'engine.hermesChannelPolicyOpen'], ['disabled', 'engine.hermesChannelPolicyDisabled']] },
+  { key: 'requireMention', labelKey: 'engine.hermesChannelRequireMention', type: 'checkbox' },
   { key: 'allowFrom', labelKey: 'engine.hermesChannelAllowFrom', type: 'textarea', placeholderKey: 'engine.hermesChannelAllowFromPlaceholder' },
   { key: 'groupAllowFrom', labelKey: 'engine.hermesChannelGroupAllowFrom', type: 'textarea', placeholderKey: 'engine.hermesChannelGroupAllowFromPlaceholder' },
 ]
@@ -109,13 +210,14 @@ function channelMeta(id) {
 }
 
 function defaultForm(platform) {
-  const form = {
-    enabled: false,
-    dmPolicy: 'pair',
-    groupPolicy: 'allowlist',
-    allowFrom: '',
-    groupAllowFrom: '',
-    requireMention: true,
+  const channel = channelMeta(platform)
+  const form = { enabled: false }
+  if (!channel.policyFields) {
+    form.dmPolicy = 'pair'
+    form.groupPolicy = 'allowlist'
+    form.allowFrom = ''
+    form.groupAllowFrom = ''
+    form.requireMention = true
   }
   if (platform === 'feishu') {
     form.domain = 'feishu'
@@ -152,6 +254,15 @@ function isConfigured(channel, form) {
 function renderField(field, form, disabled) {
   const value = valueOf(form, field.key)
   const label = esc(t(field.labelKey))
+  const placeholder = field.placeholderKey ? t(field.placeholderKey) : (field.placeholder || '')
+  if (field.type === 'checkbox') {
+    return `
+      <label class="hm-channel-check">
+        <input class="hm-channel-input" data-key="${esc(field.key)}" type="checkbox" ${form[field.key] ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+        <span>${label}</span>
+      </label>
+    `
+  }
   if (field.type === 'select') {
     return `
       <label class="hm-field">
@@ -168,14 +279,14 @@ function renderField(field, form, disabled) {
     return `
       <label class="hm-field">
         <span class="hm-field-label">${label}</span>
-        <textarea class="hm-input hm-channel-input hm-channel-textarea" data-key="${esc(field.key)}" ${disabled ? 'disabled' : ''} placeholder="${esc(t(field.placeholderKey))}">${esc(value)}</textarea>
+        <textarea class="hm-input hm-channel-input hm-channel-textarea" data-key="${esc(field.key)}" ${disabled ? 'disabled' : ''} placeholder="${esc(placeholder)}">${esc(value)}</textarea>
       </label>
     `
   }
   return `
     <label class="hm-field">
       <span class="hm-field-label">${label}</span>
-      <input class="hm-input hm-channel-input" data-key="${esc(field.key)}" type="${esc(field.type || 'text')}" value="${esc(value)}" ${disabled ? 'disabled' : ''} placeholder="${esc(field.placeholder || '')}" autocomplete="off">
+      <input class="hm-input hm-channel-input" data-key="${esc(field.key)}" type="${esc(field.type || 'text')}" value="${esc(value)}" ${disabled ? 'disabled' : ''} placeholder="${esc(placeholder)}" autocomplete="off">
     </label>
   `
 }
@@ -208,6 +319,9 @@ export function render() {
     const channel = channelMeta(active)
     const form = normalizeForm(active, values[active])
     const disabled = loading || saving
+    const policyFields = channel.policyFields || LEGACY_POLICY_FIELDS
+    const policyInputs = policyFields.filter(field => field.type !== 'checkbox')
+    const policyToggles = policyFields.filter(field => field.type === 'checkbox')
     const enabledCount = CHANNELS.filter(item => normalizeForm(item.id, values[item.id]).enabled).length
     const configuredCount = CHANNELS.filter(item => isConfigured(item, normalizeForm(item.id, values[item.id]))).length
 
@@ -295,16 +409,16 @@ export function render() {
 
               <div class="hm-channel-section">
                 <div class="hm-channel-section-title">${esc(t('engine.hermesChannelAccessPolicy'))}</div>
-                <div class="hm-field-row">
-                  ${COMMON_FIELDS.slice(0, 2).map(field => renderField(field, form, disabled)).join('')}
-                </div>
-                <label class="hm-channel-check hm-channel-check--wide">
-                  <input class="hm-channel-input" data-key="requireMention" type="checkbox" ${form.requireMention ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
-                  <span>${esc(t('engine.hermesChannelRequireMention'))}</span>
-                </label>
-                <div class="hm-field-row">
-                  ${COMMON_FIELDS.slice(2).map(field => renderField(field, form, disabled)).join('')}
-                </div>
+                ${policyInputs.length ? `
+                  <div class="hm-field-row">
+                    ${policyInputs.map(field => renderField(field, form, disabled)).join('')}
+                  </div>
+                ` : ''}
+                ${policyToggles.length ? `
+                  <div class="hm-channel-toggle-grid">
+                    ${policyToggles.map(field => renderField(field, form, disabled)).join('')}
+                  </div>
+                ` : ''}
               </div>
 
               ${(channel.advancedFields || []).length ? `

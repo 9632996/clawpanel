@@ -3285,7 +3285,18 @@ export function buildMessagingPlatformFormValues(platform, saved = {}, options =
   return form
 }
 
-const HERMES_CHANNEL_PLATFORMS = ['telegram', 'discord', 'slack', 'feishu', 'dingtalk']
+const HERMES_CHANNEL_PLATFORMS = [
+  'telegram',
+  'discord',
+  'slack',
+  'feishu',
+  'dingtalk',
+  'teams',
+  'google_chat',
+  'irc',
+  'line',
+  'simplex',
+]
 
 function normalizeHermesPlatform(platform) {
   const p = String(platform || '').trim().toLowerCase()
@@ -3299,6 +3310,11 @@ function toCamelCaseKey(key) {
 function putHermesString(form, source, key) {
   const value = source?.[key]
   if (typeof value === 'string') form[toCamelCaseKey(key)] = value
+}
+
+function putHermesScalarString(form, source, key) {
+  const value = source?.[key]
+  if (typeof value === 'string' || typeof value === 'number') form[toCamelCaseKey(key)] = String(value)
 }
 
 function putHermesBool(form, source, key) {
@@ -3330,6 +3346,13 @@ function putHermesEnvString(form, envValues, envKey, formKey) {
 function putHermesEnvBool(form, envValues, envKey, formKey) {
   const value = hermesEnvBoolValue(envValues, envKey)
   if (value !== undefined) form[formKey] = value
+}
+
+function putHermesHomeChannel(form, entry) {
+  const home = entry?.home_channel && typeof entry.home_channel === 'object' ? entry.home_channel : null
+  if (!home) return
+  if (typeof home.chat_id === 'string') form.homeChannel = home.chat_id
+  if (typeof home.name === 'string') form.homeChannelName = home.name
 }
 
 function readHermesEnvValues() {
@@ -3424,6 +3447,79 @@ export function buildHermesChannelConfigValues(config = {}, envValues = {}) {
       putHermesString(form, extra, 'client_secret')
       form.clientId = hermesEnvValue(envValues, 'DINGTALK_CLIENT_ID') || form.clientId || ''
       form.clientSecret = hermesEnvValue(envValues, 'DINGTALK_CLIENT_SECRET') || form.clientSecret || ''
+    } else if (platform === 'teams') {
+      for (const key of ['client_id', 'client_secret', 'tenant_id', 'service_url']) putHermesString(form, extra, key)
+      putHermesScalarString(form, extra, 'port')
+      putHermesHomeChannel(form, entry)
+      form.clientId = hermesEnvValue(envValues, 'TEAMS_CLIENT_ID') || form.clientId || ''
+      form.clientSecret = hermesEnvValue(envValues, 'TEAMS_CLIENT_SECRET') || form.clientSecret || ''
+      form.tenantId = hermesEnvValue(envValues, 'TEAMS_TENANT_ID') || form.tenantId || ''
+      form.port = hermesEnvValue(envValues, 'TEAMS_PORT') || form.port || ''
+      form.serviceUrl = hermesEnvValue(envValues, 'TEAMS_SERVICE_URL') || form.serviceUrl || ''
+      putHermesEnvString(form, envValues, 'TEAMS_ALLOWED_USERS', 'allowFrom')
+      putHermesEnvBool(form, envValues, 'TEAMS_ALLOW_ALL_USERS', 'allowAllUsers')
+      putHermesEnvString(form, envValues, 'TEAMS_HOME_CHANNEL', 'homeChannel')
+      putHermesEnvString(form, envValues, 'TEAMS_HOME_CHANNEL_NAME', 'homeChannelName')
+    } else if (platform === 'google_chat') {
+      for (const key of ['project_id', 'subscription_name', 'service_account_json']) putHermesString(form, extra, key)
+      putHermesHomeChannel(form, entry)
+      form.projectId = hermesEnvValue(envValues, 'GOOGLE_CHAT_PROJECT_ID') || hermesEnvValue(envValues, 'GOOGLE_CLOUD_PROJECT') || form.projectId || ''
+      form.subscriptionName = hermesEnvValue(envValues, 'GOOGLE_CHAT_SUBSCRIPTION_NAME') || hermesEnvValue(envValues, 'GOOGLE_CHAT_SUBSCRIPTION') || form.subscriptionName || ''
+      form.serviceAccountJson = hermesEnvValue(envValues, 'GOOGLE_CHAT_SERVICE_ACCOUNT_JSON') || hermesEnvValue(envValues, 'GOOGLE_APPLICATION_CREDENTIALS') || form.serviceAccountJson || ''
+      putHermesEnvString(form, envValues, 'GOOGLE_CHAT_ALLOWED_USERS', 'allowFrom')
+      putHermesEnvBool(form, envValues, 'GOOGLE_CHAT_ALLOW_ALL_USERS', 'allowAllUsers')
+      putHermesEnvString(form, envValues, 'GOOGLE_CHAT_HOME_CHANNEL', 'homeChannel')
+      putHermesEnvString(form, envValues, 'GOOGLE_CHAT_HOME_CHANNEL_NAME', 'homeChannelName')
+    } else if (platform === 'irc') {
+      for (const key of ['server', 'channel', 'nickname', 'server_password', 'nickserv_password']) putHermesString(form, extra, key)
+      putHermesScalarString(form, extra, 'port')
+      putHermesBool(form, extra, 'use_tls')
+      putHermesCsv(form, extra, 'allowed_users')
+      if (form.allowedUsers && !form.allowFrom) form.allowFrom = form.allowedUsers
+      delete form.allowedUsers
+      putHermesHomeChannel(form, entry)
+      form.server = hermesEnvValue(envValues, 'IRC_SERVER') || form.server || ''
+      form.channel = hermesEnvValue(envValues, 'IRC_CHANNEL') || form.channel || ''
+      form.nickname = hermesEnvValue(envValues, 'IRC_NICKNAME') || form.nickname || ''
+      form.port = hermesEnvValue(envValues, 'IRC_PORT') || form.port || ''
+      putHermesEnvBool(form, envValues, 'IRC_USE_TLS', 'useTls')
+      form.serverPassword = hermesEnvValue(envValues, 'IRC_SERVER_PASSWORD') || form.serverPassword || ''
+      form.nickservPassword = hermesEnvValue(envValues, 'IRC_NICKSERV_PASSWORD') || form.nickservPassword || ''
+      putHermesEnvString(form, envValues, 'IRC_ALLOWED_USERS', 'allowFrom')
+      putHermesEnvBool(form, envValues, 'IRC_ALLOW_ALL_USERS', 'allowAllUsers')
+      putHermesEnvString(form, envValues, 'IRC_HOME_CHANNEL', 'homeChannel')
+      putHermesEnvString(form, envValues, 'IRC_HOME_CHANNEL_NAME', 'homeChannelName')
+    } else if (platform === 'line') {
+      for (const key of ['channel_access_token', 'channel_secret', 'host', 'public_url', 'slow_response_threshold']) putHermesString(form, extra, key)
+      putHermesScalarString(form, extra, 'port')
+      putHermesCsv(form, extra, 'allowed_users')
+      if (form.allowedUsers && !form.allowFrom) form.allowFrom = form.allowedUsers
+      delete form.allowedUsers
+      putHermesCsv(form, extra, 'allowed_groups')
+      putHermesCsv(form, extra, 'allowed_rooms')
+      putHermesHomeChannel(form, entry)
+      form.channelAccessToken = hermesEnvValue(envValues, 'LINE_CHANNEL_ACCESS_TOKEN') || form.channelAccessToken || ''
+      form.channelSecret = hermesEnvValue(envValues, 'LINE_CHANNEL_SECRET') || form.channelSecret || ''
+      form.port = hermesEnvValue(envValues, 'LINE_PORT') || form.port || ''
+      form.host = hermesEnvValue(envValues, 'LINE_HOST') || form.host || ''
+      form.publicUrl = hermesEnvValue(envValues, 'LINE_PUBLIC_URL') || form.publicUrl || ''
+      putHermesEnvString(form, envValues, 'LINE_ALLOWED_USERS', 'allowFrom')
+      putHermesEnvString(form, envValues, 'LINE_ALLOWED_GROUPS', 'allowedGroups')
+      putHermesEnvString(form, envValues, 'LINE_ALLOWED_ROOMS', 'allowedRooms')
+      putHermesEnvBool(form, envValues, 'LINE_ALLOW_ALL_USERS', 'allowAllUsers')
+      putHermesEnvString(form, envValues, 'LINE_HOME_CHANNEL', 'homeChannel')
+      form.slowResponseThreshold = hermesEnvValue(envValues, 'LINE_SLOW_RESPONSE_THRESHOLD') || form.slowResponseThreshold || ''
+    } else if (platform === 'simplex') {
+      putHermesString(form, extra, 'ws_url')
+      putHermesCsv(form, extra, 'allowed_users')
+      if (form.allowedUsers && !form.allowFrom) form.allowFrom = form.allowedUsers
+      delete form.allowedUsers
+      putHermesHomeChannel(form, entry)
+      form.wsUrl = hermesEnvValue(envValues, 'SIMPLEX_WS_URL') || form.wsUrl || ''
+      putHermesEnvString(form, envValues, 'SIMPLEX_ALLOWED_USERS', 'allowFrom')
+      putHermesEnvBool(form, envValues, 'SIMPLEX_ALLOW_ALL_USERS', 'allowAllUsers')
+      putHermesEnvString(form, envValues, 'SIMPLEX_HOME_CHANNEL', 'homeChannel')
+      putHermesEnvString(form, envValues, 'SIMPLEX_HOME_CHANNEL_NAME', 'homeChannelName')
     }
     putHermesString(form, extra, 'dm_policy')
     putHermesString(form, extra, 'group_policy')
@@ -3450,6 +3546,26 @@ function setHermesExtra(entry, key, value) {
   entry.extra[key] = value
 }
 
+function setHermesExtraInteger(entry, key, value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return
+  const parsed = Number.parseInt(raw, 10)
+  if (Number.isFinite(parsed)) setHermesExtra(entry, key, parsed)
+}
+
+function setHermesHomeChannel(entry, form = {}) {
+  if (!Object.hasOwn(form, 'homeChannel')) return
+  const chatId = String(form.homeChannel || '').trim()
+  if (!chatId) {
+    deleteHermesEntryKey(entry, 'home_channel')
+    return
+  }
+  entry.home_channel = {
+    chat_id: chatId,
+    name: String(form.homeChannelName || '').trim() || chatId,
+  }
+}
+
 function deleteHermesEntryKey(entry, key) {
   if (entry && typeof entry === 'object') delete entry[key]
 }
@@ -3467,6 +3583,9 @@ function normalizeHermesChannelForm(platform, form = {}) {
   if (Object.hasOwn(normalized, 'groupAllowFrom')) normalized.groupAllowFrom = csvToStringArray(normalized.groupAllowFrom)
   if (Object.hasOwn(normalized, 'requireMention')) {
     normalized.requireMention = normalized.requireMention === true || normalized.requireMention === 'true' || normalized.requireMention === 'on'
+  }
+  if (Object.hasOwn(normalized, 'allowAllUsers')) {
+    normalized.allowAllUsers = normalized.allowAllUsers === true || normalized.allowAllUsers === 'true' || normalized.allowAllUsers === 'on'
   }
   if (platform === 'feishu') {
     normalized.domain = String(normalized.domain || '').trim() || 'feishu'
@@ -3488,6 +3607,14 @@ function normalizeHermesChannelForm(platform, form = {}) {
     }
     normalized.historyBackfillLimit = String(normalized.historyBackfillLimit || '').trim()
     normalized.replyToMode = String(normalized.replyToMode || '').trim()
+  }
+  if (platform === 'irc') {
+    if (Object.hasOwn(normalized, 'useTls')) normalized.useTls = normalized.useTls === true || normalized.useTls === 'true' || normalized.useTls === 'on'
+  }
+  if (platform === 'line') {
+    for (const key of ['allowedGroups', 'allowedRooms']) {
+      if (Object.hasOwn(normalized, key)) normalized[key] = csvToStringArray(normalized[key])
+    }
   }
   return normalized
 }
@@ -3544,6 +3671,40 @@ export function mergeHermesChannelConfig(config = {}, platform, form = {}) {
     deleteHermesExtraKey(entry, 'client_secret')
     deleteHermesExtraKey(entry, 'allow_from')
     deleteHermesExtraKey(entry, 'group_allow_from')
+  } else if (normalizedPlatform === 'teams') {
+    deleteHermesExtraKey(entry, 'client_id')
+    deleteHermesExtraKey(entry, 'client_secret')
+    deleteHermesExtraKey(entry, 'tenant_id')
+    setHermesExtraInteger(entry, 'port', normalized.port)
+    setHermesExtra(entry, 'service_url', String(normalized.serviceUrl || '').trim())
+    setHermesHomeChannel(entry, normalized)
+  } else if (normalizedPlatform === 'google_chat') {
+    setHermesExtra(entry, 'project_id', String(normalized.projectId || '').trim())
+    setHermesExtra(entry, 'subscription_name', String(normalized.subscriptionName || '').trim())
+    deleteHermesExtraKey(entry, 'service_account_json')
+    setHermesHomeChannel(entry, normalized)
+  } else if (normalizedPlatform === 'irc') {
+    setHermesExtra(entry, 'server', String(normalized.server || '').trim())
+    setHermesExtraInteger(entry, 'port', normalized.port)
+    setHermesExtra(entry, 'nickname', String(normalized.nickname || '').trim())
+    setHermesExtra(entry, 'channel', String(normalized.channel || '').trim())
+    if (Object.hasOwn(normalized, 'useTls')) setHermesExtra(entry, 'use_tls', !!normalized.useTls)
+    deleteHermesExtraKey(entry, 'server_password')
+    deleteHermesExtraKey(entry, 'nickserv_password')
+    setHermesHomeChannel(entry, normalized)
+  } else if (normalizedPlatform === 'line') {
+    deleteHermesExtraKey(entry, 'channel_access_token')
+    deleteHermesExtraKey(entry, 'channel_secret')
+    setHermesExtraInteger(entry, 'port', normalized.port)
+    setHermesExtra(entry, 'host', String(normalized.host || '').trim())
+    setHermesExtra(entry, 'public_url', String(normalized.publicUrl || '').trim())
+    if (Array.isArray(normalized.allowedGroups)) setHermesExtra(entry, 'allowed_groups', normalized.allowedGroups)
+    if (Array.isArray(normalized.allowedRooms)) setHermesExtra(entry, 'allowed_rooms', normalized.allowedRooms)
+    setHermesExtra(entry, 'slow_response_threshold', String(normalized.slowResponseThreshold || '').trim())
+    setHermesHomeChannel(entry, normalized)
+  } else if (normalizedPlatform === 'simplex') {
+    setHermesExtra(entry, 'ws_url', String(normalized.wsUrl || '').trim())
+    setHermesHomeChannel(entry, normalized)
   }
   if (Object.hasOwn(normalized, 'dmPolicy')) setHermesExtra(entry, 'dm_policy', normalized.dmPolicy)
   if (Object.hasOwn(normalized, 'groupPolicy')) {
@@ -3552,7 +3713,8 @@ export function mergeHermesChannelConfig(config = {}, platform, form = {}) {
   }
   if (Object.hasOwn(normalized, 'requireMention')) setHermesExtra(entry, 'require_mention', !!normalized.requireMention)
   if (Array.isArray(normalized.allowFrom)) {
-    setHermesExtra(entry, normalizedPlatform === 'dingtalk' ? 'allowed_users' : 'allow_from', normalized.allowFrom)
+    const allowKey = ['dingtalk', 'irc', 'line', 'simplex'].includes(normalizedPlatform) ? 'allowed_users' : 'allow_from'
+    setHermesExtra(entry, allowKey, normalized.allowFrom)
   }
   if (Array.isArray(normalized.groupAllowFrom)) {
     setHermesExtra(entry, normalizedPlatform === 'dingtalk' ? 'allowed_chats' : 'group_allow_from', normalized.groupAllowFrom)
@@ -3666,6 +3828,54 @@ export function buildHermesChannelEnvUpdates(platform, form = {}) {
     updates.DINGTALK_ALLOWED_USERS = csvEnvValue(form.allowFrom)
     updates.DINGTALK_ALLOWED_CHATS = csvEnvValue(form.groupAllowFrom)
     if (Object.hasOwn(form, 'requireMention')) updates.DINGTALK_REQUIRE_MENTION = boolEnvValue(form.requireMention)
+  } else if (platform === 'teams') {
+    updates.TEAMS_CLIENT_ID = String(form.clientId || '').trim()
+    updates.TEAMS_CLIENT_SECRET = String(form.clientSecret || '').trim()
+    updates.TEAMS_TENANT_ID = String(form.tenantId || '').trim()
+    updates.TEAMS_PORT = String(form.port || '').trim()
+    updates.TEAMS_SERVICE_URL = String(form.serviceUrl || '').trim()
+    updates.TEAMS_ALLOWED_USERS = csvEnvValue(form.allowFrom)
+    if (Object.hasOwn(form, 'allowAllUsers')) updates.TEAMS_ALLOW_ALL_USERS = boolEnvValue(form.allowAllUsers)
+    updates.TEAMS_HOME_CHANNEL = String(form.homeChannel || '').trim()
+    updates.TEAMS_HOME_CHANNEL_NAME = String(form.homeChannelName || '').trim()
+  } else if (platform === 'google_chat') {
+    updates.GOOGLE_CHAT_PROJECT_ID = String(form.projectId || '').trim()
+    updates.GOOGLE_CHAT_SUBSCRIPTION_NAME = String(form.subscriptionName || '').trim()
+    updates.GOOGLE_CHAT_SERVICE_ACCOUNT_JSON = String(form.serviceAccountJson || '').trim()
+    updates.GOOGLE_CHAT_ALLOWED_USERS = csvEnvValue(form.allowFrom)
+    if (Object.hasOwn(form, 'allowAllUsers')) updates.GOOGLE_CHAT_ALLOW_ALL_USERS = boolEnvValue(form.allowAllUsers)
+    updates.GOOGLE_CHAT_HOME_CHANNEL = String(form.homeChannel || '').trim()
+    updates.GOOGLE_CHAT_HOME_CHANNEL_NAME = String(form.homeChannelName || '').trim()
+  } else if (platform === 'irc') {
+    updates.IRC_SERVER = String(form.server || '').trim()
+    updates.IRC_PORT = String(form.port || '').trim()
+    updates.IRC_NICKNAME = String(form.nickname || '').trim()
+    updates.IRC_CHANNEL = String(form.channel || '').trim()
+    if (Object.hasOwn(form, 'useTls')) updates.IRC_USE_TLS = boolEnvValue(form.useTls)
+    updates.IRC_SERVER_PASSWORD = String(form.serverPassword || '').trim()
+    updates.IRC_NICKSERV_PASSWORD = String(form.nickservPassword || '').trim()
+    updates.IRC_ALLOWED_USERS = csvEnvValue(form.allowFrom)
+    if (Object.hasOwn(form, 'allowAllUsers')) updates.IRC_ALLOW_ALL_USERS = boolEnvValue(form.allowAllUsers)
+    updates.IRC_HOME_CHANNEL = String(form.homeChannel || '').trim()
+    updates.IRC_HOME_CHANNEL_NAME = String(form.homeChannelName || '').trim()
+  } else if (platform === 'line') {
+    updates.LINE_CHANNEL_ACCESS_TOKEN = String(form.channelAccessToken || '').trim()
+    updates.LINE_CHANNEL_SECRET = String(form.channelSecret || '').trim()
+    updates.LINE_PORT = String(form.port || '').trim()
+    updates.LINE_HOST = String(form.host || '').trim()
+    updates.LINE_PUBLIC_URL = String(form.publicUrl || '').trim()
+    updates.LINE_ALLOWED_USERS = csvEnvValue(form.allowFrom)
+    updates.LINE_ALLOWED_GROUPS = csvEnvValue(form.allowedGroups)
+    updates.LINE_ALLOWED_ROOMS = csvEnvValue(form.allowedRooms)
+    if (Object.hasOwn(form, 'allowAllUsers')) updates.LINE_ALLOW_ALL_USERS = boolEnvValue(form.allowAllUsers)
+    updates.LINE_HOME_CHANNEL = String(form.homeChannel || '').trim()
+    updates.LINE_SLOW_RESPONSE_THRESHOLD = String(form.slowResponseThreshold || '').trim()
+  } else if (platform === 'simplex') {
+    updates.SIMPLEX_WS_URL = String(form.wsUrl || '').trim()
+    updates.SIMPLEX_ALLOWED_USERS = csvEnvValue(form.allowFrom)
+    if (Object.hasOwn(form, 'allowAllUsers')) updates.SIMPLEX_ALLOW_ALL_USERS = boolEnvValue(form.allowAllUsers)
+    updates.SIMPLEX_HOME_CHANNEL = String(form.homeChannel || '').trim()
+    updates.SIMPLEX_HOME_CHANNEL_NAME = String(form.homeChannelName || '').trim()
   }
   return updates
 }

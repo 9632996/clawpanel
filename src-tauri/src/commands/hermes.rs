@@ -2152,7 +2152,18 @@ fn merge_env_file(existing: &str, managed_keys: &[&str], new_pairs: &[(String, S
 // 并同步 Hermes 运行时仍会读取的 .env 变量。
 // ---------------------------------------------------------------------------
 
-const HERMES_CHANNEL_PLATFORMS: [&str; 5] = ["telegram", "discord", "slack", "feishu", "dingtalk"];
+const HERMES_CHANNEL_PLATFORMS: [&str; 10] = [
+    "telegram",
+    "discord",
+    "slack",
+    "feishu",
+    "dingtalk",
+    "teams",
+    "google_chat",
+    "irc",
+    "line",
+    "simplex",
+];
 
 fn normalize_hermes_channel_platform(platform: &str) -> Option<&'static str> {
     let platform = platform.trim().to_ascii_lowercase();
@@ -2181,6 +2192,25 @@ fn yaml_string_field(map: &serde_yaml::Mapping, key: &str) -> Option<String> {
     yaml_get(map, key)
         .and_then(|v| v.as_str())
         .map(|v| v.to_string())
+}
+
+fn yaml_scalar_string_field(map: &serde_yaml::Mapping, key: &str) -> Option<String> {
+    let value = yaml_get(map, key)?;
+    if let Some(value) = value.as_str() {
+        Some(value.to_string())
+    } else if let Some(value) = value.as_i64() {
+        Some(value.to_string())
+    } else if let Some(value) = value.as_u64() {
+        Some(value.to_string())
+    } else {
+        value.as_f64().map(|value| {
+            if value.fract() == 0.0 {
+                format!("{value:.0}")
+            } else {
+                value.to_string()
+            }
+        })
+    }
 }
 
 fn yaml_bool_field(map: &serde_yaml::Mapping, key: &str) -> Option<bool> {
@@ -2216,6 +2246,17 @@ fn insert_json_string_if_present(
     json_key: &str,
 ) {
     if let Some(value) = yaml_string_field(source, yaml_key) {
+        form.insert(json_key.to_string(), Value::String(value));
+    }
+}
+
+fn insert_json_scalar_string_if_present(
+    form: &mut serde_json::Map<String, Value>,
+    source: &serde_yaml::Mapping,
+    yaml_key: &str,
+    json_key: &str,
+) {
+    if let Some(value) = yaml_scalar_string_field(source, yaml_key) {
         form.insert(json_key.to_string(), Value::String(value));
     }
 }
@@ -2291,6 +2332,21 @@ fn put_json_bool_from_env(
             "true" | "1" | "yes" | "on"
         );
         form.insert(json_key.to_string(), Value::Bool(enabled));
+    }
+}
+
+fn insert_hermes_home_channel_if_present(
+    form: &mut serde_json::Map<String, Value>,
+    entry: &serde_yaml::Mapping,
+) {
+    let Some(home) = yaml_get_mapping(entry, "home_channel") else {
+        return;
+    };
+    if let Some(value) = yaml_string_field(home, "chat_id") {
+        form.insert("homeChannel".to_string(), Value::String(value));
+    }
+    if let Some(value) = yaml_string_field(home, "name") {
+        form.insert("homeChannelName".to_string(), Value::String(value));
     }
 }
 
@@ -2471,6 +2527,230 @@ fn build_hermes_channel_config_values(
                     "clientSecret",
                 );
             }
+            "teams" => {
+                for (yaml_key_name, json_key_name) in [
+                    ("client_id", "clientId"),
+                    ("client_secret", "clientSecret"),
+                    ("tenant_id", "tenantId"),
+                    ("service_url", "serviceUrl"),
+                ] {
+                    insert_json_string_if_present(&mut form, &extra, yaml_key_name, json_key_name);
+                }
+                insert_json_scalar_string_if_present(&mut form, &extra, "port", "port");
+                insert_hermes_home_channel_if_present(&mut form, &entry);
+                put_json_string_from_env(&mut form, env_values, "TEAMS_CLIENT_ID", "clientId");
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "TEAMS_CLIENT_SECRET",
+                    "clientSecret",
+                );
+                put_json_string_from_env(&mut form, env_values, "TEAMS_TENANT_ID", "tenantId");
+                put_json_string_from_env(&mut form, env_values, "TEAMS_PORT", "port");
+                put_json_string_from_env(&mut form, env_values, "TEAMS_SERVICE_URL", "serviceUrl");
+                put_json_string_from_env(&mut form, env_values, "TEAMS_ALLOWED_USERS", "allowFrom");
+                put_json_bool_from_env(
+                    &mut form,
+                    env_values,
+                    "TEAMS_ALLOW_ALL_USERS",
+                    "allowAllUsers",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "TEAMS_HOME_CHANNEL",
+                    "homeChannel",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "TEAMS_HOME_CHANNEL_NAME",
+                    "homeChannelName",
+                );
+            }
+            "google_chat" => {
+                for (yaml_key_name, json_key_name) in [
+                    ("project_id", "projectId"),
+                    ("subscription_name", "subscriptionName"),
+                    ("service_account_json", "serviceAccountJson"),
+                ] {
+                    insert_json_string_if_present(&mut form, &extra, yaml_key_name, json_key_name);
+                }
+                insert_hermes_home_channel_if_present(&mut form, &entry);
+                if let Some(value) = hermes_env_value(env_values, "GOOGLE_CHAT_PROJECT_ID")
+                    .or_else(|| hermes_env_value(env_values, "GOOGLE_CLOUD_PROJECT"))
+                {
+                    form.insert("projectId".to_string(), Value::String(value));
+                }
+                if let Some(value) = hermes_env_value(env_values, "GOOGLE_CHAT_SUBSCRIPTION_NAME")
+                    .or_else(|| hermes_env_value(env_values, "GOOGLE_CHAT_SUBSCRIPTION"))
+                {
+                    form.insert("subscriptionName".to_string(), Value::String(value));
+                }
+                if let Some(value) =
+                    hermes_env_value(env_values, "GOOGLE_CHAT_SERVICE_ACCOUNT_JSON")
+                        .or_else(|| hermes_env_value(env_values, "GOOGLE_APPLICATION_CREDENTIALS"))
+                {
+                    form.insert("serviceAccountJson".to_string(), Value::String(value));
+                }
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "GOOGLE_CHAT_ALLOWED_USERS",
+                    "allowFrom",
+                );
+                put_json_bool_from_env(
+                    &mut form,
+                    env_values,
+                    "GOOGLE_CHAT_ALLOW_ALL_USERS",
+                    "allowAllUsers",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "GOOGLE_CHAT_HOME_CHANNEL",
+                    "homeChannel",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "GOOGLE_CHAT_HOME_CHANNEL_NAME",
+                    "homeChannelName",
+                );
+            }
+            "irc" => {
+                for (yaml_key_name, json_key_name) in [
+                    ("server", "server"),
+                    ("channel", "channel"),
+                    ("nickname", "nickname"),
+                    ("server_password", "serverPassword"),
+                    ("nickserv_password", "nickservPassword"),
+                ] {
+                    insert_json_string_if_present(&mut form, &extra, yaml_key_name, json_key_name);
+                }
+                insert_json_scalar_string_if_present(&mut form, &extra, "port", "port");
+                insert_json_bool_if_present(&mut form, &extra, "use_tls", "useTls");
+                insert_json_csv_if_present(&mut form, &extra, "allowed_users", "allowFrom");
+                insert_hermes_home_channel_if_present(&mut form, &entry);
+                put_json_string_from_env(&mut form, env_values, "IRC_SERVER", "server");
+                put_json_string_from_env(&mut form, env_values, "IRC_CHANNEL", "channel");
+                put_json_string_from_env(&mut form, env_values, "IRC_NICKNAME", "nickname");
+                put_json_string_from_env(&mut form, env_values, "IRC_PORT", "port");
+                put_json_bool_from_env(&mut form, env_values, "IRC_USE_TLS", "useTls");
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "IRC_SERVER_PASSWORD",
+                    "serverPassword",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "IRC_NICKSERV_PASSWORD",
+                    "nickservPassword",
+                );
+                put_json_string_from_env(&mut form, env_values, "IRC_ALLOWED_USERS", "allowFrom");
+                put_json_bool_from_env(
+                    &mut form,
+                    env_values,
+                    "IRC_ALLOW_ALL_USERS",
+                    "allowAllUsers",
+                );
+                put_json_string_from_env(&mut form, env_values, "IRC_HOME_CHANNEL", "homeChannel");
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "IRC_HOME_CHANNEL_NAME",
+                    "homeChannelName",
+                );
+            }
+            "line" => {
+                for (yaml_key_name, json_key_name) in [
+                    ("channel_access_token", "channelAccessToken"),
+                    ("channel_secret", "channelSecret"),
+                    ("host", "host"),
+                    ("public_url", "publicUrl"),
+                    ("slow_response_threshold", "slowResponseThreshold"),
+                ] {
+                    insert_json_string_if_present(&mut form, &extra, yaml_key_name, json_key_name);
+                }
+                insert_json_scalar_string_if_present(&mut form, &extra, "port", "port");
+                insert_json_csv_if_present(&mut form, &extra, "allowed_users", "allowFrom");
+                insert_json_csv_if_present(&mut form, &extra, "allowed_groups", "allowedGroups");
+                insert_json_csv_if_present(&mut form, &extra, "allowed_rooms", "allowedRooms");
+                insert_hermes_home_channel_if_present(&mut form, &entry);
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "LINE_CHANNEL_ACCESS_TOKEN",
+                    "channelAccessToken",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "LINE_CHANNEL_SECRET",
+                    "channelSecret",
+                );
+                put_json_string_from_env(&mut form, env_values, "LINE_PORT", "port");
+                put_json_string_from_env(&mut form, env_values, "LINE_HOST", "host");
+                put_json_string_from_env(&mut form, env_values, "LINE_PUBLIC_URL", "publicUrl");
+                put_json_string_from_env(&mut form, env_values, "LINE_ALLOWED_USERS", "allowFrom");
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "LINE_ALLOWED_GROUPS",
+                    "allowedGroups",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "LINE_ALLOWED_ROOMS",
+                    "allowedRooms",
+                );
+                put_json_bool_from_env(
+                    &mut form,
+                    env_values,
+                    "LINE_ALLOW_ALL_USERS",
+                    "allowAllUsers",
+                );
+                put_json_string_from_env(&mut form, env_values, "LINE_HOME_CHANNEL", "homeChannel");
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "LINE_SLOW_RESPONSE_THRESHOLD",
+                    "slowResponseThreshold",
+                );
+            }
+            "simplex" => {
+                insert_json_string_if_present(&mut form, &extra, "ws_url", "wsUrl");
+                insert_json_csv_if_present(&mut form, &extra, "allowed_users", "allowFrom");
+                insert_hermes_home_channel_if_present(&mut form, &entry);
+                put_json_string_from_env(&mut form, env_values, "SIMPLEX_WS_URL", "wsUrl");
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "SIMPLEX_ALLOWED_USERS",
+                    "allowFrom",
+                );
+                put_json_bool_from_env(
+                    &mut form,
+                    env_values,
+                    "SIMPLEX_ALLOW_ALL_USERS",
+                    "allowAllUsers",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "SIMPLEX_HOME_CHANNEL",
+                    "homeChannel",
+                );
+                put_json_string_from_env(
+                    &mut form,
+                    env_values,
+                    "SIMPLEX_HOME_CHANNEL_NAME",
+                    "homeChannelName",
+                );
+            }
             _ => {}
         }
 
@@ -2480,6 +2760,8 @@ fn build_hermes_channel_config_values(
         if platform == "dingtalk" {
             insert_json_csv_if_present(&mut form, &extra, "allowed_users", "allowFrom");
             insert_json_csv_if_present(&mut form, &extra, "allowed_chats", "groupAllowFrom");
+        } else if ["irc", "line", "simplex"].contains(&platform) {
+            insert_json_csv_if_present(&mut form, &extra, "allowed_users", "allowFrom");
         } else {
             insert_json_csv_if_present(&mut form, &extra, "allow_from", "allowFrom");
             insert_json_csv_if_present(&mut form, &extra, "group_allow_from", "groupAllowFrom");
@@ -2531,6 +2813,14 @@ fn set_extra_string_if_present(entry: &mut serde_yaml::Mapping, key: &str, value
     }
 }
 
+fn set_extra_integer_if_present(entry: &mut serde_yaml::Mapping, key: &str, value: Option<i64>) {
+    if let Some(value) = value {
+        if let Ok(extra) = yaml_child_object(entry, "extra") {
+            extra.insert(yaml_key(key), serde_yaml::Value::Number(value.into()));
+        }
+    }
+}
+
 fn delete_yaml_key(entry: &mut serde_yaml::Mapping, key: &str) {
     entry.remove(yaml_key(key));
 }
@@ -2570,6 +2860,25 @@ fn form_string(form: &Value, key: &str) -> Option<String> {
         .map(|v| v.to_string())
 }
 
+fn form_i64(form: &Value, key: &str) -> Option<i64> {
+    let value = form.get(key)?;
+    if let Some(value) = value.as_i64() {
+        Some(value)
+    } else if let Some(value) = value.as_u64() {
+        i64::try_from(value).ok()
+    } else if let Some(value) = value.as_f64() {
+        if value.is_finite() {
+            Some(value as i64)
+        } else {
+            None
+        }
+    } else {
+        value
+            .as_str()
+            .and_then(|value| value.trim().parse::<i64>().ok())
+    }
+}
+
 fn form_string_or_default(form: &Value, key: &str, default_value: &str) -> String {
     form_string(form, key)
         .map(|value| value.trim().to_string())
@@ -2606,6 +2915,27 @@ fn form_string_array(form: &Value, key: &str) -> Option<Vec<String>> {
         Vec::new()
     };
     Some(items)
+}
+
+fn set_hermes_home_channel(entry: &mut serde_yaml::Mapping, form: &Value) {
+    if form.get("homeChannel").is_none() {
+        return;
+    }
+    let chat_id = form_string(form, "homeChannel")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let Some(chat_id) = chat_id else {
+        delete_yaml_key(entry, "home_channel");
+        return;
+    };
+    let name = form_string(form, "homeChannelName")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| chat_id.clone());
+    let mut home = serde_yaml::Mapping::new();
+    home.insert(yaml_key("chat_id"), serde_yaml::Value::String(chat_id));
+    home.insert(yaml_key("name"), serde_yaml::Value::String(name));
+    entry.insert(yaml_key("home_channel"), serde_yaml::Value::Mapping(home));
 }
 
 fn split_csv_items(value: &str) -> Vec<String> {
@@ -2739,6 +3069,59 @@ fn merge_hermes_channel_config(
             delete_extra_key(entry, "allow_from");
             delete_extra_key(entry, "group_allow_from");
         }
+        "teams" => {
+            delete_extra_key(entry, "client_id");
+            delete_extra_key(entry, "client_secret");
+            delete_extra_key(entry, "tenant_id");
+            set_extra_integer_if_present(entry, "port", form_i64(form, "port"));
+            set_extra_string_if_present(entry, "service_url", form_string(form, "serviceUrl"));
+            set_hermes_home_channel(entry, form);
+        }
+        "google_chat" => {
+            set_extra_string_if_present(entry, "project_id", form_string(form, "projectId"));
+            set_extra_string_if_present(
+                entry,
+                "subscription_name",
+                form_string(form, "subscriptionName"),
+            );
+            delete_extra_key(entry, "service_account_json");
+            set_hermes_home_channel(entry, form);
+        }
+        "irc" => {
+            set_extra_string_if_present(entry, "server", form_string(form, "server"));
+            set_extra_integer_if_present(entry, "port", form_i64(form, "port"));
+            set_extra_string_if_present(entry, "nickname", form_string(form, "nickname"));
+            set_extra_string_if_present(entry, "channel", form_string(form, "channel"));
+            if let Some(value) = form_bool(form, "useTls") {
+                set_extra_bool(entry, "use_tls", value);
+            }
+            delete_extra_key(entry, "server_password");
+            delete_extra_key(entry, "nickserv_password");
+            set_hermes_home_channel(entry, form);
+        }
+        "line" => {
+            delete_extra_key(entry, "channel_access_token");
+            delete_extra_key(entry, "channel_secret");
+            set_extra_integer_if_present(entry, "port", form_i64(form, "port"));
+            set_extra_string_if_present(entry, "host", form_string(form, "host"));
+            set_extra_string_if_present(entry, "public_url", form_string(form, "publicUrl"));
+            if let Some(values) = form_string_array(form, "allowedGroups") {
+                set_extra_string_array(entry, "allowed_groups", values);
+            }
+            if let Some(values) = form_string_array(form, "allowedRooms") {
+                set_extra_string_array(entry, "allowed_rooms", values);
+            }
+            set_extra_string_if_present(
+                entry,
+                "slow_response_threshold",
+                form_string(form, "slowResponseThreshold"),
+            );
+            set_hermes_home_channel(entry, form);
+        }
+        "simplex" => {
+            set_extra_string_if_present(entry, "ws_url", form_string(form, "wsUrl"));
+            set_hermes_home_channel(entry, form);
+        }
         _ => {}
     }
 
@@ -2760,7 +3143,7 @@ fn merge_hermes_channel_config(
         set_extra_bool(entry, "require_mention", value);
     }
     if let Some(values) = form_string_array(form, "allowFrom") {
-        let key = if platform == "dingtalk" {
+        let key = if ["dingtalk", "irc", "line", "simplex"].contains(&platform) {
             "allowed_users"
         } else {
             "allow_from"
@@ -2974,6 +3357,152 @@ fn build_hermes_channel_env_updates(platform: &str, form: &Value) -> Vec<(String
                 push("DINGTALK_REQUIRE_MENTION", bool_env_value(value));
             }
         }
+        "teams" => {
+            push(
+                "TEAMS_CLIENT_ID",
+                form_string(form, "clientId").unwrap_or_default(),
+            );
+            push(
+                "TEAMS_CLIENT_SECRET",
+                form_string(form, "clientSecret").unwrap_or_default(),
+            );
+            push(
+                "TEAMS_TENANT_ID",
+                form_string(form, "tenantId").unwrap_or_default(),
+            );
+            push("TEAMS_PORT", form_string(form, "port").unwrap_or_default());
+            push(
+                "TEAMS_SERVICE_URL",
+                form_string(form, "serviceUrl").unwrap_or_default(),
+            );
+            push("TEAMS_ALLOWED_USERS", csv_env_value(form, "allowFrom"));
+            if let Some(value) = form_bool(form, "allowAllUsers") {
+                push("TEAMS_ALLOW_ALL_USERS", bool_env_value(value));
+            }
+            push(
+                "TEAMS_HOME_CHANNEL",
+                form_string(form, "homeChannel").unwrap_or_default(),
+            );
+            push(
+                "TEAMS_HOME_CHANNEL_NAME",
+                form_string(form, "homeChannelName").unwrap_or_default(),
+            );
+        }
+        "google_chat" => {
+            push(
+                "GOOGLE_CHAT_PROJECT_ID",
+                form_string(form, "projectId").unwrap_or_default(),
+            );
+            push(
+                "GOOGLE_CHAT_SUBSCRIPTION_NAME",
+                form_string(form, "subscriptionName").unwrap_or_default(),
+            );
+            push(
+                "GOOGLE_CHAT_SERVICE_ACCOUNT_JSON",
+                form_string(form, "serviceAccountJson").unwrap_or_default(),
+            );
+            push(
+                "GOOGLE_CHAT_ALLOWED_USERS",
+                csv_env_value(form, "allowFrom"),
+            );
+            if let Some(value) = form_bool(form, "allowAllUsers") {
+                push("GOOGLE_CHAT_ALLOW_ALL_USERS", bool_env_value(value));
+            }
+            push(
+                "GOOGLE_CHAT_HOME_CHANNEL",
+                form_string(form, "homeChannel").unwrap_or_default(),
+            );
+            push(
+                "GOOGLE_CHAT_HOME_CHANNEL_NAME",
+                form_string(form, "homeChannelName").unwrap_or_default(),
+            );
+        }
+        "irc" => {
+            push(
+                "IRC_SERVER",
+                form_string(form, "server").unwrap_or_default(),
+            );
+            push("IRC_PORT", form_string(form, "port").unwrap_or_default());
+            push(
+                "IRC_NICKNAME",
+                form_string(form, "nickname").unwrap_or_default(),
+            );
+            push(
+                "IRC_CHANNEL",
+                form_string(form, "channel").unwrap_or_default(),
+            );
+            if let Some(value) = form_bool(form, "useTls") {
+                push("IRC_USE_TLS", bool_env_value(value));
+            }
+            push(
+                "IRC_SERVER_PASSWORD",
+                form_string(form, "serverPassword").unwrap_or_default(),
+            );
+            push(
+                "IRC_NICKSERV_PASSWORD",
+                form_string(form, "nickservPassword").unwrap_or_default(),
+            );
+            push("IRC_ALLOWED_USERS", csv_env_value(form, "allowFrom"));
+            if let Some(value) = form_bool(form, "allowAllUsers") {
+                push("IRC_ALLOW_ALL_USERS", bool_env_value(value));
+            }
+            push(
+                "IRC_HOME_CHANNEL",
+                form_string(form, "homeChannel").unwrap_or_default(),
+            );
+            push(
+                "IRC_HOME_CHANNEL_NAME",
+                form_string(form, "homeChannelName").unwrap_or_default(),
+            );
+        }
+        "line" => {
+            push(
+                "LINE_CHANNEL_ACCESS_TOKEN",
+                form_string(form, "channelAccessToken").unwrap_or_default(),
+            );
+            push(
+                "LINE_CHANNEL_SECRET",
+                form_string(form, "channelSecret").unwrap_or_default(),
+            );
+            push("LINE_PORT", form_string(form, "port").unwrap_or_default());
+            push("LINE_HOST", form_string(form, "host").unwrap_or_default());
+            push(
+                "LINE_PUBLIC_URL",
+                form_string(form, "publicUrl").unwrap_or_default(),
+            );
+            push("LINE_ALLOWED_USERS", csv_env_value(form, "allowFrom"));
+            push("LINE_ALLOWED_GROUPS", csv_env_value(form, "allowedGroups"));
+            push("LINE_ALLOWED_ROOMS", csv_env_value(form, "allowedRooms"));
+            if let Some(value) = form_bool(form, "allowAllUsers") {
+                push("LINE_ALLOW_ALL_USERS", bool_env_value(value));
+            }
+            push(
+                "LINE_HOME_CHANNEL",
+                form_string(form, "homeChannel").unwrap_or_default(),
+            );
+            push(
+                "LINE_SLOW_RESPONSE_THRESHOLD",
+                form_string(form, "slowResponseThreshold").unwrap_or_default(),
+            );
+        }
+        "simplex" => {
+            push(
+                "SIMPLEX_WS_URL",
+                form_string(form, "wsUrl").unwrap_or_default(),
+            );
+            push("SIMPLEX_ALLOWED_USERS", csv_env_value(form, "allowFrom"));
+            if let Some(value) = form_bool(form, "allowAllUsers") {
+                push("SIMPLEX_ALLOW_ALL_USERS", bool_env_value(value));
+            }
+            push(
+                "SIMPLEX_HOME_CHANNEL",
+                form_string(form, "homeChannel").unwrap_or_default(),
+            );
+            push(
+                "SIMPLEX_HOME_CHANNEL_NAME",
+                form_string(form, "homeChannelName").unwrap_or_default(),
+            );
+        }
         _ => {}
     }
 
@@ -3033,6 +3562,59 @@ fn write_hermes_channel_env(platform: &str, form: &Value) -> Result<(), String> 
             "DINGTALK_ALLOWED_USERS",
             "DINGTALK_ALLOWED_CHATS",
             "DINGTALK_REQUIRE_MENTION",
+        ],
+        "teams" => vec![
+            "TEAMS_CLIENT_ID",
+            "TEAMS_CLIENT_SECRET",
+            "TEAMS_TENANT_ID",
+            "TEAMS_PORT",
+            "TEAMS_SERVICE_URL",
+            "TEAMS_ALLOWED_USERS",
+            "TEAMS_ALLOW_ALL_USERS",
+            "TEAMS_HOME_CHANNEL",
+            "TEAMS_HOME_CHANNEL_NAME",
+        ],
+        "google_chat" => vec![
+            "GOOGLE_CHAT_PROJECT_ID",
+            "GOOGLE_CHAT_SUBSCRIPTION_NAME",
+            "GOOGLE_CHAT_SERVICE_ACCOUNT_JSON",
+            "GOOGLE_CHAT_ALLOWED_USERS",
+            "GOOGLE_CHAT_ALLOW_ALL_USERS",
+            "GOOGLE_CHAT_HOME_CHANNEL",
+            "GOOGLE_CHAT_HOME_CHANNEL_NAME",
+        ],
+        "irc" => vec![
+            "IRC_SERVER",
+            "IRC_PORT",
+            "IRC_NICKNAME",
+            "IRC_CHANNEL",
+            "IRC_USE_TLS",
+            "IRC_SERVER_PASSWORD",
+            "IRC_NICKSERV_PASSWORD",
+            "IRC_ALLOWED_USERS",
+            "IRC_ALLOW_ALL_USERS",
+            "IRC_HOME_CHANNEL",
+            "IRC_HOME_CHANNEL_NAME",
+        ],
+        "line" => vec![
+            "LINE_CHANNEL_ACCESS_TOKEN",
+            "LINE_CHANNEL_SECRET",
+            "LINE_PORT",
+            "LINE_HOST",
+            "LINE_PUBLIC_URL",
+            "LINE_ALLOWED_USERS",
+            "LINE_ALLOWED_GROUPS",
+            "LINE_ALLOWED_ROOMS",
+            "LINE_ALLOW_ALL_USERS",
+            "LINE_HOME_CHANNEL",
+            "LINE_SLOW_RESPONSE_THRESHOLD",
+        ],
+        "simplex" => vec![
+            "SIMPLEX_WS_URL",
+            "SIMPLEX_ALLOWED_USERS",
+            "SIMPLEX_ALLOW_ALL_USERS",
+            "SIMPLEX_HOME_CHANNEL",
+            "SIMPLEX_HOME_CHANNEL_NAME",
         ],
         _ => Vec::new(),
     };
@@ -8411,5 +8993,341 @@ platforms:
             config["platforms"]["slack"]["extra"]["unknown_option"].as_str(),
             Some("keep-me")
         );
+    }
+
+    #[test]
+    fn plugin_platform_values_prefer_env_and_preserve_yaml_runtime_fields() {
+        let config: serde_yaml::Value = serde_yaml::from_str(
+            r##"
+platforms:
+  teams:
+    enabled: true
+    extra:
+      client_id: yaml-teams-client
+      client_secret: yaml-teams-secret
+      tenant_id: yaml-tenant
+      port: 3978
+      service_url: https://smba.trafficmanager.net/teams/
+      allow_from: ["aad-1"]
+  google_chat:
+    enabled: true
+    extra:
+      project_id: yaml-project
+      subscription_name: projects/yaml-project/subscriptions/hermes
+      service_account_json: yaml-sa.json
+      allow_from: ["user@example.com"]
+  irc:
+    enabled: true
+    extra:
+      server: irc.libera.chat
+      channel: "#hermes"
+      nickname: hermes-bot
+      use_tls: true
+      allowed_users: ["alice"]
+  line:
+    enabled: true
+    extra:
+      channel_access_token: yaml-line-token
+      channel_secret: yaml-line-secret
+      host: 0.0.0.0
+      port: 8646
+      public_url: https://line.example.com
+      allowed_users: ["U1"]
+      allowed_groups: ["C1"]
+      allowed_rooms: ["R1"]
+      slow_response_threshold: "45"
+  simplex:
+    enabled: true
+    extra:
+      ws_url: ws://127.0.0.1:5225
+      allowed_users: ["contact-1"]
+"##,
+        )
+        .unwrap();
+        let mut env = HashMap::new();
+        env.insert(
+            "TEAMS_CLIENT_ID".to_string(),
+            "env-teams-client".to_string(),
+        );
+        env.insert(
+            "TEAMS_CLIENT_SECRET".to_string(),
+            "env-teams-secret".to_string(),
+        );
+        env.insert("TEAMS_TENANT_ID".to_string(), "env-tenant".to_string());
+        env.insert("TEAMS_HOME_CHANNEL".to_string(), "teams-home".to_string());
+        env.insert(
+            "GOOGLE_CHAT_PROJECT_ID".to_string(),
+            "env-project".to_string(),
+        );
+        env.insert(
+            "GOOGLE_CHAT_SUBSCRIPTION_NAME".to_string(),
+            "projects/env-project/subscriptions/hermes".to_string(),
+        );
+        env.insert(
+            "GOOGLE_CHAT_SERVICE_ACCOUNT_JSON".to_string(),
+            "env-sa.json".to_string(),
+        );
+        env.insert(
+            "GOOGLE_CHAT_HOME_CHANNEL".to_string(),
+            "spaces/AAA".to_string(),
+        );
+        env.insert("IRC_SERVER".to_string(), "irc.oftc.net".to_string());
+        env.insert("IRC_CHANNEL".to_string(), "#ops".to_string());
+        env.insert("IRC_NICKNAME".to_string(), "ops-bot".to_string());
+        env.insert("IRC_HOME_CHANNEL".to_string(), "#reports".to_string());
+        env.insert(
+            "LINE_CHANNEL_ACCESS_TOKEN".to_string(),
+            "env-line-token".to_string(),
+        );
+        env.insert(
+            "LINE_CHANNEL_SECRET".to_string(),
+            "env-line-secret".to_string(),
+        );
+        env.insert("LINE_HOME_CHANNEL".to_string(), "U-home".to_string());
+        env.insert(
+            "SIMPLEX_WS_URL".to_string(),
+            "ws://127.0.0.1:5226".to_string(),
+        );
+        env.insert(
+            "SIMPLEX_HOME_CHANNEL".to_string(),
+            "contact-home".to_string(),
+        );
+
+        let values = build_hermes_channel_config_values(&config, &env);
+
+        assert_eq!(values["teams"]["clientId"], "env-teams-client");
+        assert_eq!(values["teams"]["clientSecret"], "env-teams-secret");
+        assert_eq!(values["teams"]["tenantId"], "env-tenant");
+        assert_eq!(values["teams"]["homeChannel"], "teams-home");
+        assert_eq!(values["teams"]["allowFrom"], "aad-1");
+        assert_eq!(values["google_chat"]["projectId"], "env-project");
+        assert_eq!(
+            values["google_chat"]["subscriptionName"],
+            "projects/env-project/subscriptions/hermes"
+        );
+        assert_eq!(values["google_chat"]["serviceAccountJson"], "env-sa.json");
+        assert_eq!(values["google_chat"]["homeChannel"], "spaces/AAA");
+        assert_eq!(values["irc"]["server"], "irc.oftc.net");
+        assert_eq!(values["irc"]["channel"], "#ops");
+        assert_eq!(values["irc"]["nickname"], "ops-bot");
+        assert_eq!(values["irc"]["homeChannel"], "#reports");
+        assert_eq!(values["irc"]["useTls"], true);
+        assert_eq!(values["irc"]["allowFrom"], "alice");
+        assert_eq!(values["line"]["channelAccessToken"], "env-line-token");
+        assert_eq!(values["line"]["channelSecret"], "env-line-secret");
+        assert_eq!(values["line"]["homeChannel"], "U-home");
+        assert_eq!(values["line"]["allowedGroups"], "C1");
+        assert_eq!(values["line"]["allowedRooms"], "R1");
+        assert_eq!(values["simplex"]["wsUrl"], "ws://127.0.0.1:5226");
+        assert_eq!(values["simplex"]["homeChannel"], "contact-home");
+        assert_eq!(values["simplex"]["allowFrom"], "contact-1");
+    }
+
+    #[test]
+    fn plugin_platform_save_writes_runtime_fields_and_env() {
+        let mut config = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+
+        merge_hermes_channel_config(
+            &mut config,
+            "teams",
+            &json!({
+                "enabled": true,
+                "clientId": "teams-client",
+                "clientSecret": "teams-secret",
+                "tenantId": "tenant-1",
+                "port": "3978",
+                "serviceUrl": "https://smba.trafficmanager.net/teams/",
+                "allowFrom": "aad-1, aad-2",
+                "allowAllUsers": false,
+                "homeChannel": "19:abc@thread.tacv2",
+                "homeChannelName": "Ops",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(
+            config["platforms"]["teams"]["extra"]["client_id"],
+            serde_yaml::Value::Null
+        );
+        assert_eq!(
+            config["platforms"]["teams"]["extra"]["client_secret"],
+            serde_yaml::Value::Null
+        );
+        assert_eq!(
+            config["platforms"]["teams"]["extra"]["tenant_id"],
+            serde_yaml::Value::Null
+        );
+        assert_eq!(
+            config["platforms"]["teams"]["extra"]["port"].as_i64(),
+            Some(3978)
+        );
+        assert_eq!(
+            config["platforms"]["teams"]["extra"]["service_url"].as_str(),
+            Some("https://smba.trafficmanager.net/teams/")
+        );
+        assert_eq!(
+            config["platforms"]["teams"]["extra"]["allow_from"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>(),
+            vec!["aad-1", "aad-2"]
+        );
+
+        merge_hermes_channel_config(
+            &mut config,
+            "google_chat",
+            &json!({
+                "enabled": true,
+                "projectId": "project-1",
+                "subscriptionName": "projects/project-1/subscriptions/hermes",
+                "serviceAccountJson": "C:\\keys\\sa.json",
+                "allowFrom": "user@example.com",
+                "allowAllUsers": true,
+                "homeChannel": "spaces/AAA",
+                "homeChannelName": "Ops Space",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(
+            config["platforms"]["google_chat"]["extra"]["project_id"].as_str(),
+            Some("project-1")
+        );
+        assert_eq!(
+            config["platforms"]["google_chat"]["extra"]["subscription_name"].as_str(),
+            Some("projects/project-1/subscriptions/hermes")
+        );
+        assert_eq!(
+            config["platforms"]["google_chat"]["extra"]["service_account_json"],
+            serde_yaml::Value::Null
+        );
+
+        merge_hermes_channel_config(
+            &mut config,
+            "irc",
+            &json!({
+                "enabled": true,
+                "server": "irc.libera.chat",
+                "port": "6697",
+                "nickname": "hermes-bot",
+                "channel": "#hermes",
+                "useTls": true,
+                "serverPassword": "server-secret",
+                "nickservPassword": "nick-secret",
+                "allowFrom": "alice, bob",
+                "allowAllUsers": false,
+                "homeChannel": "#reports",
+                "homeChannelName": "reports",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(
+            config["platforms"]["irc"]["extra"]["server"].as_str(),
+            Some("irc.libera.chat")
+        );
+        assert_eq!(
+            config["platforms"]["irc"]["extra"]["port"].as_i64(),
+            Some(6697)
+        );
+        assert_eq!(
+            config["platforms"]["irc"]["extra"]["use_tls"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            config["platforms"]["irc"]["extra"]["server_password"],
+            serde_yaml::Value::Null
+        );
+        assert_eq!(
+            config["platforms"]["irc"]["extra"]["nickserv_password"],
+            serde_yaml::Value::Null
+        );
+
+        merge_hermes_channel_config(
+            &mut config,
+            "line",
+            &json!({
+                "enabled": true,
+                "channelAccessToken": "line-token",
+                "channelSecret": "line-secret",
+                "port": "8646",
+                "host": "0.0.0.0",
+                "publicUrl": "https://line.example.com",
+                "allowFrom": "U1",
+                "allowedGroups": "C1",
+                "allowedRooms": "R1",
+                "allowAllUsers": false,
+                "homeChannel": "U-home",
+                "slowResponseThreshold": "45",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(
+            config["platforms"]["line"]["extra"]["channel_access_token"],
+            serde_yaml::Value::Null
+        );
+        assert_eq!(
+            config["platforms"]["line"]["extra"]["channel_secret"],
+            serde_yaml::Value::Null
+        );
+        assert_eq!(
+            config["platforms"]["line"]["extra"]["port"].as_i64(),
+            Some(8646)
+        );
+        assert_eq!(
+            config["platforms"]["line"]["extra"]["allowed_groups"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>(),
+            vec!["C1"]
+        );
+
+        merge_hermes_channel_config(
+            &mut config,
+            "simplex",
+            &json!({
+                "enabled": true,
+                "wsUrl": "ws://127.0.0.1:5225",
+                "allowFrom": "contact-1",
+                "allowAllUsers": true,
+                "homeChannel": "group:ops",
+                "homeChannelName": "Ops",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(
+            config["platforms"]["simplex"]["extra"]["ws_url"].as_str(),
+            Some("ws://127.0.0.1:5225")
+        );
+
+        let env = build_hermes_channel_env_updates(
+            "line",
+            &json!({
+                "channelAccessToken": "line-token",
+                "channelSecret": "line-secret",
+                "port": "8646",
+                "host": "0.0.0.0",
+                "publicUrl": "https://line.example.com",
+                "allowFrom": "U1",
+                "allowedGroups": "C1",
+                "allowedRooms": "R1",
+                "allowAllUsers": false,
+                "homeChannel": "U-home",
+                "slowResponseThreshold": "45",
+            }),
+        );
+
+        assert!(env.contains(&(
+            "LINE_CHANNEL_ACCESS_TOKEN".to_string(),
+            "line-token".to_string()
+        )));
+        assert!(env.contains(&("LINE_ALLOWED_GROUPS".to_string(), "C1".to_string())));
+        assert!(env.contains(&("LINE_HOME_CHANNEL".to_string(), "U-home".to_string())));
     }
 }
