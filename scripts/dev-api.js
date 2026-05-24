@@ -3324,6 +3324,7 @@ const HERMES_SESSION_RESET_MODES = new Set(['both', 'idle', 'daily', 'none'])
 const HERMES_STREAMING_TRANSPORTS = new Set(['auto', 'draft', 'edit', 'off'])
 const HERMES_CODE_EXECUTION_MODES = new Set(['project', 'strict'])
 const HERMES_TERMINAL_BACKENDS = new Set(['local', 'ssh', 'docker', 'singularity', 'modal', 'daytona', 'vercel_sandbox'])
+const HERMES_BROWSER_ENGINES = new Set(['auto', 'lightpanda', 'chrome'])
 const HERMES_DISPLAY_TOOL_PROGRESS_VALUES = new Set(['off', 'new', 'all', 'verbose'])
 const HERMES_DISPLAY_STREAMING_VALUES = new Set(['inherit', 'true', 'false'])
 const HERMES_DISPLAY_RESUME_VALUES = new Set(['full', 'minimal'])
@@ -3399,6 +3400,13 @@ function normalizeHermesTerminalBackend(value, strict = false) {
   if (HERMES_TERMINAL_BACKENDS.has(backend)) return backend
   if (strict) throw new Error('terminal.backend 必须是 local、ssh、docker、singularity、modal、daytona 或 vercel_sandbox')
   return 'local'
+}
+
+function normalizeHermesBrowserEngine(value, strict = false) {
+  const engine = String(value ?? '').trim().toLowerCase() || 'auto'
+  if (HERMES_BROWSER_ENGINES.has(engine)) return engine
+  if (strict) throw new Error('browser.engine 必须是 auto、lightpanda 或 chrome')
+  return 'auto'
 }
 
 function normalizeHermesDisplayToolProgress(value, strict = false, key = 'display.tool_progress') {
@@ -3940,6 +3948,33 @@ export function mergeHermesPrivacyConfig(config = {}, form = {}) {
     : {}
   privacy.redact_pii = formHermesBool(form, 'redactPii', currentValues.redactPii)
   next.privacy = privacy
+  return next
+}
+
+export function buildHermesBrowserConfigValues(config = {}) {
+  const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
+  const browser = root.browser && typeof root.browser === 'object' && !Array.isArray(root.browser)
+    ? root.browser
+    : {}
+  return {
+    browserInactivityTimeout: parseHermesInteger(browser.inactivity_timeout, 'browser.inactivity_timeout', 120, 1, 86400, false),
+    browserCommandTimeout: parseHermesInteger(browser.command_timeout, 'browser.command_timeout', 30, 5, 3600, false),
+    browserRecordSessions: readHermesBool(browser.record_sessions, false),
+    browserEngine: normalizeHermesBrowserEngine(browser.engine, false),
+  }
+}
+
+export function mergeHermesBrowserConfig(config = {}, form = {}) {
+  const next = mergeConfigsPreservingFields({}, config && typeof config === 'object' && !Array.isArray(config) ? config : {})
+  const currentValues = buildHermesBrowserConfigValues(next)
+  const browser = next.browser && typeof next.browser === 'object' && !Array.isArray(next.browser)
+    ? mergeConfigsPreservingFields(next.browser, {})
+    : {}
+  browser.inactivity_timeout = parseHermesInteger(Object.hasOwn(form, 'browserInactivityTimeout') ? form.browserInactivityTimeout : currentValues.browserInactivityTimeout, 'browser.inactivity_timeout', 120, 1, 86400, true)
+  browser.command_timeout = parseHermesInteger(Object.hasOwn(form, 'browserCommandTimeout') ? form.browserCommandTimeout : currentValues.browserCommandTimeout, 'browser.command_timeout', 30, 5, 3600, true)
+  browser.record_sessions = formHermesBool(form, 'browserRecordSessions', currentValues.browserRecordSessions)
+  browser.engine = normalizeHermesBrowserEngine(Object.hasOwn(form, 'browserEngine') ? form.browserEngine : currentValues.browserEngine, true)
+  next.browser = browser
   return next
 }
 
@@ -10563,6 +10598,27 @@ const handlers = {
       configPath,
       backup,
       values: buildHermesPrivacyConfigValues(next),
+    }
+  },
+
+  hermes_browser_config_read() {
+    const { configPath, exists, config } = readHermesConfigYamlObject()
+    return {
+      exists,
+      configPath,
+      values: buildHermesBrowserConfigValues(config),
+    }
+  },
+
+  hermes_browser_config_save({ form } = {}) {
+    const { configPath, config } = readHermesConfigYamlObject()
+    const next = mergeHermesBrowserConfig(config, form || {})
+    const backup = writeHermesConfigYamlObject(configPath, next)
+    return {
+      ok: true,
+      configPath,
+      backup,
+      values: buildHermesBrowserConfigValues(next),
     }
   },
 

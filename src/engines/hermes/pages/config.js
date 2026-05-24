@@ -113,6 +113,13 @@ const PRIVACY_DEFAULTS = {
   redactPii: false,
 }
 
+const BROWSER_DEFAULTS = {
+  browserInactivityTimeout: 120,
+  browserCommandTimeout: 30,
+  browserRecordSessions: false,
+  browserEngine: 'auto',
+}
+
 const TERMINAL_DEFAULTS = {
   terminalBackend: 'local',
   terminalCwd: '.',
@@ -130,6 +137,7 @@ const SESSION_RESET_MODES = ['both', 'idle', 'daily', 'none']
 const STREAMING_TRANSPORTS = ['edit', 'auto', 'draft', 'off']
 const CODE_EXECUTION_MODES = ['project', 'strict']
 const TERMINAL_BACKENDS = ['local', 'ssh', 'docker', 'singularity', 'modal', 'daytona', 'vercel_sandbox']
+const BROWSER_ENGINES = ['auto', 'lightpanda', 'chrome']
 const UNAUTHORIZED_DM_BEHAVIORS = ['pair', 'ignore']
 const DISPLAY_TOOL_PROGRESS_VALUES = ['off', 'new', 'all', 'verbose']
 const DISPLAY_LANGUAGE_VALUES = ['en', 'zh', 'zh-hant', 'ja', 'de', 'es', 'fr', 'tr', 'uk', 'af', 'ko', 'it', 'ga', 'pt', 'ru', 'hu']
@@ -155,6 +163,7 @@ export function render() {
   let executionLimitsValues = { ...EXECUTION_LIMITS_DEFAULTS }
   let ioSafetyValues = { ...IO_SAFETY_DEFAULTS }
   let privacyValues = { ...PRIVACY_DEFAULTS }
+  let browserValues = { ...BROWSER_DEFAULTS }
   let terminalValues = { ...TERMINAL_DEFAULTS }
   let loading = true
   let runtimeLoading = true
@@ -171,6 +180,7 @@ export function render() {
   let executionLimitsLoading = true
   let ioSafetyLoading = true
   let privacyLoading = true
+  let browserLoading = true
   let terminalLoading = true
   let saving = false
   let runtimeSaving = false
@@ -187,6 +197,7 @@ export function render() {
   let executionLimitsSaving = false
   let ioSafetySaving = false
   let privacySaving = false
+  let browserSaving = false
   let terminalSaving = false
   let error = null
   let runtimeError = null
@@ -203,6 +214,7 @@ export function render() {
   let executionLimitsError = null
   let ioSafetyError = null
   let privacyError = null
+  let browserError = null
   let terminalError = null
 
   function esc(value) {
@@ -214,7 +226,7 @@ export function render() {
   }
 
   function isBusy() {
-    return loading || runtimeLoading || compressionLoading || toolGuardrailsLoading || memoryLoading || skillsLoading || quickCommandsLoading || unauthorizedDmLoading || securityLoading || displayLoading || humanDelayLoading || streamingLoading || executionLimitsLoading || ioSafetyLoading || privacyLoading || terminalLoading || saving || runtimeSaving || compressionSaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || unauthorizedDmSaving || securitySaving || displaySaving || humanDelaySaving || streamingSaving || executionLimitsSaving || ioSafetySaving || privacySaving || terminalSaving
+    return loading || runtimeLoading || compressionLoading || toolGuardrailsLoading || memoryLoading || skillsLoading || quickCommandsLoading || unauthorizedDmLoading || securityLoading || displayLoading || humanDelayLoading || streamingLoading || executionLimitsLoading || ioSafetyLoading || privacyLoading || browserLoading || terminalLoading || saving || runtimeSaving || compressionSaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || unauthorizedDmSaving || securitySaving || displaySaving || humanDelaySaving || streamingSaving || executionLimitsSaving || ioSafetySaving || privacySaving || browserSaving || terminalSaving
   }
 
   function option(labelKey, value, selected) {
@@ -837,7 +849,7 @@ export function render() {
   }
 
   function renderPrivacyPanel() {
-    const disabled = loading || saving || privacyLoading || privacySaving || terminalSaving || runtimeSaving || compressionSaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || ioSafetySaving
+    const disabled = loading || saving || privacyLoading || privacySaving || browserSaving || terminalSaving || runtimeSaving || compressionSaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || ioSafetySaving
     return `
       <div class="hm-panel hm-config-runtime-panel hm-config-privacy-panel">
         <div class="hm-panel-header">
@@ -864,8 +876,52 @@ export function render() {
     `
   }
 
+  function renderBrowserPanel() {
+    const disabled = loading || saving || browserLoading || browserSaving || privacySaving || terminalSaving || runtimeSaving || compressionSaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || ioSafetySaving
+    return `
+      <div class="hm-panel hm-config-runtime-panel hm-config-browser-panel">
+        <div class="hm-panel-header">
+          <div>
+            <div class="hm-panel-title">${t('engine.hermesBrowserConfigTitle')}</div>
+            <div class="hm-channel-panel-desc">${t('engine.hermesBrowserConfigDesc')}</div>
+          </div>
+          <div class="hm-panel-actions">
+            <span class="hm-muted">${browserSaving ? t('engine.hermesConfigStatusSaving') : browserLoading ? t('engine.hermesConfigStatusLoading') : t('engine.hermesBrowserConfigStatusReady')}</span>
+            <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-browser-save" ${disabled ? 'disabled' : ''}>${t('engine.hermesBrowserConfigSave')}</button>
+          </div>
+        </div>
+        <div class="hm-panel-body">
+          ${renderError(browserError)}
+          <div class="hm-config-runtime-grid hm-config-browser-grid">
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesBrowserConfigEngine')}</span>
+              <select id="hm-browser-engine" class="hm-input" ${disabled ? 'disabled' : ''}>
+                ${BROWSER_ENGINES.map(mode => option(`engine.hermesBrowserConfigEngine_${mode}`, mode, browserValues.browserEngine)).join('')}
+              </select>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesBrowserConfigInactivityTimeout')}</span>
+              <input id="hm-browser-inactivity-timeout" class="hm-input" type="number" inputmode="numeric" min="1" max="86400" step="1" value="${esc(browserValues.browserInactivityTimeout)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesBrowserConfigCommandTimeout')}</span>
+              <input id="hm-browser-command-timeout" class="hm-input" type="number" inputmode="numeric" min="5" max="3600" step="1" value="${esc(browserValues.browserCommandTimeout)}" ${disabled ? 'disabled' : ''}>
+            </label>
+          </div>
+          <div class="hm-config-check-grid">
+            <label class="hm-channel-check">
+              <input id="hm-browser-record-sessions" type="checkbox" ${browserValues.browserRecordSessions ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesBrowserConfigRecordSessions')}</span>
+            </label>
+          </div>
+          <div class="hm-channel-footnote">${t('engine.hermesBrowserConfigFootnote')}</div>
+        </div>
+      </div>
+    `
+  }
+
   function renderTerminalPanel() {
-    const disabled = loading || saving || terminalLoading || terminalSaving || runtimeSaving || compressionSaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving
+    const disabled = loading || saving || terminalLoading || terminalSaving || browserSaving || runtimeSaving || compressionSaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving
     return `
       <div class="hm-panel hm-config-runtime-panel hm-config-terminal-panel">
         <div class="hm-panel-header">
@@ -955,6 +1011,7 @@ export function render() {
       ${renderExecutionLimitsPanel()}
       ${renderIoSafetyPanel()}
       ${renderPrivacyPanel()}
+      ${renderBrowserPanel()}
       ${renderCompressionPanel()}
       ${renderToolGuardrailsPanel()}
       ${renderMemoryPanel()}
@@ -997,6 +1054,7 @@ export function render() {
     el.querySelector('#hm-execution-limits-save')?.addEventListener('click', saveExecutionLimits)
     el.querySelector('#hm-io-safety-save')?.addEventListener('click', saveIoSafety)
     el.querySelector('#hm-privacy-save')?.addEventListener('click', savePrivacyConfig)
+    el.querySelector('#hm-browser-save')?.addEventListener('click', saveBrowserConfig)
     el.querySelector('#hm-terminal-save')?.addEventListener('click', saveTerminal)
   }
 
@@ -1075,6 +1133,11 @@ export function render() {
     privacyValues = { ...PRIVACY_DEFAULTS, ...(data?.values || {}) }
   }
 
+  async function loadBrowserConfig() {
+    const data = await api.hermesBrowserConfigRead()
+    browserValues = { ...BROWSER_DEFAULTS, ...(data?.values || {}) }
+  }
+
   async function loadTerminal() {
     const data = await api.hermesTerminalConfigRead()
     terminalValues = { ...TERMINAL_DEFAULTS, ...(data?.values || {}) }
@@ -1096,6 +1159,7 @@ export function render() {
     executionLimitsLoading = true
     ioSafetyLoading = true
     privacyLoading = true
+    browserLoading = true
     terminalLoading = true
     error = null
     runtimeError = null
@@ -1112,6 +1176,7 @@ export function render() {
     executionLimitsError = null
     ioSafetyError = null
     privacyError = null
+    browserError = null
     terminalError = null
     draw()
     try {
@@ -1175,6 +1240,14 @@ export function render() {
       privacyError = humanizeError(err, t('engine.hermesPrivacyConfigLoadFailed') || 'Load privacy config failed')
     } finally {
       privacyLoading = false
+      draw()
+    }
+    try {
+      await loadBrowserConfig()
+    } catch (err) {
+      browserError = humanizeError(err, t('engine.hermesBrowserConfigLoadFailed') || 'Load browser config failed')
+    } finally {
+      browserLoading = false
       draw()
     }
     try {
@@ -1303,6 +1376,9 @@ export function render() {
       } catch {}
       try {
         await loadPrivacyConfig()
+      } catch {}
+      try {
+        await loadBrowserConfig()
       } catch {}
       try {
         await loadTerminal()
@@ -1713,6 +1789,34 @@ export function render() {
       toast(privacyError, 'error')
     } finally {
       privacySaving = false
+      draw()
+    }
+  }
+
+  async function saveBrowserConfig() {
+    const form = {
+      browserInactivityTimeout: el.querySelector('#hm-browser-inactivity-timeout')?.value || '120',
+      browserCommandTimeout: el.querySelector('#hm-browser-command-timeout')?.value || '30',
+      browserRecordSessions: !!el.querySelector('#hm-browser-record-sessions')?.checked,
+      browserEngine: el.querySelector('#hm-browser-engine')?.value || 'auto',
+    }
+    browserSaving = true
+    browserError = null
+    draw()
+    try {
+      const result = await api.hermesBrowserConfigSave(form)
+      browserValues = { ...BROWSER_DEFAULTS, ...(result?.values || form) }
+      await refreshRawAfterStructuredSave()
+      const backup = result?.backup || ''
+      toast({
+        message: t('engine.hermesBrowserConfigSaveSuccess'),
+        hint: backup ? t('engine.hermesConfigBackupHint', { path: backup }) : '',
+      }, 'success')
+    } catch (err) {
+      browserError = humanizeError(err, t('engine.hermesBrowserConfigSaveFailed') || 'Save browser config failed')
+      toast(browserError, 'error')
+    } finally {
+      browserSaving = false
       draw()
     }
   }

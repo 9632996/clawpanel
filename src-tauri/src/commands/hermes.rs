@@ -4391,6 +4391,23 @@ fn normalize_hermes_terminal_backend(
     }
 }
 
+fn normalize_hermes_browser_engine(value: Option<String>, strict: bool) -> Result<String, String> {
+    let engine = value.unwrap_or_default().trim().to_ascii_lowercase();
+    let engine = if engine.is_empty() {
+        "auto".to_string()
+    } else {
+        engine
+    };
+    if matches!(engine.as_str(), "auto" | "lightpanda" | "chrome") {
+        return Ok(engine);
+    }
+    if strict {
+        Err("browser.engine 必须是 auto、lightpanda 或 chrome".to_string())
+    } else {
+        Ok("auto".to_string())
+    }
+}
+
 fn hermes_streaming_config_source(config: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
     let root = config.as_mapping()?;
     if let Some(streaming) = yaml_get_mapping(root, "streaming") {
@@ -4687,6 +4704,88 @@ fn merge_hermes_privacy_config(config: &mut serde_yaml::Value, form: &Value) -> 
     let root = ensure_yaml_object(config)?;
     let privacy = yaml_child_object(root, "privacy")?;
     privacy.insert(yaml_key("redact_pii"), serde_yaml::Value::Bool(redact_pii));
+    Ok(())
+}
+
+fn build_hermes_browser_config_values(config: &serde_yaml::Value) -> Value {
+    let root = config.as_mapping();
+    let browser = root.and_then(|map| yaml_get_mapping(map, "browser"));
+    let browser_inactivity_timeout = browser
+        .map(|map| bounded_hermes_i64(yaml_i64_field(map, "inactivity_timeout"), 120, 1, 86400))
+        .unwrap_or(120);
+    let browser_command_timeout = browser
+        .map(|map| bounded_hermes_i64(yaml_i64_field(map, "command_timeout"), 30, 5, 3600))
+        .unwrap_or(30);
+    let browser_record_sessions = browser
+        .and_then(|map| yaml_bool_field(map, "record_sessions"))
+        .unwrap_or(false);
+    let browser_engine = normalize_hermes_browser_engine(
+        browser.and_then(|map| yaml_string_field(map, "engine")),
+        false,
+    )
+    .unwrap_or_else(|_| "auto".to_string());
+
+    serde_json::json!({
+        "browserInactivityTimeout": browser_inactivity_timeout,
+        "browserCommandTimeout": browser_command_timeout,
+        "browserRecordSessions": browser_record_sessions,
+        "browserEngine": browser_engine,
+    })
+}
+
+fn merge_hermes_browser_config(config: &mut serde_yaml::Value, form: &Value) -> Result<(), String> {
+    let current = build_hermes_browser_config_values(config);
+    let browser_inactivity_timeout = validate_hermes_i64(
+        if form.get("browserInactivityTimeout").is_some() {
+            form_i64(form, "browserInactivityTimeout")
+        } else {
+            Some(current["browserInactivityTimeout"].as_i64().unwrap_or(120))
+        },
+        "browser.inactivity_timeout",
+        120,
+        1,
+        86400,
+    )?;
+    let browser_command_timeout = validate_hermes_i64(
+        if form.get("browserCommandTimeout").is_some() {
+            form_i64(form, "browserCommandTimeout")
+        } else {
+            Some(current["browserCommandTimeout"].as_i64().unwrap_or(30))
+        },
+        "browser.command_timeout",
+        30,
+        5,
+        3600,
+    )?;
+    let browser_record_sessions = form_bool(form, "browserRecordSessions")
+        .unwrap_or_else(|| current["browserRecordSessions"].as_bool().unwrap_or(false));
+    let browser_engine = normalize_hermes_browser_engine(
+        if form.get("browserEngine").is_some() {
+            form_string(form, "browserEngine")
+        } else {
+            current["browserEngine"].as_str().map(ToString::to_string)
+        },
+        true,
+    )?;
+
+    let root = ensure_yaml_object(config)?;
+    let browser = yaml_child_object(root, "browser")?;
+    browser.insert(
+        yaml_key("inactivity_timeout"),
+        serde_yaml::Value::Number(browser_inactivity_timeout.into()),
+    );
+    browser.insert(
+        yaml_key("command_timeout"),
+        serde_yaml::Value::Number(browser_command_timeout.into()),
+    );
+    browser.insert(
+        yaml_key("record_sessions"),
+        serde_yaml::Value::Bool(browser_record_sessions),
+    );
+    browser.insert(
+        yaml_key("engine"),
+        serde_yaml::Value::String(browser_engine),
+    );
     Ok(())
 }
 
@@ -6158,6 +6257,30 @@ pub fn hermes_privacy_config_save(form: Value) -> Result<Value, String> {
         "configPath": config_path.to_string_lossy(),
         "backup": backup,
         "values": build_hermes_privacy_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_browser_config_read() -> Result<Value, String> {
+    let (config_path, exists, config) = read_hermes_channel_yaml_config()?;
+    ensure_yaml_object(&mut config.clone())?;
+    Ok(serde_json::json!({
+        "exists": exists,
+        "configPath": config_path.to_string_lossy(),
+        "values": build_hermes_browser_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_browser_config_save(form: Value) -> Result<Value, String> {
+    let (config_path, _exists, mut config) = read_hermes_channel_yaml_config()?;
+    merge_hermes_browser_config(&mut config, &form)?;
+    let backup = write_hermes_yaml_config(&config_path, &config)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "configPath": config_path.to_string_lossy(),
+        "backup": backup,
+        "values": build_hermes_browser_config_values(&config),
     }))
 }
 
@@ -11827,6 +11950,108 @@ streaming:
             config["privacy"]["custom_flag"].as_str(),
             Some("keep-privacy")
         );
+    }
+}
+
+#[cfg(test)]
+mod hermes_browser_config_tests {
+    use super::{build_hermes_browser_config_values, merge_hermes_browser_config};
+    use serde_json::json;
+
+    #[test]
+    fn browser_values_have_upstream_defaults() {
+        let config: serde_yaml::Value = serde_yaml::from_str("{}").unwrap();
+        let values = build_hermes_browser_config_values(&config);
+        assert_eq!(values["browserInactivityTimeout"], 120);
+        assert_eq!(values["browserCommandTimeout"], 30);
+        assert_eq!(values["browserRecordSessions"], false);
+        assert_eq!(values["browserEngine"], "auto");
+    }
+
+    #[test]
+    fn browser_values_read_yaml_fields() {
+        let config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+browser:
+  inactivity_timeout: 300
+  command_timeout: 45
+  record_sessions: true
+  engine: lightpanda
+"#,
+        )
+        .unwrap();
+        let values = build_hermes_browser_config_values(&config);
+        assert_eq!(values["browserInactivityTimeout"], 300);
+        assert_eq!(values["browserCommandTimeout"], 45);
+        assert_eq!(values["browserRecordSessions"], true);
+        assert_eq!(values["browserEngine"], "lightpanda");
+    }
+
+    #[test]
+    fn merge_browser_config_preserves_unknown_fields() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+model:
+  provider: anthropic
+browser:
+  inactivity_timeout: 120
+  command_timeout: 30
+  record_sessions: false
+  engine: auto
+  cdp_url: ws://127.0.0.1:9222/devtools/browser/demo
+  camofox:
+    managed_persistence: true
+  custom_flag: keep-browser
+streaming:
+  enabled: true
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_browser_config(
+            &mut config,
+            &json!({
+                "browserInactivityTimeout": "180",
+                "browserCommandTimeout": "60",
+                "browserRecordSessions": true,
+                "browserEngine": "chrome",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(config["model"]["provider"].as_str(), Some("anthropic"));
+        assert_eq!(config["streaming"]["enabled"].as_bool(), Some(true));
+        assert_eq!(config["browser"]["inactivity_timeout"].as_i64(), Some(180));
+        assert_eq!(config["browser"]["command_timeout"].as_i64(), Some(60));
+        assert_eq!(config["browser"]["record_sessions"].as_bool(), Some(true));
+        assert_eq!(config["browser"]["engine"].as_str(), Some("chrome"));
+        assert_eq!(
+            config["browser"]["cdp_url"].as_str(),
+            Some("ws://127.0.0.1:9222/devtools/browser/demo")
+        );
+        assert_eq!(
+            config["browser"]["camofox"]["managed_persistence"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            config["browser"]["custom_flag"].as_str(),
+            Some("keep-browser")
+        );
+    }
+
+    #[test]
+    fn merge_browser_config_rejects_invalid_values() {
+        let mut config = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let err = merge_hermes_browser_config(&mut config, &json!({ "browserEngine": "firefox" }))
+            .unwrap_err();
+        assert!(err.contains("browser.engine"));
+        let err =
+            merge_hermes_browser_config(&mut config, &json!({ "browserInactivityTimeout": 0 }))
+                .unwrap_err();
+        assert!(err.contains("browser.inactivity_timeout"));
+        let err = merge_hermes_browser_config(&mut config, &json!({ "browserCommandTimeout": 4 }))
+            .unwrap_err();
+        assert!(err.contains("browser.command_timeout"));
     }
 }
 
