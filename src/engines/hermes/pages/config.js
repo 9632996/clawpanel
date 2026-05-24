@@ -40,6 +40,7 @@ const MEMORY_DEFAULTS = {
   memoryCharLimit: 2200,
   userCharLimit: 1375,
   nudgeInterval: 10,
+  flushMinTurns: 6,
 }
 
 const STREAMING_DEFAULTS = {
@@ -342,6 +343,10 @@ export function render() {
             <label class="hm-field">
               <span class="hm-field-label">${t('engine.hermesMemoryConfigNudgeInterval')}</span>
               <input id="hm-memory-nudge-interval" class="hm-input" type="number" inputmode="numeric" min="0" max="1000" step="1" value="${esc(memoryValues.nudgeInterval)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesMemoryConfigFlushMinTurns')}</span>
+              <input id="hm-memory-flush-min-turns" class="hm-input" type="number" inputmode="numeric" min="0" max="1000" step="1" value="${esc(memoryValues.flushMinTurns)}" ${disabled ? 'disabled' : ''}>
             </label>
           </div>
           <div class="hm-channel-footnote">${t('engine.hermesMemoryConfigFootnote')}</div>
@@ -864,6 +869,7 @@ export function render() {
       memoryCharLimit: el.querySelector('#hm-memory-char-limit')?.value || '2200',
       userCharLimit: el.querySelector('#hm-memory-user-char-limit')?.value || '1375',
       nudgeInterval: el.querySelector('#hm-memory-nudge-interval')?.value || '10',
+      flushMinTurns: el.querySelector('#hm-memory-flush-min-turns')?.value || '6',
     }
     memorySaving = true
     memoryError = null

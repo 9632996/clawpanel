@@ -33,6 +33,7 @@ test('Hermes 配置页会暴露记忆结构化配置字段', () => {
     'hm-memory-char-limit',
     'hm-memory-user-char-limit',
     'hm-memory-nudge-interval',
+    'hm-memory-flush-min-turns',
   ]) {
     assert.match(source, new RegExp(`id="${id}"`), `缺少 ${id}`)
   }

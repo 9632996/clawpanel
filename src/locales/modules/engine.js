@@ -608,7 +608,8 @@ export default {
   hermesMemoryConfigMemoryCharLimit: _('记忆字符上限', 'Memory character limit', '記憶字元上限'),
   hermesMemoryConfigUserCharLimit: _('用户画像字符上限', 'User profile character limit', '使用者画像字元上限'),
   hermesMemoryConfigNudgeInterval: _('整理提醒间隔', 'Review nudge interval', '整理提醒間隔'),
-  hermesMemoryConfigFootnote: _('提醒间隔按用户消息轮数计算，设为 0 可关闭提醒。外部记忆 provider 等高级字段会保留在 raw YAML 中。', 'The nudge interval is counted in user turns. Set it to 0 to disable nudges. Advanced fields such as external memory provider are preserved in raw YAML.', '提醒間隔依使用者訊息輪數計算，設為 0 可關閉提醒。外部記憶 provider 等進階欄位會保留在 raw YAML 中。'),
+  hermesMemoryConfigFlushMinTurns: _('退出/重置前最少轮数', 'Minimum turns before flush', '退出/重置前最少輪數'),
+  hermesMemoryConfigFootnote: _('提醒间隔按用户消息轮数计算，设为 0 可关闭提醒。flush 最小轮数会影响退出、重置和压缩前是否先写入记忆。外部记忆 provider 等高级字段会保留在 raw YAML 中。', 'The nudge interval is counted in user turns. Set it to 0 to disable nudges. flush minimum turns controls whether memory is written before exit, reset, or compression. Advanced fields such as external memory provider are preserved in raw YAML.', '提醒間隔依使用者訊息輪數計算，設為 0 可關閉提醒。flush 最小輪數會影響退出、重置和壓縮前是否先寫入記憶。外部記憶 provider 等進階欄位會保留在 raw YAML 中。'),
   // Batch 1 §E: 会话导出
   sessionsExport: _('导出', 'Export', '匯出'),
   sessionsExportSuccess: _('已导出', 'Exported', '已匯出'),

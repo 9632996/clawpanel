@@ -3577,6 +3577,9 @@ fn build_hermes_memory_config_values(config: &serde_yaml::Value) -> Value {
     let nudge_interval = memory
         .map(|map| bounded_hermes_i64(yaml_i64_field(map, "nudge_interval"), 10, 0, 1000))
         .unwrap_or(10);
+    let flush_min_turns = memory
+        .map(|map| bounded_hermes_i64(yaml_i64_field(map, "flush_min_turns"), 6, 0, 1000))
+        .unwrap_or(6);
 
     serde_json::json!({
         "memoryEnabled": memory_enabled,
@@ -3584,6 +3587,7 @@ fn build_hermes_memory_config_values(config: &serde_yaml::Value) -> Value {
         "memoryCharLimit": memory_char_limit,
         "userCharLimit": user_char_limit,
         "nudgeInterval": nudge_interval,
+        "flushMinTurns": flush_min_turns,
     })
 }
 
@@ -3626,6 +3630,17 @@ fn merge_hermes_memory_config(config: &mut serde_yaml::Value, form: &Value) -> R
         0,
         1000,
     )?;
+    let flush_min_turns = validate_hermes_i64(
+        if form.get("flushMinTurns").is_some() {
+            form_i64(form, "flushMinTurns")
+        } else {
+            Some(current["flushMinTurns"].as_i64().unwrap_or(6))
+        },
+        "memory.flush_min_turns",
+        6,
+        0,
+        1000,
+    )?;
 
     let root = ensure_yaml_object(config)?;
     let memory = yaml_child_object(root, "memory")?;
@@ -3648,6 +3663,10 @@ fn merge_hermes_memory_config(config: &mut serde_yaml::Value, form: &Value) -> R
     memory.insert(
         yaml_key("nudge_interval"),
         serde_yaml::Value::Number(nudge_interval.into()),
+    );
+    memory.insert(
+        yaml_key("flush_min_turns"),
+        serde_yaml::Value::Number(flush_min_turns.into()),
     );
     Ok(())
 }
@@ -10846,6 +10865,7 @@ mod hermes_memory_config_tests {
         assert_eq!(values["memoryCharLimit"], 2200);
         assert_eq!(values["userCharLimit"], 1375);
         assert_eq!(values["nudgeInterval"], 10);
+        assert_eq!(values["flushMinTurns"], 6);
     }
 
     #[test]
@@ -10858,6 +10878,7 @@ memory:
   memory_enabled: true
   provider: honcho
   custom_flag: keep-me
+  flush_min_turns: 9
 streaming:
   enabled: true
 "#,
@@ -10872,6 +10893,7 @@ streaming:
                 "memoryCharLimit": "2600",
                 "userCharLimit": "1500",
                 "nudgeInterval": "0",
+                "flushMinTurns": "7",
             }),
         )
         .unwrap();
@@ -10886,6 +10908,7 @@ streaming:
         assert_eq!(config["memory"]["memory_char_limit"].as_i64(), Some(2600));
         assert_eq!(config["memory"]["user_char_limit"].as_i64(), Some(1500));
         assert_eq!(config["memory"]["nudge_interval"].as_i64(), Some(0));
+        assert_eq!(config["memory"]["flush_min_turns"].as_i64(), Some(7));
         assert_eq!(config["memory"]["provider"].as_str(), Some("honcho"));
         assert_eq!(config["memory"]["custom_flag"].as_str(), Some("keep-me"));
     }
@@ -10905,6 +10928,12 @@ streaming:
         let err =
             merge_hermes_memory_config(&mut config, &json!({ "nudgeInterval": 1001 })).unwrap_err();
         assert!(err.contains("memory.nudge_interval"));
+        let err =
+            merge_hermes_memory_config(&mut config, &json!({ "flushMinTurns": -1 })).unwrap_err();
+        assert!(err.contains("memory.flush_min_turns"));
+        let err =
+            merge_hermes_memory_config(&mut config, &json!({ "flushMinTurns": 1001 })).unwrap_err();
+        assert!(err.contains("memory.flush_min_turns"));
     }
 }
 

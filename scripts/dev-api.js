@@ -3554,6 +3554,7 @@ export function buildHermesMemoryConfigValues(config = {}) {
     memoryCharLimit: parseHermesInteger(memory.memory_char_limit, 'memory.memory_char_limit', 2200, 100, 200000, false),
     userCharLimit: parseHermesInteger(memory.user_char_limit, 'memory.user_char_limit', 1375, 100, 200000, false),
     nudgeInterval: parseHermesInteger(memory.nudge_interval, 'memory.nudge_interval', 10, 0, 1000, false),
+    flushMinTurns: parseHermesInteger(memory.flush_min_turns, 'memory.flush_min_turns', 6, 0, 1000, false),
   }
 }
 
@@ -3568,6 +3569,7 @@ export function mergeHermesMemoryConfig(config = {}, form = {}) {
   memory.memory_char_limit = parseHermesInteger(Object.hasOwn(form, 'memoryCharLimit') ? form.memoryCharLimit : currentValues.memoryCharLimit, 'memory.memory_char_limit', 2200, 100, 200000, true)
   memory.user_char_limit = parseHermesInteger(Object.hasOwn(form, 'userCharLimit') ? form.userCharLimit : currentValues.userCharLimit, 'memory.user_char_limit', 1375, 100, 200000, true)
   memory.nudge_interval = parseHermesInteger(Object.hasOwn(form, 'nudgeInterval') ? form.nudgeInterval : currentValues.nudgeInterval, 'memory.nudge_interval', 10, 0, 1000, true)
+  memory.flush_min_turns = parseHermesInteger(Object.hasOwn(form, 'flushMinTurns') ? form.flushMinTurns : currentValues.flushMinTurns, 'memory.flush_min_turns', 6, 0, 1000, true)
   next.memory = memory
   return next
 }
