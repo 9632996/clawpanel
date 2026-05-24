@@ -3327,6 +3327,7 @@ const HERMES_TERMINAL_BACKENDS = new Set(['local', 'ssh', 'docker', 'singularity
 const HERMES_BROWSER_ENGINES = new Set(['auto', 'lightpanda', 'chrome'])
 const HERMES_APPROVAL_MODES = new Set(['manual', 'smart', 'off'])
 const HERMES_APPROVAL_CRON_MODES = new Set(['deny', 'approve'])
+const HERMES_LOGGING_LEVELS = new Set(['DEBUG', 'INFO', 'WARNING'])
 const HERMES_AGENT_IMAGE_INPUT_MODES = new Set(['auto', 'native', 'text'])
 const HERMES_DISPLAY_TOOL_PROGRESS_VALUES = new Set(['off', 'new', 'all', 'verbose'])
 const HERMES_DISPLAY_STREAMING_VALUES = new Set(['inherit', 'true', 'false'])
@@ -3424,6 +3425,13 @@ function normalizeHermesApprovalCronMode(value, strict = false) {
   if (HERMES_APPROVAL_CRON_MODES.has(mode)) return mode
   if (strict) throw new Error('approvals.cron_mode 必须是 deny 或 approve')
   return 'deny'
+}
+
+function normalizeHermesLoggingLevel(value, strict = false) {
+  const level = String(value ?? '').trim().toUpperCase() || 'INFO'
+  if (HERMES_LOGGING_LEVELS.has(level)) return level
+  if (strict) throw new Error('logging.level 必须是 DEBUG、INFO 或 WARNING')
+  return 'INFO'
 }
 
 function normalizeHermesImageInputMode(value, strict = false) {
@@ -4088,6 +4096,43 @@ export function mergeHermesCronConfig(config = {}, form = {}) {
   const maxParallelJobs = parseHermesInteger(Object.hasOwn(form, 'cronMaxParallelJobs') ? form.cronMaxParallelJobs : currentValues.cronMaxParallelJobs, 'cron.max_parallel_jobs', 0, 0, 10000, true)
   cron.max_parallel_jobs = maxParallelJobs === 0 ? null : maxParallelJobs
   next.cron = cron
+  return next
+}
+
+export function buildHermesLoggingConfigValues(config = {}) {
+  const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
+  const logging = root.logging && typeof root.logging === 'object' && !Array.isArray(root.logging)
+    ? root.logging
+    : {}
+  const memoryMonitor = logging.memory_monitor && typeof logging.memory_monitor === 'object' && !Array.isArray(logging.memory_monitor)
+    ? logging.memory_monitor
+    : {}
+  return {
+    loggingLevel: normalizeHermesLoggingLevel(logging.level, false),
+    loggingMaxSizeMb: parseHermesInteger(logging.max_size_mb, 'logging.max_size_mb', 5, 1, 102400, false),
+    loggingBackupCount: parseHermesInteger(logging.backup_count, 'logging.backup_count', 3, 0, 1000, false),
+    loggingMemoryMonitorEnabled: readHermesBool(memoryMonitor.enabled, true),
+    loggingMemoryMonitorIntervalSeconds: parseHermesInteger(memoryMonitor.interval_seconds, 'logging.memory_monitor.interval_seconds', 300, 1, 86400, false),
+  }
+}
+
+export function mergeHermesLoggingConfig(config = {}, form = {}) {
+  const next = mergeConfigsPreservingFields({}, config && typeof config === 'object' && !Array.isArray(config) ? config : {})
+  const currentValues = buildHermesLoggingConfigValues(next)
+  const logging = next.logging && typeof next.logging === 'object' && !Array.isArray(next.logging)
+    ? mergeConfigsPreservingFields(next.logging, {})
+    : {}
+  const memoryMonitor = logging.memory_monitor && typeof logging.memory_monitor === 'object' && !Array.isArray(logging.memory_monitor)
+    ? mergeConfigsPreservingFields(logging.memory_monitor, {})
+    : {}
+
+  logging.level = normalizeHermesLoggingLevel(Object.hasOwn(form, 'loggingLevel') ? form.loggingLevel : currentValues.loggingLevel, true)
+  logging.max_size_mb = parseHermesInteger(Object.hasOwn(form, 'loggingMaxSizeMb') ? form.loggingMaxSizeMb : currentValues.loggingMaxSizeMb, 'logging.max_size_mb', 5, 1, 102400, true)
+  logging.backup_count = parseHermesInteger(Object.hasOwn(form, 'loggingBackupCount') ? form.loggingBackupCount : currentValues.loggingBackupCount, 'logging.backup_count', 3, 0, 1000, true)
+  memoryMonitor.enabled = formHermesBool(form, 'loggingMemoryMonitorEnabled', currentValues.loggingMemoryMonitorEnabled)
+  memoryMonitor.interval_seconds = parseHermesInteger(Object.hasOwn(form, 'loggingMemoryMonitorIntervalSeconds') ? form.loggingMemoryMonitorIntervalSeconds : currentValues.loggingMemoryMonitorIntervalSeconds, 'logging.memory_monitor.interval_seconds', 300, 1, 86400, true)
+  logging.memory_monitor = memoryMonitor
+  next.logging = logging
   return next
 }
 
@@ -10852,6 +10897,27 @@ const handlers = {
       configPath,
       backup,
       values: buildHermesCronConfigValues(next),
+    }
+  },
+
+  hermes_logging_config_read() {
+    const { configPath, exists, config } = readHermesConfigYamlObject()
+    return {
+      exists,
+      configPath,
+      values: buildHermesLoggingConfigValues(config),
+    }
+  },
+
+  hermes_logging_config_save({ form } = {}) {
+    const { configPath, config } = readHermesConfigYamlObject()
+    const next = mergeHermesLoggingConfig(config, form || {})
+    const backup = writeHermesConfigYamlObject(configPath, next)
+    return {
+      ok: true,
+      configPath,
+      backup,
+      values: buildHermesLoggingConfigValues(next),
     }
   },
 

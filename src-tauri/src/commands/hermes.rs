@@ -4668,6 +4668,23 @@ fn normalize_hermes_approval_cron_mode(
     }
 }
 
+fn normalize_hermes_logging_level(value: Option<String>, strict: bool) -> Result<String, String> {
+    let level = value.unwrap_or_default().trim().to_ascii_uppercase();
+    let level = if level.is_empty() {
+        "INFO".to_string()
+    } else {
+        level
+    };
+    if matches!(level.as_str(), "DEBUG" | "INFO" | "WARNING") {
+        return Ok(level);
+    }
+    if strict {
+        Err("logging.level 必须是 DEBUG、INFO 或 WARNING".to_string())
+    } else {
+        Ok("INFO".to_string())
+    }
+}
+
 fn hermes_streaming_config_source(config: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
     let root = config.as_mapping()?;
     if let Some(streaming) = yaml_get_mapping(root, "streaming") {
@@ -5133,6 +5150,114 @@ fn merge_hermes_cron_config(config: &mut serde_yaml::Value, form: &Value) -> Res
         } else {
             serde_yaml::Value::Number(cron_max_parallel_jobs.into())
         },
+    );
+    Ok(())
+}
+
+fn build_hermes_logging_config_values(config: &serde_yaml::Value) -> Value {
+    let root = config.as_mapping();
+    let logging = root.and_then(|map| yaml_get_mapping(map, "logging"));
+    let memory_monitor = logging.and_then(|map| yaml_get_mapping(map, "memory_monitor"));
+    let logging_level = normalize_hermes_logging_level(
+        logging.and_then(|map| yaml_string_field(map, "level")),
+        false,
+    )
+    .unwrap_or_else(|_| "INFO".to_string());
+    let logging_max_size_mb = logging
+        .map(|map| bounded_hermes_i64(yaml_i64_field(map, "max_size_mb"), 5, 1, 102400))
+        .unwrap_or(5);
+    let logging_backup_count = logging
+        .map(|map| bounded_hermes_i64(yaml_i64_field(map, "backup_count"), 3, 0, 1000))
+        .unwrap_or(3);
+    let logging_memory_monitor_enabled = memory_monitor
+        .and_then(|map| yaml_bool_field(map, "enabled"))
+        .unwrap_or(true);
+    let logging_memory_monitor_interval_seconds = memory_monitor
+        .map(|map| bounded_hermes_i64(yaml_i64_field(map, "interval_seconds"), 300, 1, 86400))
+        .unwrap_or(300);
+
+    serde_json::json!({
+        "loggingLevel": logging_level,
+        "loggingMaxSizeMb": logging_max_size_mb,
+        "loggingBackupCount": logging_backup_count,
+        "loggingMemoryMonitorEnabled": logging_memory_monitor_enabled,
+        "loggingMemoryMonitorIntervalSeconds": logging_memory_monitor_interval_seconds,
+    })
+}
+
+fn merge_hermes_logging_config(config: &mut serde_yaml::Value, form: &Value) -> Result<(), String> {
+    let current = build_hermes_logging_config_values(config);
+    let logging_level = normalize_hermes_logging_level(
+        if form.get("loggingLevel").is_some() {
+            form_string(form, "loggingLevel")
+        } else {
+            current["loggingLevel"].as_str().map(ToString::to_string)
+        },
+        true,
+    )?;
+    let logging_max_size_mb = validate_hermes_i64(
+        if form.get("loggingMaxSizeMb").is_some() {
+            form_i64(form, "loggingMaxSizeMb")
+        } else {
+            Some(current["loggingMaxSizeMb"].as_i64().unwrap_or(5))
+        },
+        "logging.max_size_mb",
+        5,
+        1,
+        102400,
+    )?;
+    let logging_backup_count = validate_hermes_i64(
+        if form.get("loggingBackupCount").is_some() {
+            form_i64(form, "loggingBackupCount")
+        } else {
+            Some(current["loggingBackupCount"].as_i64().unwrap_or(3))
+        },
+        "logging.backup_count",
+        3,
+        0,
+        1000,
+    )?;
+    let logging_memory_monitor_enabled = form_bool(form, "loggingMemoryMonitorEnabled")
+        .unwrap_or_else(|| {
+            current["loggingMemoryMonitorEnabled"]
+                .as_bool()
+                .unwrap_or(true)
+        });
+    let logging_memory_monitor_interval_seconds = validate_hermes_i64(
+        if form.get("loggingMemoryMonitorIntervalSeconds").is_some() {
+            form_i64(form, "loggingMemoryMonitorIntervalSeconds")
+        } else {
+            Some(
+                current["loggingMemoryMonitorIntervalSeconds"]
+                    .as_i64()
+                    .unwrap_or(300),
+            )
+        },
+        "logging.memory_monitor.interval_seconds",
+        300,
+        1,
+        86400,
+    )?;
+
+    let root = ensure_yaml_object(config)?;
+    let logging = yaml_child_object(root, "logging")?;
+    logging.insert(yaml_key("level"), serde_yaml::Value::String(logging_level));
+    logging.insert(
+        yaml_key("max_size_mb"),
+        serde_yaml::Value::Number(logging_max_size_mb.into()),
+    );
+    logging.insert(
+        yaml_key("backup_count"),
+        serde_yaml::Value::Number(logging_backup_count.into()),
+    );
+    let memory_monitor = yaml_child_object(logging, "memory_monitor")?;
+    memory_monitor.insert(
+        yaml_key("enabled"),
+        serde_yaml::Value::Bool(logging_memory_monitor_enabled),
+    );
+    memory_monitor.insert(
+        yaml_key("interval_seconds"),
+        serde_yaml::Value::Number(logging_memory_monitor_interval_seconds.into()),
     );
     Ok(())
 }
@@ -6883,6 +7008,30 @@ pub fn hermes_cron_config_save(form: Value) -> Result<Value, String> {
         "configPath": config_path.to_string_lossy(),
         "backup": backup,
         "values": build_hermes_cron_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_logging_config_read() -> Result<Value, String> {
+    let (config_path, exists, config) = read_hermes_channel_yaml_config()?;
+    ensure_yaml_object(&mut config.clone())?;
+    Ok(serde_json::json!({
+        "exists": exists,
+        "configPath": config_path.to_string_lossy(),
+        "values": build_hermes_logging_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_logging_config_save(form: Value) -> Result<Value, String> {
+    let (config_path, _exists, mut config) = read_hermes_channel_yaml_config()?;
+    merge_hermes_logging_config(&mut config, &form)?;
+    let backup = write_hermes_yaml_config(&config_path, &config)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "configPath": config_path.to_string_lossy(),
+        "backup": backup,
+        "values": build_hermes_logging_config_values(&config),
     }))
 }
 
@@ -12941,6 +13090,117 @@ cron:
         let err = merge_hermes_cron_config(&mut config, &json!({ "cronMaxParallelJobs": 10001 }))
             .unwrap_err();
         assert!(err.contains("cron.max_parallel_jobs"));
+    }
+}
+
+#[cfg(test)]
+mod hermes_logging_config_tests {
+    use super::{build_hermes_logging_config_values, merge_hermes_logging_config};
+    use serde_json::json;
+
+    #[test]
+    fn logging_values_have_upstream_defaults() {
+        let config: serde_yaml::Value = serde_yaml::from_str("{}").unwrap();
+        let values = build_hermes_logging_config_values(&config);
+        assert_eq!(values["loggingLevel"], "INFO");
+        assert_eq!(values["loggingMaxSizeMb"], 5);
+        assert_eq!(values["loggingBackupCount"], 3);
+        assert_eq!(values["loggingMemoryMonitorEnabled"], true);
+        assert_eq!(values["loggingMemoryMonitorIntervalSeconds"], 300);
+    }
+
+    #[test]
+    fn logging_values_read_yaml_fields() {
+        let config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+logging:
+  level: DEBUG
+  max_size_mb: 12
+  backup_count: 7
+  memory_monitor:
+    enabled: false
+    interval_seconds: 120
+"#,
+        )
+        .unwrap();
+        let values = build_hermes_logging_config_values(&config);
+        assert_eq!(values["loggingLevel"], "DEBUG");
+        assert_eq!(values["loggingMaxSizeMb"], 12);
+        assert_eq!(values["loggingBackupCount"], 7);
+        assert_eq!(values["loggingMemoryMonitorEnabled"], false);
+        assert_eq!(values["loggingMemoryMonitorIntervalSeconds"], 120);
+    }
+
+    #[test]
+    fn merge_logging_config_preserves_unknown_fields() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+logging:
+  level: INFO
+  custom_flag: keep-logging
+  memory_monitor:
+    custom_flag: keep-memory-monitor
+cron:
+  wrap_response: true
+streaming:
+  enabled: true
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_logging_config(
+            &mut config,
+            &json!({
+                "loggingLevel": "WARNING",
+                "loggingMaxSizeMb": "20",
+                "loggingBackupCount": "5",
+                "loggingMemoryMonitorEnabled": true,
+                "loggingMemoryMonitorIntervalSeconds": "180",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(config["cron"]["wrap_response"].as_bool(), Some(true));
+        assert_eq!(config["streaming"]["enabled"].as_bool(), Some(true));
+        assert_eq!(config["logging"]["level"].as_str(), Some("WARNING"));
+        assert_eq!(config["logging"]["max_size_mb"].as_i64(), Some(20));
+        assert_eq!(config["logging"]["backup_count"].as_i64(), Some(5));
+        assert_eq!(
+            config["logging"]["memory_monitor"]["enabled"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            config["logging"]["memory_monitor"]["interval_seconds"].as_i64(),
+            Some(180)
+        );
+        assert_eq!(
+            config["logging"]["custom_flag"].as_str(),
+            Some("keep-logging")
+        );
+        assert_eq!(
+            config["logging"]["memory_monitor"]["custom_flag"].as_str(),
+            Some("keep-memory-monitor")
+        );
+    }
+
+    #[test]
+    fn merge_logging_config_rejects_invalid_values() {
+        let mut config = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let err = merge_hermes_logging_config(&mut config, &json!({ "loggingLevel": "TRACE" }))
+            .unwrap_err();
+        assert!(err.contains("logging.level"));
+        let err = merge_hermes_logging_config(&mut config, &json!({ "loggingMaxSizeMb": 0 }))
+            .unwrap_err();
+        assert!(err.contains("logging.max_size_mb"));
+        let err = merge_hermes_logging_config(&mut config, &json!({ "loggingBackupCount": -1 }))
+            .unwrap_err();
+        assert!(err.contains("logging.backup_count"));
+        let err = merge_hermes_logging_config(
+            &mut config,
+            &json!({ "loggingMemoryMonitorIntervalSeconds": 0 }),
+        )
+        .unwrap_err();
+        assert!(err.contains("logging.memory_monitor.interval_seconds"));
     }
 }
 
