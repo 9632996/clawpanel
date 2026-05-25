@@ -3325,6 +3325,10 @@ const HERMES_STREAMING_TRANSPORTS = new Set(['auto', 'draft', 'edit', 'off'])
 const HERMES_CODE_EXECUTION_MODES = new Set(['project', 'strict'])
 const HERMES_TERMINAL_BACKENDS = new Set(['local', 'ssh', 'docker', 'singularity', 'modal', 'daytona', 'vercel_sandbox'])
 const HERMES_BROWSER_ENGINES = new Set(['auto', 'lightpanda', 'chrome'])
+const HERMES_STT_PROVIDERS = new Set(['auto', 'local', 'groq', 'openai', 'mistral'])
+const HERMES_STT_LOCAL_MODELS = new Set(['tiny', 'base', 'small', 'medium', 'large-v3', 'turbo'])
+const HERMES_STT_OPENAI_MODELS = new Set(['whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe'])
+const HERMES_STT_MISTRAL_MODELS = new Set(['voxtral-mini-latest', 'voxtral-mini-2602'])
 const HERMES_APPROVAL_MODES = new Set(['manual', 'smart', 'off'])
 const HERMES_APPROVAL_CRON_MODES = new Set(['deny', 'approve'])
 const HERMES_LOGGING_LEVELS = new Set(['DEBUG', 'INFO', 'WARNING'])
@@ -3415,6 +3419,42 @@ function normalizeHermesBrowserEngine(value, strict = false) {
   if (HERMES_BROWSER_ENGINES.has(engine)) return engine
   if (strict) throw new Error('browser.engine 必须是 auto、lightpanda 或 chrome')
   return 'auto'
+}
+
+function normalizeHermesSttProvider(value, strict = false) {
+  const provider = String(value ?? '').trim().toLowerCase() || 'auto'
+  if (HERMES_STT_PROVIDERS.has(provider)) return provider
+  if (strict) throw new Error('stt.provider 必须是 auto、local、groq、openai 或 mistral')
+  return 'auto'
+}
+
+function normalizeHermesSttLocalModel(value, strict = false) {
+  const model = String(value ?? '').trim().toLowerCase() || 'base'
+  if (HERMES_STT_LOCAL_MODELS.has(model)) return model
+  if (strict) throw new Error('stt.local.model 必须是 tiny、base、small、medium、large-v3 或 turbo')
+  return 'base'
+}
+
+function normalizeHermesSttOpenaiModel(value, strict = false) {
+  const model = String(value ?? '').trim() || 'whisper-1'
+  if (HERMES_STT_OPENAI_MODELS.has(model)) return model
+  if (strict) throw new Error('stt.openai.model 必须是 whisper-1、gpt-4o-mini-transcribe 或 gpt-4o-transcribe')
+  return 'whisper-1'
+}
+
+function normalizeHermesSttMistralModel(value, strict = false) {
+  const model = String(value ?? '').trim() || 'voxtral-mini-latest'
+  if (HERMES_STT_MISTRAL_MODELS.has(model)) return model
+  if (strict) throw new Error('stt.mistral.model 必须是 voxtral-mini-latest 或 voxtral-mini-2602')
+  return 'voxtral-mini-latest'
+}
+
+function normalizeHermesSttLanguage(value, strict = false) {
+  const language = String(value ?? '').trim()
+  if (!language) return ''
+  if (/^[a-z]{2,3}(-[A-Za-z0-9]+)?$/.test(language)) return language
+  if (strict) throw new Error('stt.local.language 必须为空或合法语言标签，例如 zh、en、pt-BR')
+  return ''
 }
 
 function normalizeHermesApprovalMode(value, strict = false) {
@@ -4278,6 +4318,58 @@ export function mergeHermesBrowserConfig(config = {}, form = {}) {
   browser.record_sessions = formHermesBool(form, 'browserRecordSessions', currentValues.browserRecordSessions)
   browser.engine = normalizeHermesBrowserEngine(Object.hasOwn(form, 'browserEngine') ? form.browserEngine : currentValues.browserEngine, true)
   next.browser = browser
+  return next
+}
+
+export function buildHermesSttConfigValues(config = {}) {
+  const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
+  const stt = root.stt && typeof root.stt === 'object' && !Array.isArray(root.stt)
+    ? root.stt
+    : {}
+  const local = stt.local && typeof stt.local === 'object' && !Array.isArray(stt.local)
+    ? stt.local
+    : {}
+  const openai = stt.openai && typeof stt.openai === 'object' && !Array.isArray(stt.openai)
+    ? stt.openai
+    : {}
+  const mistral = stt.mistral && typeof stt.mistral === 'object' && !Array.isArray(stt.mistral)
+    ? stt.mistral
+    : {}
+  return {
+    sttEnabled: readHermesBool(stt.enabled, true),
+    sttProvider: normalizeHermesSttProvider(stt.provider, false),
+    sttLocalModel: normalizeHermesSttLocalModel(local.model, false),
+    sttLocalLanguage: normalizeHermesSttLanguage(local.language, false),
+    sttOpenaiModel: normalizeHermesSttOpenaiModel(openai.model, false),
+    sttMistralModel: normalizeHermesSttMistralModel(mistral.model, false),
+  }
+}
+
+export function mergeHermesSttConfig(config = {}, form = {}) {
+  const next = mergeConfigsPreservingFields({}, config && typeof config === 'object' && !Array.isArray(config) ? config : {})
+  const currentValues = buildHermesSttConfigValues(next)
+  const stt = next.stt && typeof next.stt === 'object' && !Array.isArray(next.stt)
+    ? mergeConfigsPreservingFields(next.stt, {})
+    : {}
+  const local = stt.local && typeof stt.local === 'object' && !Array.isArray(stt.local)
+    ? mergeConfigsPreservingFields(stt.local, {})
+    : {}
+  const openai = stt.openai && typeof stt.openai === 'object' && !Array.isArray(stt.openai)
+    ? mergeConfigsPreservingFields(stt.openai, {})
+    : {}
+  const mistral = stt.mistral && typeof stt.mistral === 'object' && !Array.isArray(stt.mistral)
+    ? mergeConfigsPreservingFields(stt.mistral, {})
+    : {}
+  stt.enabled = formHermesBool(form, 'sttEnabled', currentValues.sttEnabled)
+  stt.provider = normalizeHermesSttProvider(Object.hasOwn(form, 'sttProvider') ? form.sttProvider : currentValues.sttProvider, true)
+  local.model = normalizeHermesSttLocalModel(Object.hasOwn(form, 'sttLocalModel') ? form.sttLocalModel : currentValues.sttLocalModel, true)
+  local.language = normalizeHermesSttLanguage(Object.hasOwn(form, 'sttLocalLanguage') ? form.sttLocalLanguage : currentValues.sttLocalLanguage, true)
+  openai.model = normalizeHermesSttOpenaiModel(Object.hasOwn(form, 'sttOpenaiModel') ? form.sttOpenaiModel : currentValues.sttOpenaiModel, true)
+  mistral.model = normalizeHermesSttMistralModel(Object.hasOwn(form, 'sttMistralModel') ? form.sttMistralModel : currentValues.sttMistralModel, true)
+  stt.local = local
+  stt.openai = openai
+  stt.mistral = mistral
+  next.stt = stt
   return next
 }
 
@@ -11069,6 +11161,27 @@ const handlers = {
       configPath,
       backup,
       values: buildHermesBrowserConfigValues(next),
+    }
+  },
+
+  hermes_stt_config_read() {
+    const { configPath, exists, config } = readHermesConfigYamlObject()
+    return {
+      exists,
+      configPath,
+      values: buildHermesSttConfigValues(config),
+    }
+  },
+
+  hermes_stt_config_save({ form } = {}) {
+    const { configPath, config } = readHermesConfigYamlObject()
+    const next = mergeHermesSttConfig(config, form || {})
+    const backup = writeHermesConfigYamlObject(configPath, next)
+    return {
+      ok: true,
+      configPath,
+      backup,
+      values: buildHermesSttConfigValues(next),
     }
   },
 

@@ -4825,6 +4825,115 @@ fn normalize_hermes_browser_engine(value: Option<String>, strict: bool) -> Resul
     }
 }
 
+fn normalize_hermes_stt_provider(value: Option<String>, strict: bool) -> Result<String, String> {
+    let provider = value.unwrap_or_default().trim().to_ascii_lowercase();
+    let provider = if provider.is_empty() {
+        "auto".to_string()
+    } else {
+        provider
+    };
+    if matches!(
+        provider.as_str(),
+        "auto" | "local" | "groq" | "openai" | "mistral"
+    ) {
+        return Ok(provider);
+    }
+    if strict {
+        Err("stt.provider 必须是 auto、local、groq、openai 或 mistral".to_string())
+    } else {
+        Ok("auto".to_string())
+    }
+}
+
+fn normalize_hermes_stt_local_model(value: Option<String>, strict: bool) -> Result<String, String> {
+    let model = value.unwrap_or_default().trim().to_ascii_lowercase();
+    let model = if model.is_empty() {
+        "base".to_string()
+    } else {
+        model
+    };
+    if matches!(
+        model.as_str(),
+        "tiny" | "base" | "small" | "medium" | "large-v3" | "turbo"
+    ) {
+        return Ok(model);
+    }
+    if strict {
+        Err("stt.local.model 必须是 tiny、base、small、medium、large-v3 或 turbo".to_string())
+    } else {
+        Ok("base".to_string())
+    }
+}
+
+fn normalize_hermes_stt_openai_model(
+    value: Option<String>,
+    strict: bool,
+) -> Result<String, String> {
+    let model = value.unwrap_or_default().trim().to_string();
+    let model = if model.is_empty() {
+        "whisper-1".to_string()
+    } else {
+        model
+    };
+    if matches!(
+        model.as_str(),
+        "whisper-1" | "gpt-4o-mini-transcribe" | "gpt-4o-transcribe"
+    ) {
+        return Ok(model);
+    }
+    if strict {
+        Err(
+            "stt.openai.model 必须是 whisper-1、gpt-4o-mini-transcribe 或 gpt-4o-transcribe"
+                .to_string(),
+        )
+    } else {
+        Ok("whisper-1".to_string())
+    }
+}
+
+fn normalize_hermes_stt_mistral_model(
+    value: Option<String>,
+    strict: bool,
+) -> Result<String, String> {
+    let model = value.unwrap_or_default().trim().to_string();
+    let model = if model.is_empty() {
+        "voxtral-mini-latest".to_string()
+    } else {
+        model
+    };
+    if matches!(model.as_str(), "voxtral-mini-latest" | "voxtral-mini-2602") {
+        return Ok(model);
+    }
+    if strict {
+        Err("stt.mistral.model 必须是 voxtral-mini-latest 或 voxtral-mini-2602".to_string())
+    } else {
+        Ok("voxtral-mini-latest".to_string())
+    }
+}
+
+fn normalize_hermes_stt_language(value: Option<String>, strict: bool) -> Result<String, String> {
+    let language = value.unwrap_or_default().trim().to_string();
+    if language.is_empty() {
+        return Ok(String::new());
+    }
+    let mut parts = language.split('-');
+    let Some(first) = parts.next() else {
+        return Ok(String::new());
+    };
+    let first_valid =
+        (2..=3).contains(&first.len()) && first.chars().all(|ch| ch.is_ascii_lowercase());
+    let rest_valid =
+        parts.all(|part| !part.is_empty() && part.chars().all(|ch| ch.is_ascii_alphanumeric()));
+    if first_valid && rest_valid {
+        return Ok(language);
+    }
+    if strict {
+        Err("stt.local.language 必须为空或合法语言标签，例如 zh、en、pt-BR".to_string())
+    } else {
+        Ok(String::new())
+    }
+}
+
 fn normalize_hermes_approval_mode(value: Option<String>, strict: bool) -> Result<String, String> {
     let mode = value.unwrap_or_default().trim().to_ascii_lowercase();
     let mode = if mode.is_empty() {
@@ -5658,6 +5767,130 @@ fn merge_hermes_browser_config(config: &mut serde_yaml::Value, form: &Value) -> 
     browser.insert(
         yaml_key("engine"),
         serde_yaml::Value::String(browser_engine),
+    );
+    Ok(())
+}
+
+fn build_hermes_stt_config_values(config: &serde_yaml::Value) -> Value {
+    let root = config.as_mapping();
+    let stt = root.and_then(|map| yaml_get_mapping(map, "stt"));
+    let local = stt.and_then(|map| yaml_get_mapping(map, "local"));
+    let openai = stt.and_then(|map| yaml_get_mapping(map, "openai"));
+    let mistral = stt.and_then(|map| yaml_get_mapping(map, "mistral"));
+    let stt_enabled = stt
+        .and_then(|map| yaml_bool_field(map, "enabled"))
+        .unwrap_or(true);
+    let stt_provider = normalize_hermes_stt_provider(
+        stt.and_then(|map| yaml_string_field(map, "provider")),
+        false,
+    )
+    .unwrap_or_else(|_| "auto".to_string());
+    let stt_local_model = normalize_hermes_stt_local_model(
+        local.and_then(|map| yaml_string_field(map, "model")),
+        false,
+    )
+    .unwrap_or_else(|_| "base".to_string());
+    let stt_local_language = normalize_hermes_stt_language(
+        local.and_then(|map| yaml_string_field(map, "language")),
+        false,
+    )
+    .unwrap_or_else(|_| String::new());
+    let stt_openai_model = normalize_hermes_stt_openai_model(
+        openai.and_then(|map| yaml_string_field(map, "model")),
+        false,
+    )
+    .unwrap_or_else(|_| "whisper-1".to_string());
+    let stt_mistral_model = normalize_hermes_stt_mistral_model(
+        mistral.and_then(|map| yaml_string_field(map, "model")),
+        false,
+    )
+    .unwrap_or_else(|_| "voxtral-mini-latest".to_string());
+
+    serde_json::json!({
+        "sttEnabled": stt_enabled,
+        "sttProvider": stt_provider,
+        "sttLocalModel": stt_local_model,
+        "sttLocalLanguage": stt_local_language,
+        "sttOpenaiModel": stt_openai_model,
+        "sttMistralModel": stt_mistral_model,
+    })
+}
+
+fn merge_hermes_stt_config(config: &mut serde_yaml::Value, form: &Value) -> Result<(), String> {
+    let current = build_hermes_stt_config_values(config);
+    let stt_enabled = form_bool(form, "sttEnabled")
+        .unwrap_or_else(|| current["sttEnabled"].as_bool().unwrap_or(true));
+    let stt_provider = normalize_hermes_stt_provider(
+        if form.get("sttProvider").is_some() {
+            form_string(form, "sttProvider")
+        } else {
+            current["sttProvider"].as_str().map(ToString::to_string)
+        },
+        true,
+    )?;
+    let stt_local_model = normalize_hermes_stt_local_model(
+        if form.get("sttLocalModel").is_some() {
+            form_string(form, "sttLocalModel")
+        } else {
+            current["sttLocalModel"].as_str().map(ToString::to_string)
+        },
+        true,
+    )?;
+    let stt_local_language = normalize_hermes_stt_language(
+        if form.get("sttLocalLanguage").is_some() {
+            form_string(form, "sttLocalLanguage")
+        } else {
+            current["sttLocalLanguage"]
+                .as_str()
+                .map(ToString::to_string)
+        },
+        true,
+    )?;
+    let stt_openai_model = normalize_hermes_stt_openai_model(
+        if form.get("sttOpenaiModel").is_some() {
+            form_string(form, "sttOpenaiModel")
+        } else {
+            current["sttOpenaiModel"].as_str().map(ToString::to_string)
+        },
+        true,
+    )?;
+    let stt_mistral_model = normalize_hermes_stt_mistral_model(
+        if form.get("sttMistralModel").is_some() {
+            form_string(form, "sttMistralModel")
+        } else {
+            current["sttMistralModel"].as_str().map(ToString::to_string)
+        },
+        true,
+    )?;
+
+    let root = ensure_yaml_object(config)?;
+    let stt = yaml_child_object(root, "stt")?;
+    stt.insert(yaml_key("enabled"), serde_yaml::Value::Bool(stt_enabled));
+    stt.insert(
+        yaml_key("provider"),
+        serde_yaml::Value::String(stt_provider),
+    );
+
+    let local = yaml_child_object(stt, "local")?;
+    local.insert(
+        yaml_key("model"),
+        serde_yaml::Value::String(stt_local_model),
+    );
+    local.insert(
+        yaml_key("language"),
+        serde_yaml::Value::String(stt_local_language),
+    );
+
+    let openai = yaml_child_object(stt, "openai")?;
+    openai.insert(
+        yaml_key("model"),
+        serde_yaml::Value::String(stt_openai_model),
+    );
+
+    let mistral = yaml_child_object(stt, "mistral")?;
+    mistral.insert(
+        yaml_key("model"),
+        serde_yaml::Value::String(stt_mistral_model),
     );
     Ok(())
 }
@@ -7322,6 +7555,30 @@ pub fn hermes_browser_config_save(form: Value) -> Result<Value, String> {
         "configPath": config_path.to_string_lossy(),
         "backup": backup,
         "values": build_hermes_browser_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_stt_config_read() -> Result<Value, String> {
+    let (config_path, exists, config) = read_hermes_channel_yaml_config()?;
+    ensure_yaml_object(&mut config.clone())?;
+    Ok(serde_json::json!({
+        "exists": exists,
+        "configPath": config_path.to_string_lossy(),
+        "values": build_hermes_stt_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_stt_config_save(form: Value) -> Result<Value, String> {
+    let (config_path, _exists, mut config) = read_hermes_channel_yaml_config()?;
+    merge_hermes_stt_config(&mut config, &form)?;
+    let backup = write_hermes_yaml_config(&config_path, &config)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "configPath": config_path.to_string_lossy(),
+        "backup": backup,
+        "values": build_hermes_stt_config_values(&config),
     }))
 }
 
@@ -13161,6 +13418,124 @@ streaming:
         let err = merge_hermes_browser_config(&mut config, &json!({ "browserCommandTimeout": 4 }))
             .unwrap_err();
         assert!(err.contains("browser.command_timeout"));
+    }
+}
+
+#[cfg(test)]
+mod hermes_stt_config_tests {
+    use super::{build_hermes_stt_config_values, merge_hermes_stt_config};
+    use serde_json::json;
+
+    #[test]
+    fn stt_values_have_upstream_defaults() {
+        let config: serde_yaml::Value = serde_yaml::from_str("{}").unwrap();
+        let values = build_hermes_stt_config_values(&config);
+        assert_eq!(values["sttEnabled"], true);
+        assert_eq!(values["sttProvider"], "auto");
+        assert_eq!(values["sttLocalModel"], "base");
+        assert_eq!(values["sttLocalLanguage"], "");
+        assert_eq!(values["sttOpenaiModel"], "whisper-1");
+        assert_eq!(values["sttMistralModel"], "voxtral-mini-latest");
+    }
+
+    #[test]
+    fn stt_values_read_yaml_fields() {
+        let config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+stt:
+  enabled: false
+  provider: openai
+  local:
+    model: small
+    language: zh
+  openai:
+    model: gpt-4o-mini-transcribe
+  mistral:
+    model: voxtral-mini-2602
+"#,
+        )
+        .unwrap();
+        let values = build_hermes_stt_config_values(&config);
+        assert_eq!(values["sttEnabled"], false);
+        assert_eq!(values["sttProvider"], "openai");
+        assert_eq!(values["sttLocalModel"], "small");
+        assert_eq!(values["sttLocalLanguage"], "zh");
+        assert_eq!(values["sttOpenaiModel"], "gpt-4o-mini-transcribe");
+        assert_eq!(values["sttMistralModel"], "voxtral-mini-2602");
+    }
+
+    #[test]
+    fn merge_stt_config_preserves_unknown_fields() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+model:
+  provider: anthropic
+stt:
+  enabled: true
+  provider: auto
+  custom_flag: keep-stt
+  local:
+    model: base
+    custom_flag: keep-local
+memory:
+  memory_enabled: true
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_stt_config(
+            &mut config,
+            &json!({
+                "sttEnabled": false,
+                "sttProvider": "openai",
+                "sttLocalModel": "small",
+                "sttLocalLanguage": "zh",
+                "sttOpenaiModel": "gpt-4o-mini-transcribe",
+                "sttMistralModel": "voxtral-mini-2602",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(config["model"]["provider"].as_str(), Some("anthropic"));
+        assert_eq!(config["memory"]["memory_enabled"].as_bool(), Some(true));
+        assert_eq!(config["stt"]["enabled"].as_bool(), Some(false));
+        assert_eq!(config["stt"]["provider"].as_str(), Some("openai"));
+        assert_eq!(config["stt"]["local"]["model"].as_str(), Some("small"));
+        assert_eq!(config["stt"]["local"]["language"].as_str(), Some("zh"));
+        assert_eq!(
+            config["stt"]["openai"]["model"].as_str(),
+            Some("gpt-4o-mini-transcribe")
+        );
+        assert_eq!(
+            config["stt"]["mistral"]["model"].as_str(),
+            Some("voxtral-mini-2602")
+        );
+        assert_eq!(config["stt"]["custom_flag"].as_str(), Some("keep-stt"));
+        assert_eq!(
+            config["stt"]["local"]["custom_flag"].as_str(),
+            Some("keep-local")
+        );
+    }
+
+    #[test]
+    fn merge_stt_config_rejects_invalid_values() {
+        let mut config = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let err =
+            merge_hermes_stt_config(&mut config, &json!({ "sttProvider": "bad" })).unwrap_err();
+        assert!(err.contains("stt.provider"));
+        let err =
+            merge_hermes_stt_config(&mut config, &json!({ "sttLocalModel": "giant" })).unwrap_err();
+        assert!(err.contains("stt.local.model"));
+        let err = merge_hermes_stt_config(&mut config, &json!({ "sttOpenaiModel": "gpt-4.1" }))
+            .unwrap_err();
+        assert!(err.contains("stt.openai.model"));
+        let err =
+            merge_hermes_stt_config(&mut config, &json!({ "sttMistralModel": "voxtral-large" }))
+                .unwrap_err();
+        assert!(err.contains("stt.mistral.model"));
+        let err = merge_hermes_stt_config(&mut config, &json!({ "sttLocalLanguage": "中文" }))
+            .unwrap_err();
+        assert!(err.contains("stt.local.language"));
     }
 }
 

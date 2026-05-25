@@ -283,6 +283,20 @@ test('Hermes 配置页会暴露终端执行结构化配置字段', () => {
   }
 })
 
+test('Hermes 配置页会暴露语音转写结构化配置字段', () => {
+  for (const id of [
+    'hm-stt-save',
+    'hm-stt-enabled',
+    'hm-stt-provider',
+    'hm-stt-local-model',
+    'hm-stt-local-language',
+    'hm-stt-openai-model',
+    'hm-stt-mistral-model',
+  ]) {
+    assert.match(source, new RegExp(`id="${id}"`), `缺少 ${id}`)
+  }
+})
+
 test('Hermes 配置页数值输入会保留 0 值显示', () => {
   assert.doesNotMatch(source, /String\(value \|\| ''\)/, 'esc(value) 不能把合法 0 渲染为空字符串')
 })
@@ -305,6 +319,7 @@ test('Hermes 配置页新增结构化配置不会暴露翻译 key', () => {
     key.includes('PrivacyConfig') ||
     key.includes('BrowserConfig') ||
     key.includes('TerminalConfig') ||
+    key.includes('SttConfig') ||
     key.includes('CheckpointsConfig') ||
     key.includes('ApprovalsConfig') ||
     key.includes('CronConfig') ||
