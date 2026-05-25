@@ -4434,6 +4434,53 @@ fn hermes_model_form_string(
     Ok(current.as_str().map(ToString::to_string))
 }
 
+fn optional_hermes_model_i64_field(
+    form: &Value,
+    form_key: &str,
+    yaml_key_name: &str,
+    current: &Value,
+) -> Result<Option<i64>, String> {
+    let raw = if let Some(value) = form.get(form_key) {
+        if value.is_null() {
+            None
+        } else if let Some(text) = value.as_str() {
+            let text = text.trim();
+            if text.is_empty() {
+                None
+            } else {
+                Some(
+                    text.parse::<i64>()
+                        .map_err(|_| format!("{yaml_key_name} 必须是整数"))?,
+                )
+            }
+        } else if let Some(value) = value.as_i64() {
+            Some(value)
+        } else if let Some(value) = value.as_u64() {
+            Some(i64::try_from(value).map_err(|_| format!("{yaml_key_name} 必须是整数"))?)
+        } else {
+            return Err(format!("{yaml_key_name} 必须是整数"));
+        }
+    } else if let Some(text) = current.as_str() {
+        let text = text.trim();
+        if text.is_empty() {
+            None
+        } else {
+            Some(
+                text.parse::<i64>()
+                    .map_err(|_| format!("{yaml_key_name} 必须是整数"))?,
+            )
+        }
+    } else {
+        None
+    };
+
+    match raw {
+        Some(value) if (1..=10_000_000).contains(&value) => Ok(Some(value)),
+        Some(_) => Err(format!("{yaml_key_name} 必须在 1-10000000 范围内")),
+        None => Ok(None),
+    }
+}
+
 fn build_hermes_model_config_values(config: &serde_yaml::Value) -> Value {
     let root = config.as_mapping();
     let model = root
@@ -4460,11 +4507,23 @@ fn build_hermes_model_config_values(config: &serde_yaml::Value) -> Value {
         .unwrap_or_default()
         .trim()
         .to_string();
+    let context_length = model
+        .and_then(|map| yaml_i64_field(map, "context_length"))
+        .filter(|value| *value > 0)
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    let max_tokens = model
+        .and_then(|map| yaml_i64_field(map, "max_tokens"))
+        .filter(|value| *value > 0)
+        .map(|value| value.to_string())
+        .unwrap_or_default();
 
     serde_json::json!({
         "modelDefault": model_default,
         "modelProvider": provider,
         "modelBaseUrl": base_url,
+        "modelContextLength": context_length,
+        "modelMaxTokens": max_tokens,
     })
 }
 
@@ -4500,6 +4559,18 @@ fn merge_hermes_model_config(config: &mut serde_yaml::Value, form: &Value) -> Re
         "model.base_url",
         false,
     )?;
+    let context_length = optional_hermes_model_i64_field(
+        form,
+        "modelContextLength",
+        "model.context_length",
+        &current["modelContextLength"],
+    )?;
+    let max_tokens = optional_hermes_model_i64_field(
+        form,
+        "modelMaxTokens",
+        "model.max_tokens",
+        &current["modelMaxTokens"],
+    )?;
 
     let root = ensure_yaml_object(config)?;
     let mut model = root
@@ -4516,6 +4587,22 @@ fn merge_hermes_model_config(config: &mut serde_yaml::Value, form: &Value) -> Re
         model.remove(yaml_key("base_url"));
     } else {
         model.insert(yaml_key("base_url"), serde_yaml::Value::String(base_url));
+    }
+    if let Some(context_length) = context_length {
+        model.insert(
+            yaml_key("context_length"),
+            serde_yaml::Value::Number(context_length.into()),
+        );
+    } else {
+        model.remove(yaml_key("context_length"));
+    }
+    if let Some(max_tokens) = max_tokens {
+        model.insert(
+            yaml_key("max_tokens"),
+            serde_yaml::Value::Number(max_tokens.into()),
+        );
+    } else {
+        model.remove(yaml_key("max_tokens"));
     }
     model.remove(yaml_key("model"));
     root.insert(yaml_key("model"), serde_yaml::Value::Mapping(model));
@@ -16802,6 +16889,8 @@ mod hermes_model_config_tests {
         assert_eq!(values["modelDefault"], "");
         assert_eq!(values["modelProvider"], "auto");
         assert_eq!(values["modelBaseUrl"], "");
+        assert_eq!(values["modelContextLength"], "");
+        assert_eq!(values["modelMaxTokens"], "");
 
         let config: serde_yaml::Value = serde_yaml::from_str(
             r#"
@@ -16809,6 +16898,8 @@ model:
   model: anthropic/claude-sonnet-4-6
   provider: openrouter
   base_url: https://openrouter.ai/api/v1
+  context_length: 131072
+  max_tokens: 8192
 "#,
         )
         .unwrap();
@@ -16816,6 +16907,8 @@ model:
         assert_eq!(values["modelDefault"], "anthropic/claude-sonnet-4-6");
         assert_eq!(values["modelProvider"], "openrouter");
         assert_eq!(values["modelBaseUrl"], "https://openrouter.ai/api/v1");
+        assert_eq!(values["modelContextLength"], "131072");
+        assert_eq!(values["modelMaxTokens"], "8192");
     }
 
     #[test]
@@ -16840,6 +16933,8 @@ memory:
                 "modelDefault": "anthropic/claude-opus-4.6",
                 "modelProvider": "openrouter",
                 "modelBaseUrl": "https://openrouter.ai/api/v1",
+                "modelContextLength": "262144",
+                "modelMaxTokens": "16384",
             }),
         )
         .unwrap();
@@ -16853,8 +16948,9 @@ memory:
             config["model"]["base_url"].as_str(),
             Some("https://openrouter.ai/api/v1")
         );
+        assert_eq!(config["model"]["context_length"].as_i64(), Some(262144));
+        assert_eq!(config["model"]["max_tokens"].as_i64(), Some(16384));
         assert_eq!(config["model"]["auth_mode"].as_str(), Some("env"));
-        assert_eq!(config["model"]["context_length"].as_i64(), Some(200000));
         assert_eq!(config["memory"]["memory_enabled"].as_bool(), Some(true));
     }
 
@@ -16879,6 +16975,8 @@ display:
                 "modelDefault": "google/gemini-3-flash-preview",
                 "modelProvider": "auto",
                 "modelBaseUrl": "  ",
+                "modelContextLength": "",
+                "modelMaxTokens": " ",
             }),
         )
         .unwrap();
@@ -16890,7 +16988,8 @@ display:
         assert_eq!(config["model"]["provider"].as_str(), Some("auto"));
         assert!(config["model"]["base_url"].is_null());
         assert!(config["model"]["model"].is_null());
-        assert_eq!(config["model"]["max_tokens"].as_i64(), Some(8192));
+        assert!(config["model"]["context_length"].is_null());
+        assert!(config["model"]["max_tokens"].is_null());
         assert_eq!(config["display"]["language"].as_str(), Some("zh"));
     }
 
@@ -16938,6 +17037,28 @@ model:
         )
         .unwrap_err();
         assert!(err.contains("model.base_url"));
+
+        let err = merge_hermes_model_config(
+            &mut config,
+            &json!({
+                "modelDefault": "gpt-5",
+                "modelProvider": "auto",
+                "modelContextLength": "0",
+            }),
+        )
+        .unwrap_err();
+        assert!(err.contains("model.context_length"));
+
+        let err = merge_hermes_model_config(
+            &mut config,
+            &json!({
+                "modelDefault": "gpt-5",
+                "modelProvider": "auto",
+                "modelMaxTokens": "1.5",
+            }),
+        )
+        .unwrap_err();
+        assert!(err.contains("model.max_tokens"));
     }
 }
 

@@ -4303,6 +4303,12 @@ function normalizeHermesModelConfigString(value, key, required = false) {
   return text
 }
 
+function normalizeHermesOptionalModelInteger(value, key) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  return parseHermesInteger(raw, key, 0, 1, 10000000, true)
+}
+
 export function buildHermesModelConfigValues(config = {}) {
   const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
   const model = root.model && typeof root.model === 'object' && !Array.isArray(root.model) ? root.model : {}
@@ -4311,6 +4317,8 @@ export function buildHermesModelConfigValues(config = {}) {
     modelDefault: typeof defaultModel === 'string' ? defaultModel.trim() : '',
     modelProvider: typeof model.provider === 'string' && model.provider.trim() ? model.provider.trim() : 'auto',
     modelBaseUrl: typeof model.base_url === 'string' ? model.base_url.trim() : '',
+    modelContextLength: Number.isInteger(model.context_length) && model.context_length > 0 ? String(model.context_length) : '',
+    modelMaxTokens: Number.isInteger(model.max_tokens) && model.max_tokens > 0 ? String(model.max_tokens) : '',
   }
 }
 
@@ -4325,6 +4333,12 @@ export function mergeHermesModelConfig(config = {}, form = {}) {
   const baseUrl = normalizeHermesModelConfigString(Object.hasOwn(form, 'modelBaseUrl') ? form.modelBaseUrl : currentValues.modelBaseUrl, 'model.base_url')
   if (baseUrl) model.base_url = baseUrl
   else delete model.base_url
+  const contextLength = normalizeHermesOptionalModelInteger(Object.hasOwn(form, 'modelContextLength') ? form.modelContextLength : currentValues.modelContextLength, 'model.context_length')
+  if (contextLength) model.context_length = contextLength
+  else delete model.context_length
+  const maxTokens = normalizeHermesOptionalModelInteger(Object.hasOwn(form, 'modelMaxTokens') ? form.modelMaxTokens : currentValues.modelMaxTokens, 'model.max_tokens')
+  if (maxTokens) model.max_tokens = maxTokens
+  else delete model.max_tokens
   delete model.model
   next.model = model
   return next

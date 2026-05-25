@@ -78,6 +78,8 @@ test('Hermes 配置页会暴露基础模型结构化配置字段', () => {
     'hm-model-default',
     'hm-model-provider',
     'hm-model-base-url',
+    'hm-model-context-length',
+    'hm-model-max-tokens',
   ]) {
     assert.match(source, new RegExp(`id="${id}"`), `缺少 ${id}`)
   }

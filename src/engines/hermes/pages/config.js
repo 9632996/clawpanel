@@ -88,6 +88,8 @@ const MODEL_DEFAULTS = {
   modelDefault: '',
   modelProvider: 'auto',
   modelBaseUrl: '',
+  modelContextLength: '',
+  modelMaxTokens: '',
 }
 
 const MODEL_ALIASES_DEFAULTS = {
@@ -961,6 +963,14 @@ export function render() {
             <label class="hm-field hm-field--wide">
               <span class="hm-field-label">${t('engine.hermesModelConfigBaseUrl')}</span>
               <input id="hm-model-base-url" class="hm-input" value="${esc(modelValues.modelBaseUrl)}" placeholder="https://openrouter.ai/api/v1" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesModelConfigContextLength')}</span>
+              <input id="hm-model-context-length" class="hm-input" type="number" inputmode="numeric" min="1" max="10000000" step="1" value="${esc(modelValues.modelContextLength)}" placeholder="131072" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesModelConfigMaxTokens')}</span>
+              <input id="hm-model-max-tokens" class="hm-input" type="number" inputmode="numeric" min="1" max="10000000" step="1" value="${esc(modelValues.modelMaxTokens)}" placeholder="8192" ${disabled ? 'disabled' : ''}>
             </label>
           </div>
           <div class="hm-channel-footnote">${t('engine.hermesModelConfigFootnote')}</div>
@@ -3018,6 +3028,8 @@ export function render() {
       modelDefault: el.querySelector('#hm-model-default')?.value || '',
       modelProvider: el.querySelector('#hm-model-provider')?.value || 'auto',
       modelBaseUrl: el.querySelector('#hm-model-base-url')?.value || '',
+      modelContextLength: el.querySelector('#hm-model-context-length')?.value || '',
+      modelMaxTokens: el.querySelector('#hm-model-max-tokens')?.value || '',
     }
     modelSaving = true
     modelError = null
