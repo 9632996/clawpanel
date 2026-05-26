@@ -4370,6 +4370,50 @@ export function mergeHermesSkillsConfig(config = {}, form = {}) {
   return next
 }
 
+export function buildHermesCuratorConfigValues(config = {}) {
+  const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
+  const curator = root.curator && typeof root.curator === 'object' && !Array.isArray(root.curator)
+    ? root.curator
+    : {}
+  const backup = curator.backup && typeof curator.backup === 'object' && !Array.isArray(curator.backup)
+    ? curator.backup
+    : {}
+  return {
+    curatorEnabled: readHermesBool(curator.enabled, true),
+    curatorIntervalHours: parseHermesInteger(curator.interval_hours, 'curator.interval_hours', 168, 1, 87600, false),
+    curatorMinIdleHours: parseHermesInteger(curator.min_idle_hours, 'curator.min_idle_hours', 2, 0, 87600, false),
+    curatorStaleAfterDays: parseHermesInteger(curator.stale_after_days, 'curator.stale_after_days', 30, 1, 36500, false),
+    curatorArchiveAfterDays: parseHermesInteger(curator.archive_after_days, 'curator.archive_after_days', 90, 1, 36500, false),
+    curatorBackupEnabled: readHermesBool(backup.enabled, true),
+    curatorBackupKeep: parseHermesInteger(backup.keep, 'curator.backup.keep', 5, 0, 1000, false),
+  }
+}
+
+export function mergeHermesCuratorConfig(config = {}, form = {}) {
+  const next = mergeConfigsPreservingFields({}, config && typeof config === 'object' && !Array.isArray(config) ? config : {})
+  const currentValues = buildHermesCuratorConfigValues(next)
+  const curator = next.curator && typeof next.curator === 'object' && !Array.isArray(next.curator)
+    ? mergeConfigsPreservingFields(next.curator, {})
+    : {}
+  const backup = curator.backup && typeof curator.backup === 'object' && !Array.isArray(curator.backup)
+    ? mergeConfigsPreservingFields(curator.backup, {})
+    : {}
+
+  curator.enabled = formHermesBool(form, 'curatorEnabled', currentValues.curatorEnabled)
+  curator.interval_hours = parseHermesInteger(Object.hasOwn(form, 'curatorIntervalHours') ? form.curatorIntervalHours : currentValues.curatorIntervalHours, 'curator.interval_hours', 168, 1, 87600, true)
+  curator.min_idle_hours = parseHermesInteger(Object.hasOwn(form, 'curatorMinIdleHours') ? form.curatorMinIdleHours : currentValues.curatorMinIdleHours, 'curator.min_idle_hours', 2, 0, 87600, true)
+  curator.stale_after_days = parseHermesInteger(Object.hasOwn(form, 'curatorStaleAfterDays') ? form.curatorStaleAfterDays : currentValues.curatorStaleAfterDays, 'curator.stale_after_days', 30, 1, 36500, true)
+  curator.archive_after_days = parseHermesInteger(Object.hasOwn(form, 'curatorArchiveAfterDays') ? form.curatorArchiveAfterDays : currentValues.curatorArchiveAfterDays, 'curator.archive_after_days', 90, 1, 36500, true)
+  if (curator.archive_after_days < curator.stale_after_days) {
+    throw new Error('curator.archive_after_days 必须大于或等于 curator.stale_after_days')
+  }
+  backup.enabled = formHermesBool(form, 'curatorBackupEnabled', currentValues.curatorBackupEnabled)
+  backup.keep = parseHermesInteger(Object.hasOwn(form, 'curatorBackupKeep') ? form.curatorBackupKeep : currentValues.curatorBackupKeep, 'curator.backup.keep', 5, 0, 1000, true)
+  curator.backup = backup
+  next.curator = curator
+  return next
+}
+
 export function buildHermesAgentToolsetsConfigValues(config = {}) {
   const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
   const agent = root.agent && typeof root.agent === 'object' && !Array.isArray(root.agent)
@@ -11969,6 +12013,27 @@ const handlers = {
       configPath,
       backup,
       values: buildHermesSkillsConfigValues(next),
+    }
+  },
+
+  hermes_curator_config_read() {
+    const { configPath, exists, config } = readHermesConfigYamlObject()
+    return {
+      exists,
+      configPath,
+      values: buildHermesCuratorConfigValues(config),
+    }
+  },
+
+  hermes_curator_config_save({ form } = {}) {
+    const { configPath, config } = readHermesConfigYamlObject()
+    const next = mergeHermesCuratorConfig(config, form || {})
+    const backup = writeHermesConfigYamlObject(configPath, next)
+    return {
+      ok: true,
+      configPath,
+      backup,
+      values: buildHermesCuratorConfigValues(next),
     }
   },
 

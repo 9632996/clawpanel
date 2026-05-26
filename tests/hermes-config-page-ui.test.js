@@ -67,6 +67,21 @@ test('Hermes 配置页会暴露 Skills 结构化配置字段', () => {
   }
 })
 
+test('Hermes 配置页会暴露 Curator 结构化配置字段', () => {
+  for (const id of [
+    'hm-curator-config-save',
+    'hm-curator-enabled',
+    'hm-curator-interval-hours',
+    'hm-curator-min-idle-hours',
+    'hm-curator-stale-after-days',
+    'hm-curator-archive-after-days',
+    'hm-curator-backup-enabled',
+    'hm-curator-backup-keep',
+  ]) {
+    assert.match(source, new RegExp(`id="${id}"`), `缺少 ${id}`)
+  }
+})
+
 test('Hermes 配置页会暴露快捷命令结构化配置字段', () => {
   for (const id of [
     'hm-quick-commands-save',

@@ -4437,6 +4437,135 @@ fn merge_hermes_skills_config(config: &mut serde_yaml::Value, form: &Value) -> R
     Ok(())
 }
 
+fn build_hermes_curator_config_values(config: &serde_yaml::Value) -> Value {
+    let root = config.as_mapping();
+    let curator = root.and_then(|map| yaml_get_mapping(map, "curator"));
+    let backup = curator.and_then(|map| yaml_get_mapping(map, "backup"));
+
+    serde_json::json!({
+        "curatorEnabled": curator.and_then(|map| yaml_bool_field(map, "enabled")).unwrap_or(true),
+        "curatorIntervalHours": curator
+            .map(|map| bounded_hermes_i64(yaml_i64_field(map, "interval_hours"), 168, 1, 87600))
+            .unwrap_or(168),
+        "curatorMinIdleHours": curator
+            .map(|map| bounded_hermes_i64(yaml_i64_field(map, "min_idle_hours"), 2, 0, 87600))
+            .unwrap_or(2),
+        "curatorStaleAfterDays": curator
+            .map(|map| bounded_hermes_i64(yaml_i64_field(map, "stale_after_days"), 30, 1, 36500))
+            .unwrap_or(30),
+        "curatorArchiveAfterDays": curator
+            .map(|map| bounded_hermes_i64(yaml_i64_field(map, "archive_after_days"), 90, 1, 36500))
+            .unwrap_or(90),
+        "curatorBackupEnabled": backup.and_then(|map| yaml_bool_field(map, "enabled")).unwrap_or(true),
+        "curatorBackupKeep": backup
+            .map(|map| bounded_hermes_i64(yaml_i64_field(map, "keep"), 5, 0, 1000))
+            .unwrap_or(5),
+    })
+}
+
+fn merge_hermes_curator_config(config: &mut serde_yaml::Value, form: &Value) -> Result<(), String> {
+    let current = build_hermes_curator_config_values(config);
+    let curator_interval_hours = validate_hermes_i64(
+        if form.get("curatorIntervalHours").is_some() {
+            form_i64(form, "curatorIntervalHours")
+        } else {
+            Some(current["curatorIntervalHours"].as_i64().unwrap_or(168))
+        },
+        "curator.interval_hours",
+        168,
+        1,
+        87600,
+    )?;
+    let curator_min_idle_hours = validate_hermes_i64(
+        if form.get("curatorMinIdleHours").is_some() {
+            form_i64(form, "curatorMinIdleHours")
+        } else {
+            Some(current["curatorMinIdleHours"].as_i64().unwrap_or(2))
+        },
+        "curator.min_idle_hours",
+        2,
+        0,
+        87600,
+    )?;
+    let curator_stale_after_days = validate_hermes_i64(
+        if form.get("curatorStaleAfterDays").is_some() {
+            form_i64(form, "curatorStaleAfterDays")
+        } else {
+            Some(current["curatorStaleAfterDays"].as_i64().unwrap_or(30))
+        },
+        "curator.stale_after_days",
+        30,
+        1,
+        36500,
+    )?;
+    let curator_archive_after_days = validate_hermes_i64(
+        if form.get("curatorArchiveAfterDays").is_some() {
+            form_i64(form, "curatorArchiveAfterDays")
+        } else {
+            Some(current["curatorArchiveAfterDays"].as_i64().unwrap_or(90))
+        },
+        "curator.archive_after_days",
+        90,
+        1,
+        36500,
+    )?;
+    if curator_archive_after_days < curator_stale_after_days {
+        return Err(
+            "curator.archive_after_days 必须大于或等于 curator.stale_after_days".to_string(),
+        );
+    }
+    let curator_backup_keep = validate_hermes_i64(
+        if form.get("curatorBackupKeep").is_some() {
+            form_i64(form, "curatorBackupKeep")
+        } else {
+            Some(current["curatorBackupKeep"].as_i64().unwrap_or(5))
+        },
+        "curator.backup.keep",
+        5,
+        0,
+        1000,
+    )?;
+
+    let root = ensure_yaml_object(config)?;
+    let curator = yaml_child_object(root, "curator")?;
+    curator.insert(
+        yaml_key("enabled"),
+        serde_yaml::Value::Bool(
+            form_bool(form, "curatorEnabled")
+                .unwrap_or_else(|| current["curatorEnabled"].as_bool().unwrap_or(true)),
+        ),
+    );
+    curator.insert(
+        yaml_key("interval_hours"),
+        serde_yaml::Value::Number(curator_interval_hours.into()),
+    );
+    curator.insert(
+        yaml_key("min_idle_hours"),
+        serde_yaml::Value::Number(curator_min_idle_hours.into()),
+    );
+    curator.insert(
+        yaml_key("stale_after_days"),
+        serde_yaml::Value::Number(curator_stale_after_days.into()),
+    );
+    curator.insert(
+        yaml_key("archive_after_days"),
+        serde_yaml::Value::Number(curator_archive_after_days.into()),
+    );
+    let backup = yaml_child_object(curator, "backup")?;
+    backup.insert(
+        yaml_key("enabled"),
+        serde_yaml::Value::Bool(
+            form_bool(form, "curatorBackupEnabled")
+                .unwrap_or_else(|| current["curatorBackupEnabled"].as_bool().unwrap_or(true)),
+        ),
+    );
+    backup.insert(
+        yaml_key("keep"),
+        serde_yaml::Value::Number(curator_backup_keep.into()),
+    );
+    Ok(())
+}
+
 fn build_hermes_quick_commands_config_values(config: &serde_yaml::Value) -> Value {
     let root = config.as_mapping();
     let quick_commands = root
@@ -9662,6 +9791,30 @@ pub fn hermes_skills_config_save(form: Value) -> Result<Value, String> {
         "configPath": config_path.to_string_lossy(),
         "backup": backup,
         "values": build_hermes_skills_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_curator_config_read() -> Result<Value, String> {
+    let (config_path, exists, config) = read_hermes_channel_yaml_config()?;
+    ensure_yaml_object(&mut config.clone())?;
+    Ok(serde_json::json!({
+        "exists": exists,
+        "configPath": config_path.to_string_lossy(),
+        "values": build_hermes_curator_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_curator_config_save(form: Value) -> Result<Value, String> {
+    let (config_path, _exists, mut config) = read_hermes_channel_yaml_config()?;
+    merge_hermes_curator_config(&mut config, &form)?;
+    let backup = write_hermes_yaml_config(&config_path, &config)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "configPath": config_path.to_string_lossy(),
+        "backup": backup,
+        "values": build_hermes_curator_config_values(&config),
     }))
 }
 
@@ -17764,6 +17917,133 @@ memory:
         let err = merge_hermes_skills_config(&mut config, &json!({ "inlineShellTimeout": 86401 }))
             .unwrap_err();
         assert!(err.contains("skills.inline_shell_timeout"));
+    }
+}
+
+#[cfg(test)]
+mod hermes_curator_config_tests {
+    use super::{build_hermes_curator_config_values, merge_hermes_curator_config};
+    use serde_json::json;
+
+    #[test]
+    fn curator_values_have_upstream_defaults() {
+        let config: serde_yaml::Value = serde_yaml::from_str("{}").unwrap();
+        let values = build_hermes_curator_config_values(&config);
+        assert_eq!(values["curatorEnabled"], true);
+        assert_eq!(values["curatorIntervalHours"], 168);
+        assert_eq!(values["curatorMinIdleHours"], 2);
+        assert_eq!(values["curatorStaleAfterDays"], 30);
+        assert_eq!(values["curatorArchiveAfterDays"], 90);
+        assert_eq!(values["curatorBackupEnabled"], true);
+        assert_eq!(values["curatorBackupKeep"], 5);
+    }
+
+    #[test]
+    fn curator_values_read_yaml_fields() {
+        let config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+curator:
+  enabled: false
+  interval_hours: 24
+  min_idle_hours: 6
+  stale_after_days: 14
+  archive_after_days: 45
+  backup:
+    enabled: false
+    keep: 9
+"#,
+        )
+        .unwrap();
+
+        let values = build_hermes_curator_config_values(&config);
+        assert_eq!(values["curatorEnabled"], false);
+        assert_eq!(values["curatorIntervalHours"], 24);
+        assert_eq!(values["curatorMinIdleHours"], 6);
+        assert_eq!(values["curatorStaleAfterDays"], 14);
+        assert_eq!(values["curatorArchiveAfterDays"], 45);
+        assert_eq!(values["curatorBackupEnabled"], false);
+        assert_eq!(values["curatorBackupKeep"], 9);
+    }
+
+    #[test]
+    fn merge_curator_config_preserves_unknown_fields() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+curator:
+  enabled: true
+  backup:
+    enabled: true
+    custom_flag: keep-backup
+  custom_flag: keep-curator
+skills:
+  external_dirs:
+    - ~/.agents/skills
+model:
+  provider: anthropic
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_curator_config(
+            &mut config,
+            &json!({
+                "curatorEnabled": false,
+                "curatorIntervalHours": "48",
+                "curatorMinIdleHours": "4",
+                "curatorStaleAfterDays": "21",
+                "curatorArchiveAfterDays": "60",
+                "curatorBackupEnabled": false,
+                "curatorBackupKeep": "3",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(
+            config["skills"]["external_dirs"][0].as_str(),
+            Some("~/.agents/skills")
+        );
+        assert_eq!(config["model"]["provider"].as_str(), Some("anthropic"));
+        assert_eq!(config["curator"]["enabled"].as_bool(), Some(false));
+        assert_eq!(config["curator"]["interval_hours"].as_i64(), Some(48));
+        assert_eq!(config["curator"]["min_idle_hours"].as_i64(), Some(4));
+        assert_eq!(config["curator"]["stale_after_days"].as_i64(), Some(21));
+        assert_eq!(config["curator"]["archive_after_days"].as_i64(), Some(60));
+        assert_eq!(
+            config["curator"]["backup"]["enabled"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(config["curator"]["backup"]["keep"].as_i64(), Some(3));
+        assert_eq!(
+            config["curator"]["backup"]["custom_flag"].as_str(),
+            Some("keep-backup")
+        );
+        assert_eq!(
+            config["curator"]["custom_flag"].as_str(),
+            Some("keep-curator")
+        );
+    }
+
+    #[test]
+    fn merge_curator_config_rejects_invalid_values() {
+        let mut config = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let err = merge_hermes_curator_config(&mut config, &json!({ "curatorIntervalHours": 0 }))
+            .unwrap_err();
+        assert!(err.contains("curator.interval_hours"));
+        let err = merge_hermes_curator_config(&mut config, &json!({ "curatorMinIdleHours": -1 }))
+            .unwrap_err();
+        assert!(err.contains("curator.min_idle_hours"));
+        let err = merge_hermes_curator_config(&mut config, &json!({ "curatorBackupKeep": 1001 }))
+            .unwrap_err();
+        assert!(err.contains("curator.backup.keep"));
+        let err = merge_hermes_curator_config(
+            &mut config,
+            &json!({
+                "curatorStaleAfterDays": 90,
+                "curatorArchiveAfterDays": 30,
+            }),
+        )
+        .unwrap_err();
+        assert!(err.contains("curator.archive_after_days"));
     }
 }
 

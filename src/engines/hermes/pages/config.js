@@ -84,6 +84,16 @@ const SKILLS_DEFAULTS = {
   guardAgentCreated: false,
 }
 
+const CURATOR_DEFAULTS = {
+  curatorEnabled: true,
+  curatorIntervalHours: 168,
+  curatorMinIdleHours: 2,
+  curatorStaleAfterDays: 30,
+  curatorArchiveAfterDays: 90,
+  curatorBackupEnabled: true,
+  curatorBackupKeep: 5,
+}
+
 const QUICK_COMMANDS_DEFAULTS = {
   quickCommandsJson: '{}',
 }
@@ -345,6 +355,7 @@ export function render() {
   let toolGuardrailsValues = { ...TOOL_GUARDRAILS_DEFAULTS }
   let memoryValues = { ...MEMORY_DEFAULTS }
   let skillsValues = { ...SKILLS_DEFAULTS }
+  let curatorValues = { ...CURATOR_DEFAULTS }
   let quickCommandsValues = { ...QUICK_COMMANDS_DEFAULTS }
   let modelValues = { ...MODEL_DEFAULTS }
   let modelAliasesValues = { ...MODEL_ALIASES_DEFAULTS }
@@ -380,6 +391,7 @@ export function render() {
   let toolGuardrailsLoading = true
   let memoryLoading = true
   let skillsLoading = true
+  let curatorLoading = true
   let quickCommandsLoading = true
   let modelLoading = true
   let modelAliasesLoading = true
@@ -415,6 +427,7 @@ export function render() {
   let toolGuardrailsSaving = false
   let memorySaving = false
   let skillsSaving = false
+  let curatorSaving = false
   let quickCommandsSaving = false
   let modelSaving = false
   let modelAliasesSaving = false
@@ -450,6 +463,7 @@ export function render() {
   let toolGuardrailsError = null
   let memoryError = null
   let skillsError = null
+  let curatorError = null
   let quickCommandsError = null
   let modelError = null
   let modelAliasesError = null
@@ -485,7 +499,7 @@ export function render() {
   }
 
   function isBusy() {
-    return loading || runtimeLoading || compressionLoading || promptCachingLoading || openrouterCacheLoading || providerRoutingLoading || auxiliaryLoading || toolGuardrailsLoading || memoryLoading || skillsLoading || quickCommandsLoading || modelLoading || modelAliasesLoading || hooksLoading || providerOverridesLoading || mcpServersLoading || agentToolsetsLoading || platformToolsetsLoading || agentRuntimeLoading || unauthorizedDmLoading || securityLoading || displayLoading || humanDelayLoading || kanbanLoading || streamingLoading || executionLimitsLoading || ioSafetyLoading || checkpointsLoading || cronLoading || loggingLoading || approvalsLoading || privacyLoading || browserLoading || sttLoading || terminalLoading || saving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || modelSaving || modelAliasesSaving || hooksSaving || providerOverridesSaving || mcpServersSaving || agentToolsetsSaving || platformToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || securitySaving || displaySaving || humanDelaySaving || kanbanSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || privacySaving || browserSaving || sttSaving || terminalSaving
+    return loading || runtimeLoading || compressionLoading || promptCachingLoading || openrouterCacheLoading || providerRoutingLoading || auxiliaryLoading || toolGuardrailsLoading || memoryLoading || skillsLoading || curatorLoading || quickCommandsLoading || modelLoading || modelAliasesLoading || hooksLoading || providerOverridesLoading || mcpServersLoading || agentToolsetsLoading || platformToolsetsLoading || agentRuntimeLoading || unauthorizedDmLoading || securityLoading || displayLoading || humanDelayLoading || kanbanLoading || streamingLoading || executionLimitsLoading || ioSafetyLoading || checkpointsLoading || cronLoading || loggingLoading || approvalsLoading || privacyLoading || browserLoading || sttLoading || terminalLoading || saving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || curatorSaving || quickCommandsSaving || modelSaving || modelAliasesSaving || hooksSaving || providerOverridesSaving || mcpServersSaving || agentToolsetsSaving || platformToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || securitySaving || displaySaving || humanDelaySaving || kanbanSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || privacySaving || browserSaving || sttSaving || terminalSaving
   }
 
   function option(labelKey, value, selected) {
@@ -963,6 +977,60 @@ export function render() {
             </label>
           </div>
           <div class="hm-channel-footnote">${t('engine.hermesSkillsConfigFootnote')}</div>
+        </div>
+      </div>
+    `
+  }
+
+  function renderCuratorConfigPanel() {
+    const disabled = loading || saving || curatorLoading || curatorSaving || skillsSaving || quickCommandsSaving || providerOverridesSaving || agentToolsetsSaving || agentRuntimeSaving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || streamingSaving || executionLimitsSaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || terminalSaving
+    return `
+      <div class="hm-panel hm-config-runtime-panel hm-config-curator-panel">
+        <div class="hm-panel-header">
+          <div>
+            <div class="hm-panel-title">${t('engine.hermesCuratorConfigTitle')}</div>
+            <div class="hm-channel-panel-desc">${t('engine.hermesCuratorConfigDesc')}</div>
+          </div>
+          <div class="hm-panel-actions">
+            <span class="hm-muted">${curatorSaving ? t('engine.hermesConfigStatusSaving') : curatorLoading ? t('engine.hermesConfigStatusLoading') : t('engine.hermesCuratorConfigStatusReady')}</span>
+            <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-curator-config-save" ${disabled ? 'disabled' : ''}>${t('engine.hermesCuratorConfigSave')}</button>
+          </div>
+        </div>
+        <div class="hm-panel-body">
+          ${renderError(curatorError)}
+          <div class="hm-config-check-grid">
+            <label class="hm-channel-check">
+              <input id="hm-curator-enabled" type="checkbox" ${curatorValues.curatorEnabled ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesCuratorConfigEnabled')}</span>
+            </label>
+            <label class="hm-channel-check">
+              <input id="hm-curator-backup-enabled" type="checkbox" ${curatorValues.curatorBackupEnabled ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesCuratorConfigBackupEnabled')}</span>
+            </label>
+          </div>
+          <div class="hm-config-runtime-grid hm-config-curator-grid">
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesCuratorConfigIntervalHours')}</span>
+              <input id="hm-curator-interval-hours" class="hm-input" type="number" inputmode="numeric" min="1" max="87600" step="1" value="${esc(curatorValues.curatorIntervalHours)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesCuratorConfigMinIdleHours')}</span>
+              <input id="hm-curator-min-idle-hours" class="hm-input" type="number" inputmode="numeric" min="0" max="87600" step="1" value="${esc(curatorValues.curatorMinIdleHours)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesCuratorConfigStaleAfterDays')}</span>
+              <input id="hm-curator-stale-after-days" class="hm-input" type="number" inputmode="numeric" min="1" max="36500" step="1" value="${esc(curatorValues.curatorStaleAfterDays)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesCuratorConfigArchiveAfterDays')}</span>
+              <input id="hm-curator-archive-after-days" class="hm-input" type="number" inputmode="numeric" min="1" max="36500" step="1" value="${esc(curatorValues.curatorArchiveAfterDays)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesCuratorConfigBackupKeep')}</span>
+              <input id="hm-curator-backup-keep" class="hm-input" type="number" inputmode="numeric" min="0" max="1000" step="1" value="${esc(curatorValues.curatorBackupKeep)}" ${disabled ? 'disabled' : ''}>
+            </label>
+          </div>
+          <div class="hm-channel-footnote">${t('engine.hermesCuratorConfigFootnote')}</div>
         </div>
       </div>
     `
@@ -2242,6 +2310,7 @@ export function render() {
       ${renderToolGuardrailsPanel()}
       ${renderMemoryPanel()}
       ${renderSkillsConfigPanel()}
+      ${renderCuratorConfigPanel()}
       ${renderQuickCommandsConfigPanel()}
       ${renderModelConfigPanel()}
       ${renderModelAliasesConfigPanel()}
@@ -2284,6 +2353,7 @@ export function render() {
     el.querySelector('#hm-tool-guardrails-save')?.addEventListener('click', saveToolGuardrails)
     el.querySelector('#hm-memory-save')?.addEventListener('click', saveMemory)
     el.querySelector('#hm-skills-config-save')?.addEventListener('click', saveSkillsConfig)
+    el.querySelector('#hm-curator-config-save')?.addEventListener('click', saveCuratorConfig)
     el.querySelector('#hm-quick-commands-save')?.addEventListener('click', saveQuickCommandsConfig)
     el.querySelector('#hm-model-config-save')?.addEventListener('click', saveModelConfig)
     el.querySelector('#hm-model-aliases-save')?.addEventListener('click', saveModelAliasesConfig)
@@ -2359,6 +2429,11 @@ export function render() {
   async function loadSkillsConfig() {
     const data = await api.hermesSkillsConfigRead()
     skillsValues = { ...SKILLS_DEFAULTS, ...(data?.values || {}) }
+  }
+
+  async function loadCuratorConfig() {
+    const data = await api.hermesCuratorConfigRead()
+    curatorValues = { ...CURATOR_DEFAULTS, ...(data?.values || {}) }
   }
 
   async function loadQuickCommandsConfig() {
@@ -2497,6 +2572,7 @@ export function render() {
     toolGuardrailsLoading = true
     memoryLoading = true
     skillsLoading = true
+    curatorLoading = true
     quickCommandsLoading = true
     modelLoading = true
     modelAliasesLoading = true
@@ -2532,6 +2608,7 @@ export function render() {
     toolGuardrailsError = null
     memoryError = null
     skillsError = null
+    curatorError = null
     quickCommandsError = null
     modelError = null
     modelAliasesError = null
@@ -2725,6 +2802,14 @@ export function render() {
       draw()
     }
     try {
+      await loadCuratorConfig()
+    } catch (err) {
+      curatorError = humanizeError(err, t('engine.hermesCuratorConfigLoadFailed') || 'Load curator config failed')
+    } finally {
+      curatorLoading = false
+      draw()
+    }
+    try {
       await loadQuickCommandsConfig()
     } catch (err) {
       quickCommandsError = humanizeError(err, t('engine.hermesQuickCommandsConfigLoadFailed') || 'Load quick commands config failed')
@@ -2883,6 +2968,9 @@ export function render() {
       } catch {}
       try {
         await loadSkillsConfig()
+      } catch {}
+      try {
+        await loadCuratorConfig()
       } catch {}
       try {
         await loadQuickCommandsConfig()
@@ -3225,6 +3313,37 @@ export function render() {
       toast(skillsError, 'error')
     } finally {
       skillsSaving = false
+      draw()
+    }
+  }
+
+  async function saveCuratorConfig() {
+    const form = {
+      curatorEnabled: !!el.querySelector('#hm-curator-enabled')?.checked,
+      curatorIntervalHours: el.querySelector('#hm-curator-interval-hours')?.value || '168',
+      curatorMinIdleHours: el.querySelector('#hm-curator-min-idle-hours')?.value || '2',
+      curatorStaleAfterDays: el.querySelector('#hm-curator-stale-after-days')?.value || '30',
+      curatorArchiveAfterDays: el.querySelector('#hm-curator-archive-after-days')?.value || '90',
+      curatorBackupEnabled: !!el.querySelector('#hm-curator-backup-enabled')?.checked,
+      curatorBackupKeep: el.querySelector('#hm-curator-backup-keep')?.value || '5',
+    }
+    curatorSaving = true
+    curatorError = null
+    draw()
+    try {
+      const result = await api.hermesCuratorConfigSave(form)
+      curatorValues = { ...CURATOR_DEFAULTS, ...(result?.values || form) }
+      await refreshRawAfterStructuredSave()
+      const backup = result?.backup || ''
+      toast({
+        message: t('engine.hermesCuratorConfigSaveSuccess'),
+        hint: backup ? t('engine.hermesConfigBackupHint', { path: backup }) : '',
+      }, 'success')
+    } catch (err) {
+      curatorError = humanizeError(err, t('engine.hermesCuratorConfigSaveFailed') || 'Save curator config failed')
+      toast(curatorError, 'error')
+    } finally {
+      curatorSaving = false
       draw()
     }
   }
