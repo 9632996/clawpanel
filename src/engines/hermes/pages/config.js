@@ -260,6 +260,11 @@ const BROWSER_DEFAULTS = {
   browserCommandTimeout: 30,
   browserRecordSessions: false,
   browserEngine: 'auto',
+  browserAllowPrivateUrls: false,
+  browserAutoLocalForPrivateUrls: true,
+  browserCdpUrl: '',
+  browserDialogPolicy: 'must_respond',
+  browserDialogTimeout: 300,
 }
 
 const STT_DEFAULTS = {
@@ -298,6 +303,7 @@ const STREAMING_TRANSPORTS = ['edit', 'auto', 'draft', 'off']
 const CODE_EXECUTION_MODES = ['project', 'strict']
 const TERMINAL_BACKENDS = ['local', 'ssh', 'docker', 'singularity', 'modal', 'daytona', 'vercel_sandbox']
 const BROWSER_ENGINES = ['auto', 'lightpanda', 'chrome']
+const BROWSER_DIALOG_POLICIES = ['must_respond', 'auto_dismiss', 'auto_accept']
 const STT_PROVIDERS = ['auto', 'local', 'groq', 'openai', 'mistral']
 const STT_LOCAL_MODELS = ['tiny', 'base', 'small', 'medium', 'large-v3', 'turbo']
 const STT_OPENAI_MODELS = ['whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe']
@@ -1977,11 +1983,33 @@ export function render() {
               <span class="hm-field-label">${t('engine.hermesBrowserConfigCommandTimeout')}</span>
               <input id="hm-browser-command-timeout" class="hm-input" type="number" inputmode="numeric" min="5" max="3600" step="1" value="${esc(browserValues.browserCommandTimeout)}" ${disabled ? 'disabled' : ''}>
             </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesBrowserConfigCdpUrl')}</span>
+              <input id="hm-browser-cdp-url" class="hm-input" type="text" value="${esc(browserValues.browserCdpUrl)}" placeholder="${t('engine.hermesBrowserConfigCdpUrlPlaceholder')}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesBrowserConfigDialogPolicy')}</span>
+              <select id="hm-browser-dialog-policy" class="hm-input" ${disabled ? 'disabled' : ''}>
+                ${BROWSER_DIALOG_POLICIES.map(policy => option(`engine.hermesBrowserConfigDialogPolicy_${policy}`, policy, browserValues.browserDialogPolicy)).join('')}
+              </select>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesBrowserConfigDialogTimeout')}</span>
+              <input id="hm-browser-dialog-timeout" class="hm-input" type="number" inputmode="numeric" min="1" max="86400" step="1" value="${esc(browserValues.browserDialogTimeout)}" ${disabled ? 'disabled' : ''}>
+            </label>
           </div>
           <div class="hm-config-check-grid">
             <label class="hm-channel-check">
               <input id="hm-browser-record-sessions" type="checkbox" ${browserValues.browserRecordSessions ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
               <span>${t('engine.hermesBrowserConfigRecordSessions')}</span>
+            </label>
+            <label class="hm-channel-check">
+              <input id="hm-browser-allow-private-urls" type="checkbox" ${browserValues.browserAllowPrivateUrls ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesBrowserConfigAllowPrivateUrls')}</span>
+            </label>
+            <label class="hm-channel-check">
+              <input id="hm-browser-auto-local-for-private-urls" type="checkbox" ${browserValues.browserAutoLocalForPrivateUrls ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesBrowserConfigAutoLocalForPrivateUrls')}</span>
             </label>
           </div>
           <div class="hm-channel-footnote">${t('engine.hermesBrowserConfigFootnote')}</div>
@@ -3818,6 +3846,11 @@ export function render() {
       browserCommandTimeout: el.querySelector('#hm-browser-command-timeout')?.value || '30',
       browserRecordSessions: !!el.querySelector('#hm-browser-record-sessions')?.checked,
       browserEngine: el.querySelector('#hm-browser-engine')?.value || 'auto',
+      browserAllowPrivateUrls: !!el.querySelector('#hm-browser-allow-private-urls')?.checked,
+      browserAutoLocalForPrivateUrls: !!el.querySelector('#hm-browser-auto-local-for-private-urls')?.checked,
+      browserCdpUrl: el.querySelector('#hm-browser-cdp-url')?.value || '',
+      browserDialogPolicy: el.querySelector('#hm-browser-dialog-policy')?.value || 'must_respond',
+      browserDialogTimeout: el.querySelector('#hm-browser-dialog-timeout')?.value || '300',
     }
     browserSaving = true
     browserError = null

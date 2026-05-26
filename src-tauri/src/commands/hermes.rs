@@ -6892,6 +6892,29 @@ fn normalize_hermes_browser_engine(value: Option<String>, strict: bool) -> Resul
     }
 }
 
+fn normalize_hermes_browser_dialog_policy(
+    value: Option<String>,
+    strict: bool,
+) -> Result<String, String> {
+    let policy = value.unwrap_or_default().trim().to_ascii_lowercase();
+    let policy = if policy.is_empty() {
+        "must_respond".to_string()
+    } else {
+        policy
+    };
+    if matches!(
+        policy.as_str(),
+        "must_respond" | "auto_dismiss" | "auto_accept"
+    ) {
+        return Ok(policy);
+    }
+    if strict {
+        Err("browser.dialog_policy 必须是 must_respond、auto_dismiss 或 auto_accept".to_string())
+    } else {
+        Ok("must_respond".to_string())
+    }
+}
+
 fn normalize_hermes_stt_provider(value: Option<String>, strict: bool) -> Result<String, String> {
     let provider = value.unwrap_or_default().trim().to_ascii_lowercase();
     let provider = if provider.is_empty() {
@@ -7785,12 +7808,34 @@ fn build_hermes_browser_config_values(config: &serde_yaml::Value) -> Value {
         false,
     )
     .unwrap_or_else(|_| "auto".to_string());
+    let browser_allow_private_urls = browser
+        .and_then(|map| yaml_bool_field(map, "allow_private_urls"))
+        .unwrap_or(false);
+    let browser_auto_local_for_private_urls = browser
+        .and_then(|map| yaml_bool_field(map, "auto_local_for_private_urls"))
+        .unwrap_or(true);
+    let browser_cdp_url = browser
+        .and_then(|map| yaml_string_field(map, "cdp_url"))
+        .unwrap_or_default();
+    let browser_dialog_policy = normalize_hermes_browser_dialog_policy(
+        browser.and_then(|map| yaml_string_field(map, "dialog_policy")),
+        false,
+    )
+    .unwrap_or_else(|_| "must_respond".to_string());
+    let browser_dialog_timeout = browser
+        .map(|map| bounded_hermes_i64(yaml_i64_field(map, "dialog_timeout_s"), 300, 1, 86400))
+        .unwrap_or(300);
 
     serde_json::json!({
         "browserInactivityTimeout": browser_inactivity_timeout,
         "browserCommandTimeout": browser_command_timeout,
         "browserRecordSessions": browser_record_sessions,
         "browserEngine": browser_engine,
+        "browserAllowPrivateUrls": browser_allow_private_urls,
+        "browserAutoLocalForPrivateUrls": browser_auto_local_for_private_urls,
+        "browserCdpUrl": browser_cdp_url,
+        "browserDialogPolicy": browser_dialog_policy,
+        "browserDialogTimeout": browser_dialog_timeout,
     })
 }
 
@@ -7828,6 +7873,51 @@ fn merge_hermes_browser_config(config: &mut serde_yaml::Value, form: &Value) -> 
         },
         true,
     )?;
+    let browser_allow_private_urls =
+        form_bool(form, "browserAllowPrivateUrls").unwrap_or_else(|| {
+            current["browserAllowPrivateUrls"]
+                .as_bool()
+                .unwrap_or(false)
+        });
+    let browser_auto_local_for_private_urls = form_bool(form, "browserAutoLocalForPrivateUrls")
+        .unwrap_or_else(|| {
+            current["browserAutoLocalForPrivateUrls"]
+                .as_bool()
+                .unwrap_or(true)
+        });
+    let browser_cdp_url = if form.get("browserCdpUrl").is_some() {
+        form_string(form, "browserCdpUrl")
+            .ok_or_else(|| "browser.cdp_url 必须是字符串".to_string())?
+            .trim()
+            .to_string()
+    } else {
+        current["browserCdpUrl"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    };
+    let browser_dialog_policy = normalize_hermes_browser_dialog_policy(
+        if form.get("browserDialogPolicy").is_some() {
+            form_string(form, "browserDialogPolicy")
+        } else {
+            current["browserDialogPolicy"]
+                .as_str()
+                .map(ToString::to_string)
+        },
+        true,
+    )?;
+    let browser_dialog_timeout = validate_hermes_i64(
+        if form.get("browserDialogTimeout").is_some() {
+            form_i64(form, "browserDialogTimeout")
+        } else {
+            Some(current["browserDialogTimeout"].as_i64().unwrap_or(300))
+        },
+        "browser.dialog_timeout_s",
+        300,
+        1,
+        86400,
+    )?;
 
     let root = ensure_yaml_object(config)?;
     let browser = yaml_child_object(root, "browser")?;
@@ -7846,6 +7936,23 @@ fn merge_hermes_browser_config(config: &mut serde_yaml::Value, form: &Value) -> 
     browser.insert(
         yaml_key("engine"),
         serde_yaml::Value::String(browser_engine),
+    );
+    browser.insert(
+        yaml_key("allow_private_urls"),
+        serde_yaml::Value::Bool(browser_allow_private_urls),
+    );
+    browser.insert(
+        yaml_key("auto_local_for_private_urls"),
+        serde_yaml::Value::Bool(browser_auto_local_for_private_urls),
+    );
+    set_optional_yaml_string(browser, "cdp_url", browser_cdp_url);
+    browser.insert(
+        yaml_key("dialog_policy"),
+        serde_yaml::Value::String(browser_dialog_policy),
+    );
+    browser.insert(
+        yaml_key("dialog_timeout_s"),
+        serde_yaml::Value::Number(browser_dialog_timeout.into()),
     );
     Ok(())
 }
@@ -16370,6 +16477,11 @@ mod hermes_browser_config_tests {
         assert_eq!(values["browserCommandTimeout"], 30);
         assert_eq!(values["browserRecordSessions"], false);
         assert_eq!(values["browserEngine"], "auto");
+        assert_eq!(values["browserAllowPrivateUrls"], false);
+        assert_eq!(values["browserAutoLocalForPrivateUrls"], true);
+        assert_eq!(values["browserCdpUrl"], "");
+        assert_eq!(values["browserDialogPolicy"], "must_respond");
+        assert_eq!(values["browserDialogTimeout"], 300);
     }
 
     #[test]
@@ -16381,6 +16493,11 @@ browser:
   command_timeout: 45
   record_sessions: true
   engine: lightpanda
+  allow_private_urls: true
+  auto_local_for_private_urls: false
+  cdp_url: ws://127.0.0.1:9222/devtools/browser/demo
+  dialog_policy: auto_accept
+  dialog_timeout_s: 120
 "#,
         )
         .unwrap();
@@ -16389,6 +16506,14 @@ browser:
         assert_eq!(values["browserCommandTimeout"], 45);
         assert_eq!(values["browserRecordSessions"], true);
         assert_eq!(values["browserEngine"], "lightpanda");
+        assert_eq!(values["browserAllowPrivateUrls"], true);
+        assert_eq!(values["browserAutoLocalForPrivateUrls"], false);
+        assert_eq!(
+            values["browserCdpUrl"],
+            "ws://127.0.0.1:9222/devtools/browser/demo"
+        );
+        assert_eq!(values["browserDialogPolicy"], "auto_accept");
+        assert_eq!(values["browserDialogTimeout"], 120);
     }
 
     #[test]
@@ -16419,6 +16544,11 @@ streaming:
                 "browserCommandTimeout": "60",
                 "browserRecordSessions": true,
                 "browserEngine": "chrome",
+                "browserAllowPrivateUrls": true,
+                "browserAutoLocalForPrivateUrls": false,
+                "browserCdpUrl": "http://127.0.0.1:9222",
+                "browserDialogPolicy": "auto_dismiss",
+                "browserDialogTimeout": "45",
             }),
         )
         .unwrap();
@@ -16430,9 +16560,22 @@ streaming:
         assert_eq!(config["browser"]["record_sessions"].as_bool(), Some(true));
         assert_eq!(config["browser"]["engine"].as_str(), Some("chrome"));
         assert_eq!(
-            config["browser"]["cdp_url"].as_str(),
-            Some("ws://127.0.0.1:9222/devtools/browser/demo")
+            config["browser"]["allow_private_urls"].as_bool(),
+            Some(true)
         );
+        assert_eq!(
+            config["browser"]["auto_local_for_private_urls"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            config["browser"]["cdp_url"].as_str(),
+            Some("http://127.0.0.1:9222")
+        );
+        assert_eq!(
+            config["browser"]["dialog_policy"].as_str(),
+            Some("auto_dismiss")
+        );
+        assert_eq!(config["browser"]["dialog_timeout_s"].as_i64(), Some(45));
         assert_eq!(
             config["browser"]["camofox"]["managed_persistence"].as_bool(),
             Some(true)
@@ -16441,6 +16584,26 @@ streaming:
             config["browser"]["custom_flag"].as_str(),
             Some("keep-browser")
         );
+    }
+
+    #[test]
+    fn merge_browser_config_removes_empty_cdp_url() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+browser:
+  cdp_url: ws://127.0.0.1:9222/devtools/browser/demo
+  custom_flag: keep-browser
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_browser_config(&mut config, &json!({ "browserCdpUrl": "   " })).unwrap();
+
+        assert_eq!(
+            config["browser"]["custom_flag"].as_str(),
+            Some("keep-browser")
+        );
+        assert!(config["browser"]["cdp_url"].is_null());
     }
 
     #[test]
@@ -16456,6 +16619,16 @@ streaming:
         let err = merge_hermes_browser_config(&mut config, &json!({ "browserCommandTimeout": 4 }))
             .unwrap_err();
         assert!(err.contains("browser.command_timeout"));
+        let err =
+            merge_hermes_browser_config(&mut config, &json!({ "browserDialogPolicy": "ignore" }))
+                .unwrap_err();
+        assert!(err.contains("browser.dialog_policy"));
+        let err = merge_hermes_browser_config(&mut config, &json!({ "browserDialogTimeout": 0 }))
+            .unwrap_err();
+        assert!(err.contains("browser.dialog_timeout_s"));
+        let err =
+            merge_hermes_browser_config(&mut config, &json!({ "browserCdpUrl": 123 })).unwrap_err();
+        assert!(err.contains("browser.cdp_url"));
     }
 }
 

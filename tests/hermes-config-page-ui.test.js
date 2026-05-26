@@ -379,6 +379,11 @@ test('Hermes 配置页会暴露浏览器基础结构化配置字段', () => {
     'hm-browser-command-timeout',
     'hm-browser-record-sessions',
     'hm-browser-engine',
+    'hm-browser-allow-private-urls',
+    'hm-browser-auto-local-for-private-urls',
+    'hm-browser-cdp-url',
+    'hm-browser-dialog-policy',
+    'hm-browser-dialog-timeout',
   ]) {
     assert.match(source, new RegExp(`id="${id}"`), `缺少 ${id}`)
   }

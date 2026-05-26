@@ -3325,6 +3325,7 @@ const HERMES_STREAMING_TRANSPORTS = new Set(['auto', 'draft', 'edit', 'off'])
 const HERMES_CODE_EXECUTION_MODES = new Set(['project', 'strict'])
 const HERMES_TERMINAL_BACKENDS = new Set(['local', 'ssh', 'docker', 'singularity', 'modal', 'daytona', 'vercel_sandbox'])
 const HERMES_BROWSER_ENGINES = new Set(['auto', 'lightpanda', 'chrome'])
+const HERMES_BROWSER_DIALOG_POLICIES = new Set(['must_respond', 'auto_dismiss', 'auto_accept'])
 const HERMES_STT_PROVIDERS = new Set(['auto', 'local', 'groq', 'openai', 'mistral'])
 const HERMES_STT_LOCAL_MODELS = new Set(['tiny', 'base', 'small', 'medium', 'large-v3', 'turbo'])
 const HERMES_STT_OPENAI_MODELS = new Set(['whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe'])
@@ -3460,6 +3461,13 @@ function normalizeHermesBrowserEngine(value, strict = false) {
   if (HERMES_BROWSER_ENGINES.has(engine)) return engine
   if (strict) throw new Error('browser.engine 必须是 auto、lightpanda 或 chrome')
   return 'auto'
+}
+
+function normalizeHermesBrowserDialogPolicy(value, strict = false) {
+  const policy = String(value ?? '').trim().toLowerCase() || 'must_respond'
+  if (HERMES_BROWSER_DIALOG_POLICIES.has(policy)) return policy
+  if (strict) throw new Error('browser.dialog_policy 必须是 must_respond、auto_dismiss 或 auto_accept')
+  return 'must_respond'
 }
 
 function normalizeHermesSttProvider(value, strict = false) {
@@ -5293,6 +5301,11 @@ export function buildHermesBrowserConfigValues(config = {}) {
     browserCommandTimeout: parseHermesInteger(browser.command_timeout, 'browser.command_timeout', 30, 5, 3600, false),
     browserRecordSessions: readHermesBool(browser.record_sessions, false),
     browserEngine: normalizeHermesBrowserEngine(browser.engine, false),
+    browserAllowPrivateUrls: readHermesBool(browser.allow_private_urls, false),
+    browserAutoLocalForPrivateUrls: readHermesBool(browser.auto_local_for_private_urls, true),
+    browserCdpUrl: normalizeHermesOptionalString(browser.cdp_url, 'browser.cdp_url'),
+    browserDialogPolicy: normalizeHermesBrowserDialogPolicy(browser.dialog_policy, false),
+    browserDialogTimeout: parseHermesInteger(browser.dialog_timeout_s, 'browser.dialog_timeout_s', 300, 1, 86400, false),
   }
 }
 
@@ -5306,6 +5319,13 @@ export function mergeHermesBrowserConfig(config = {}, form = {}) {
   browser.command_timeout = parseHermesInteger(Object.hasOwn(form, 'browserCommandTimeout') ? form.browserCommandTimeout : currentValues.browserCommandTimeout, 'browser.command_timeout', 30, 5, 3600, true)
   browser.record_sessions = formHermesBool(form, 'browserRecordSessions', currentValues.browserRecordSessions)
   browser.engine = normalizeHermesBrowserEngine(Object.hasOwn(form, 'browserEngine') ? form.browserEngine : currentValues.browserEngine, true)
+  browser.allow_private_urls = formHermesBool(form, 'browserAllowPrivateUrls', currentValues.browserAllowPrivateUrls)
+  browser.auto_local_for_private_urls = formHermesBool(form, 'browserAutoLocalForPrivateUrls', currentValues.browserAutoLocalForPrivateUrls)
+  const cdpUrl = normalizeHermesOptionalString(Object.hasOwn(form, 'browserCdpUrl') ? form.browserCdpUrl : currentValues.browserCdpUrl, 'browser.cdp_url')
+  if (cdpUrl) browser.cdp_url = cdpUrl
+  else delete browser.cdp_url
+  browser.dialog_policy = normalizeHermesBrowserDialogPolicy(Object.hasOwn(form, 'browserDialogPolicy') ? form.browserDialogPolicy : currentValues.browserDialogPolicy, true)
+  browser.dialog_timeout_s = parseHermesInteger(Object.hasOwn(form, 'browserDialogTimeout') ? form.browserDialogTimeout : currentValues.browserDialogTimeout, 'browser.dialog_timeout_s', 300, 1, 86400, true)
   next.browser = browser
   return next
 }
