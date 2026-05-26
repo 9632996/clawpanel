@@ -2404,6 +2404,39 @@ fn normalize_hermes_env_name_list(raw: Option<String>, key: &str) -> Result<Vec<
     Ok(values)
 }
 
+fn normalize_hermes_shell_init_file_list(
+    raw: Option<String>,
+    key: &str,
+) -> Result<Vec<String>, String> {
+    let mut values = Vec::new();
+    for item in normalize_hermes_multiline_list(raw) {
+        let path = item.trim().to_string();
+        if path.is_empty() {
+            continue;
+        }
+        if path.chars().any(|ch| ch.is_control() || ch.is_whitespace()) {
+            return Err(format!(
+                "{key} 每行只能填写一个 shell 初始化文件路径，路径不能包含空白字符"
+            ));
+        }
+        if !path.chars().all(|ch| {
+            ch.is_ascii_alphanumeric()
+                || matches!(
+                    ch,
+                    '~' | '$' | '%' | '{' | '}' | '_' | '.' | '/' | '\\' | ':' | '-'
+                )
+        }) {
+            return Err(format!(
+                "{key} 只能包含路径字符、~、环境变量占位、点、斜杠、冒号和短横线"
+            ));
+        }
+        if !values.contains(&path) {
+            values.push(path);
+        }
+    }
+    Ok(values)
+}
+
 fn normalize_hermes_auxiliary_provider(
     value: Option<String>,
     key: &str,
@@ -8604,6 +8637,15 @@ fn build_hermes_terminal_config_values(config: &serde_yaml::Value) -> Value {
     let terminal_lifetime_seconds = terminal
         .map(|map| bounded_hermes_i64(yaml_i64_field(map, "lifetime_seconds"), 300, 0, 86400))
         .unwrap_or(300);
+    let terminal_shell_init_files = terminal
+        .map(|map| yaml_string_sequence_field(map, "shell_init_files").join("\n"))
+        .unwrap_or_default();
+    let terminal_auto_source_bashrc = terminal
+        .and_then(|map| yaml_bool_field(map, "auto_source_bashrc"))
+        .unwrap_or(true);
+    let terminal_persistent_shell = terminal
+        .and_then(|map| yaml_bool_field(map, "persistent_shell"))
+        .unwrap_or(true);
     let terminal_docker_mount_cwd_to_workspace = terminal
         .and_then(|map| yaml_bool_field(map, "docker_mount_cwd_to_workspace"))
         .unwrap_or(false);
@@ -8641,6 +8683,9 @@ fn build_hermes_terminal_config_values(config: &serde_yaml::Value) -> Value {
         "terminalCwd": terminal_cwd,
         "terminalTimeout": terminal_timeout,
         "terminalLifetimeSeconds": terminal_lifetime_seconds,
+        "terminalShellInitFiles": terminal_shell_init_files,
+        "terminalAutoSourceBashrc": terminal_auto_source_bashrc,
+        "terminalPersistentShell": terminal_persistent_shell,
         "terminalDockerMountCwdToWorkspace": terminal_docker_mount_cwd_to_workspace,
         "terminalDockerRunAsHostUser": terminal_docker_run_as_host_user,
         "terminalDockerImage": terminal_docker_image,
@@ -8707,6 +8752,22 @@ fn merge_hermes_terminal_config(
         0,
         86400,
     )?;
+    let terminal_shell_init_files = normalize_hermes_shell_init_file_list(
+        form_string(form, "terminalShellInitFiles").or_else(|| {
+            current["terminalShellInitFiles"]
+                .as_str()
+                .map(ToString::to_string)
+        }),
+        "terminal.shell_init_files",
+    )?;
+    let terminal_auto_source_bashrc =
+        form_bool(form, "terminalAutoSourceBashrc").unwrap_or_else(|| {
+            current["terminalAutoSourceBashrc"]
+                .as_bool()
+                .unwrap_or(true)
+        });
+    let terminal_persistent_shell = form_bool(form, "terminalPersistentShell")
+        .unwrap_or_else(|| current["terminalPersistentShell"].as_bool().unwrap_or(true));
     let terminal_docker_mount_cwd_to_workspace =
         form_bool(form, "terminalDockerMountCwdToWorkspace").unwrap_or_else(|| {
             current["terminalDockerMountCwdToWorkspace"]
@@ -8843,6 +8904,27 @@ fn merge_hermes_terminal_config(
     terminal.insert(
         yaml_key("lifetime_seconds"),
         serde_yaml::Value::Number(terminal_lifetime_seconds.into()),
+    );
+    if terminal_shell_init_files.is_empty() {
+        terminal.remove(yaml_key("shell_init_files"));
+    } else {
+        terminal.insert(
+            yaml_key("shell_init_files"),
+            serde_yaml::Value::Sequence(
+                terminal_shell_init_files
+                    .into_iter()
+                    .map(serde_yaml::Value::String)
+                    .collect(),
+            ),
+        );
+    }
+    terminal.insert(
+        yaml_key("auto_source_bashrc"),
+        serde_yaml::Value::Bool(terminal_auto_source_bashrc),
+    );
+    terminal.insert(
+        yaml_key("persistent_shell"),
+        serde_yaml::Value::Bool(terminal_persistent_shell),
     );
     terminal.insert(
         yaml_key("docker_mount_cwd_to_workspace"),
@@ -17764,6 +17846,9 @@ mod hermes_terminal_config_tests {
         assert_eq!(values["terminalCwd"], ".");
         assert_eq!(values["terminalTimeout"], 180);
         assert_eq!(values["terminalLifetimeSeconds"], 300);
+        assert_eq!(values["terminalShellInitFiles"], "");
+        assert_eq!(values["terminalAutoSourceBashrc"], true);
+        assert_eq!(values["terminalPersistentShell"], true);
         assert_eq!(values["terminalDockerMountCwdToWorkspace"], false);
         assert_eq!(values["terminalDockerRunAsHostUser"], false);
         assert_eq!(values["terminalContainerCpu"], 1);
@@ -17790,6 +17875,11 @@ terminal:
   cwd: /workspace
   timeout: 600
   lifetime_seconds: 1800
+  shell_init_files:
+    - ~/.zshrc
+    - ${HOME}/.config/hermes/env.sh
+  auto_source_bashrc: false
+  persistent_shell: false
   docker_mount_cwd_to_workspace: true
   docker_run_as_host_user: true
   docker_image: nikolaik/python-nodejs:python3.11-nodejs20
@@ -17815,6 +17905,12 @@ terminal:
         assert_eq!(values["terminalCwd"], "/workspace");
         assert_eq!(values["terminalTimeout"], 600);
         assert_eq!(values["terminalLifetimeSeconds"], 1800);
+        assert_eq!(
+            values["terminalShellInitFiles"],
+            "~/.zshrc\n${HOME}/.config/hermes/env.sh"
+        );
+        assert_eq!(values["terminalAutoSourceBashrc"], false);
+        assert_eq!(values["terminalPersistentShell"], false);
         assert_eq!(values["terminalDockerMountCwdToWorkspace"], true);
         assert_eq!(values["terminalDockerRunAsHostUser"], true);
         assert_eq!(
@@ -17849,6 +17945,8 @@ model:
   provider: anthropic
 terminal:
   backend: local
+  shell_init_files:
+    - ~/.profile
   docker_image: custom/python-node
   docker_forward_env:
     - OLD_TOKEN
@@ -17866,6 +17964,9 @@ streaming:
                 "terminalCwd": "/workspace",
                 "terminalTimeout": "900",
                 "terminalLifetimeSeconds": "1200",
+                "terminalShellInitFiles": "~/.zshrc\n${HOME}/.config/hermes/env.sh\n~/.zshrc",
+                "terminalAutoSourceBashrc": false,
+                "terminalPersistentShell": false,
                 "terminalDockerMountCwdToWorkspace": true,
                 "terminalDockerRunAsHostUser": true,
                 "terminalDockerImage": "nikolaik/python-nodejs:python3.12-nodejs22",
@@ -17891,6 +17992,29 @@ streaming:
         assert_eq!(config["terminal"]["cwd"].as_str(), Some("/workspace"));
         assert_eq!(config["terminal"]["timeout"].as_i64(), Some(900));
         assert_eq!(config["terminal"]["lifetime_seconds"].as_i64(), Some(1200));
+        assert_eq!(
+            config["terminal"]["shell_init_files"][0].as_str(),
+            Some("~/.zshrc")
+        );
+        assert_eq!(
+            config["terminal"]["shell_init_files"][1].as_str(),
+            Some("${HOME}/.config/hermes/env.sh")
+        );
+        assert_eq!(
+            config["terminal"]["shell_init_files"]
+                .as_sequence()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            config["terminal"]["auto_source_bashrc"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            config["terminal"]["persistent_shell"].as_bool(),
+            Some(false)
+        );
         assert_eq!(
             config["terminal"]["docker_mount_cwd_to_workspace"].as_bool(),
             Some(true)
@@ -17974,6 +18098,33 @@ terminal:
         .unwrap();
 
         assert!(config["terminal"]["docker_forward_env"].is_null());
+        assert_eq!(
+            config["terminal"]["custom_flag"].as_str(),
+            Some("keep-terminal")
+        );
+    }
+
+    #[test]
+    fn merge_terminal_config_removes_empty_shell_init_files() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+terminal:
+  shell_init_files:
+    - ~/.bashrc
+  custom_flag: keep-terminal
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_terminal_config(
+            &mut config,
+            &json!({
+                "terminalShellInitFiles": "  \n",
+            }),
+        )
+        .unwrap();
+
+        assert!(config["terminal"]["shell_init_files"].is_null());
         assert_eq!(
             config["terminal"]["custom_flag"].as_str(),
             Some("keep-terminal")
@@ -18083,6 +18234,12 @@ terminal:
         )
         .unwrap_err();
         assert!(err.contains("terminal.docker_forward_env"));
+        let err = merge_hermes_terminal_config(
+            &mut config,
+            &json!({ "terminalShellInitFiles": "valid.sh\nbad path.sh" }),
+        )
+        .unwrap_err();
+        assert!(err.contains("terminal.shell_init_files"));
     }
 }
 

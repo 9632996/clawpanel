@@ -308,6 +308,9 @@ const TERMINAL_DEFAULTS = {
   terminalCwd: '.',
   terminalTimeout: 180,
   terminalLifetimeSeconds: 300,
+  terminalShellInitFiles: '',
+  terminalAutoSourceBashrc: true,
+  terminalPersistentShell: true,
   terminalDockerMountCwdToWorkspace: false,
   terminalDockerRunAsHostUser: false,
   terminalDockerImage: '',
@@ -2302,8 +2305,20 @@ export function render() {
               <span class="hm-field-label">${t('engine.hermesTerminalConfigLifetimeSeconds')}</span>
               <input id="hm-terminal-lifetime-seconds" class="hm-input" type="number" inputmode="numeric" min="0" max="86400" step="1" value="${esc(terminalValues.terminalLifetimeSeconds)}" ${disabled ? 'disabled' : ''}>
             </label>
+            <label class="hm-field hm-field--wide">
+              <span class="hm-field-label">${t('engine.hermesTerminalConfigShellInitFiles')}</span>
+              <textarea id="hm-terminal-shell-init-files" class="hm-input hm-textarea" rows="3" placeholder="~/.bashrc&#10;\${HOME}/.config/hermes/env.sh" ${disabled ? 'disabled' : ''}>${esc(terminalValues.terminalShellInitFiles)}</textarea>
+            </label>
           </div>
           <div class="hm-config-check-grid">
+            <label class="hm-channel-check">
+              <input id="hm-terminal-auto-source-bashrc" type="checkbox" ${terminalValues.terminalAutoSourceBashrc ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesTerminalConfigAutoSourceBashrc')}</span>
+            </label>
+            <label class="hm-channel-check">
+              <input id="hm-terminal-persistent-shell" type="checkbox" ${terminalValues.terminalPersistentShell ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesTerminalConfigPersistentShell')}</span>
+            </label>
             <label class="hm-channel-check hm-channel-check--danger">
               <input id="hm-terminal-docker-mount-cwd-to-workspace" type="checkbox" ${terminalValues.terminalDockerMountCwdToWorkspace ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
               <span>${t('engine.hermesTerminalConfigDockerMountCwd')}</span>
@@ -4250,6 +4265,9 @@ export function render() {
       terminalCwd: el.querySelector('#hm-terminal-cwd')?.value || '.',
       terminalTimeout: el.querySelector('#hm-terminal-timeout')?.value || '180',
       terminalLifetimeSeconds: el.querySelector('#hm-terminal-lifetime-seconds')?.value || '300',
+      terminalShellInitFiles: el.querySelector('#hm-terminal-shell-init-files')?.value || '',
+      terminalAutoSourceBashrc: !!el.querySelector('#hm-terminal-auto-source-bashrc')?.checked,
+      terminalPersistentShell: !!el.querySelector('#hm-terminal-persistent-shell')?.checked,
       terminalDockerMountCwdToWorkspace: !!el.querySelector('#hm-terminal-docker-mount-cwd-to-workspace')?.checked,
       terminalDockerRunAsHostUser: !!el.querySelector('#hm-terminal-docker-run-as-host-user')?.checked,
       terminalDockerImage: el.querySelector('#hm-terminal-docker-image')?.value || '',

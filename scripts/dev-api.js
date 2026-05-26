@@ -3594,6 +3594,25 @@ function normalizeHermesEnvNameList(value, key) {
   return normalized
 }
 
+function normalizeHermesShellInitFileList(value, key) {
+  const seen = new Set()
+  const normalized = []
+  for (const item of normalizeHermesMultilineList(value)) {
+    const path = String(item ?? '').trim()
+    if (!path || /[\u0000-\u001f\u007f]/.test(path) || /\s/.test(path)) {
+      throw new Error(`${key} 每行只能填写一个 shell 初始化文件路径，路径不能包含空白字符`)
+    }
+    if (!/^[~$%{}A-Za-z0-9_./:\\-]+$/.test(path)) {
+      throw new Error(`${key} 只能包含路径字符、~、环境变量占位、点、斜杠、冒号和短横线`)
+    }
+    if (!seen.has(path)) {
+      seen.add(path)
+      normalized.push(path)
+    }
+  }
+  return normalized
+}
+
 function normalizeHermesAuxiliaryProvider(value, key, strict = false) {
   const provider = String(value ?? '').trim().toLowerCase() || 'auto'
   if (HERMES_AUXILIARY_PROVIDERS.has(provider)) return provider
@@ -5498,6 +5517,9 @@ export function buildHermesTerminalConfigValues(config = {}) {
     terminalCwd: typeof terminal.cwd === 'string' && terminal.cwd.trim() ? terminal.cwd : '.',
     terminalTimeout: parseHermesInteger(terminal.timeout, 'terminal.timeout', 180, 1, 86400, false),
     terminalLifetimeSeconds: parseHermesInteger(terminal.lifetime_seconds, 'terminal.lifetime_seconds', 300, 0, 86400, false),
+    terminalShellInitFiles: normalizeHermesShellInitFileList(terminal.shell_init_files || [], 'terminal.shell_init_files').join('\n'),
+    terminalAutoSourceBashrc: readHermesBool(terminal.auto_source_bashrc, true),
+    terminalPersistentShell: readHermesBool(terminal.persistent_shell, true),
     terminalDockerMountCwdToWorkspace: readHermesBool(terminal.docker_mount_cwd_to_workspace, false),
     terminalDockerRunAsHostUser: readHermesBool(terminal.docker_run_as_host_user, false),
     terminalDockerImage: typeof terminal.docker_image === 'string' ? terminal.docker_image.trim() : '',
@@ -5526,6 +5548,11 @@ export function mergeHermesTerminalConfig(config = {}, form = {}) {
   terminal.cwd = String(Object.hasOwn(form, 'terminalCwd') ? form.terminalCwd : currentValues.terminalCwd).trim() || '.'
   terminal.timeout = parseHermesInteger(Object.hasOwn(form, 'terminalTimeout') ? form.terminalTimeout : currentValues.terminalTimeout, 'terminal.timeout', 180, 1, 86400, true)
   terminal.lifetime_seconds = parseHermesInteger(Object.hasOwn(form, 'terminalLifetimeSeconds') ? form.terminalLifetimeSeconds : currentValues.terminalLifetimeSeconds, 'terminal.lifetime_seconds', 300, 0, 86400, true)
+  const shellInitFiles = normalizeHermesShellInitFileList(Object.hasOwn(form, 'terminalShellInitFiles') ? form.terminalShellInitFiles : currentValues.terminalShellInitFiles, 'terminal.shell_init_files')
+  if (shellInitFiles.length) terminal.shell_init_files = shellInitFiles
+  else delete terminal.shell_init_files
+  terminal.auto_source_bashrc = formHermesBool(form, 'terminalAutoSourceBashrc', currentValues.terminalAutoSourceBashrc)
+  terminal.persistent_shell = formHermesBool(form, 'terminalPersistentShell', currentValues.terminalPersistentShell)
   terminal.docker_mount_cwd_to_workspace = formHermesBool(form, 'terminalDockerMountCwdToWorkspace', currentValues.terminalDockerMountCwdToWorkspace)
   terminal.docker_run_as_host_user = formHermesBool(form, 'terminalDockerRunAsHostUser', currentValues.terminalDockerRunAsHostUser)
   for (const [formKey, yamlKey] of [

@@ -14,6 +14,9 @@ test('Hermes 终端执行配置读取会提供上游默认值', () => {
     terminalCwd: '.',
     terminalTimeout: 180,
     terminalLifetimeSeconds: 300,
+    terminalShellInitFiles: '',
+    terminalAutoSourceBashrc: true,
+    terminalPersistentShell: true,
     terminalDockerMountCwdToWorkspace: false,
     terminalDockerRunAsHostUser: false,
     terminalContainerCpu: 1,
@@ -39,6 +42,9 @@ test('Hermes 终端执行配置读取会回显 YAML 字段', () => {
       cwd: '/workspace',
       timeout: 600,
       lifetime_seconds: 1800,
+      shell_init_files: ['~/.zshrc', '${HOME}/.config/hermes/env.sh'],
+      auto_source_bashrc: false,
+      persistent_shell: false,
       docker_mount_cwd_to_workspace: true,
       docker_run_as_host_user: true,
       docker_image: 'nikolaik/python-nodejs:python3.11-nodejs20',
@@ -61,6 +67,9 @@ test('Hermes 终端执行配置读取会回显 YAML 字段', () => {
   assert.equal(values.terminalCwd, '/workspace')
   assert.equal(values.terminalTimeout, 600)
   assert.equal(values.terminalLifetimeSeconds, 1800)
+  assert.equal(values.terminalShellInitFiles, '~/.zshrc\n${HOME}/.config/hermes/env.sh')
+  assert.equal(values.terminalAutoSourceBashrc, false)
+  assert.equal(values.terminalPersistentShell, false)
   assert.equal(values.terminalDockerMountCwdToWorkspace, true)
   assert.equal(values.terminalDockerRunAsHostUser, true)
   assert.equal(values.terminalDockerImage, 'nikolaik/python-nodejs:python3.11-nodejs20')
@@ -83,6 +92,7 @@ test('Hermes 终端执行配置保存会保留未知字段并写入上游结构'
     model: { provider: 'anthropic' },
     terminal: {
       backend: 'local',
+      shell_init_files: ['~/.profile'],
       docker_image: 'custom/python-node',
       docker_forward_env: ['OLD_TOKEN'],
       custom_flag: 'keep-terminal',
@@ -93,6 +103,9 @@ test('Hermes 终端执行配置保存会保留未知字段并写入上游结构'
     terminalCwd: '/workspace',
     terminalTimeout: '900',
     terminalLifetimeSeconds: '1200',
+    terminalShellInitFiles: '~/.zshrc\n${HOME}/.config/hermes/env.sh\n~/.zshrc',
+    terminalAutoSourceBashrc: false,
+    terminalPersistentShell: false,
     terminalDockerMountCwdToWorkspace: true,
     terminalDockerRunAsHostUser: true,
     terminalDockerImage: 'nikolaik/python-nodejs:python3.12-nodejs22',
@@ -116,6 +129,9 @@ test('Hermes 终端执行配置保存会保留未知字段并写入上游结构'
   assert.equal(next.terminal.cwd, '/workspace')
   assert.equal(next.terminal.timeout, 900)
   assert.equal(next.terminal.lifetime_seconds, 1200)
+  assert.deepEqual(next.terminal.shell_init_files, ['~/.zshrc', '${HOME}/.config/hermes/env.sh'])
+  assert.equal(next.terminal.auto_source_bashrc, false)
+  assert.equal(next.terminal.persistent_shell, false)
   assert.equal(next.terminal.docker_mount_cwd_to_workspace, true)
   assert.equal(next.terminal.docker_run_as_host_user, true)
   assert.equal(next.terminal.docker_image, 'nikolaik/python-nodejs:python3.12-nodejs22')
@@ -145,6 +161,20 @@ test('Hermes 终端执行配置保存空 Docker 环境变量转发会删除对�
   })
 
   assert.equal(Object.hasOwn(next.terminal, 'docker_forward_env'), false)
+  assert.equal(next.terminal.custom_flag, 'keep-terminal')
+})
+
+test('Hermes 终端执行配置保存空 Shell 初始化文件会删除对应字段', () => {
+  const next = mergeHermesTerminalConfig({
+    terminal: {
+      shell_init_files: ['~/.bashrc'],
+      custom_flag: 'keep-terminal',
+    },
+  }, {
+    terminalShellInitFiles: '  \n',
+  })
+
+  assert.equal(Object.hasOwn(next.terminal, 'shell_init_files'), false)
   assert.equal(next.terminal.custom_flag, 'keep-terminal')
 })
 
@@ -226,5 +256,9 @@ test('Hermes 终端执行配置保存会拒绝非法后端和越界值', () => {
   assert.throws(
     () => mergeHermesTerminalConfig({}, { terminalDockerForwardEnv: 'GOOD_TOKEN\nBAD TOKEN' }),
     /terminal\.docker_forward_env/,
+  )
+  assert.throws(
+    () => mergeHermesTerminalConfig({}, { terminalShellInitFiles: 'valid.sh\nbad path.sh' }),
+    /terminal\.shell_init_files/,
   )
 })
