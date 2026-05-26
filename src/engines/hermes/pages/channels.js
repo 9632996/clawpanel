@@ -17,6 +17,13 @@ const CHANNELS = [
     fields: [
       { key: 'botToken', labelKey: 'engine.hermesChannelBotToken', type: 'password', placeholder: '123456:ABC-DEF...' },
     ],
+    advancedFields: [
+      { key: 'replyToMode', labelKey: 'engine.hermesChannelTelegramReplyToMode', type: 'select', options: [['first', 'engine.hermesChannelTelegramReplyFirst'], ['all', 'engine.hermesChannelTelegramReplyAll'], ['off', 'engine.hermesChannelTelegramReplyOff']] },
+    ],
+    advancedToggles: [
+      { key: 'guestMode', labelKey: 'engine.hermesChannelTelegramGuestMode' },
+      { key: 'disableLinkPreviews', labelKey: 'engine.hermesChannelTelegramDisableLinkPreviews' },
+    ],
   },
   {
     id: 'discord',
@@ -270,6 +277,11 @@ function defaultForm(platform) {
     form.threadRequireMention = false
     form.historyBackfill = false
     form.replyToMode = 'first'
+  }
+  if (platform === 'telegram') {
+    form.replyToMode = 'first'
+    form.guestMode = false
+    form.disableLinkPreviews = false
   }
   if (platform === 'slack') form.webhookPath = '/slack/events'
   return form

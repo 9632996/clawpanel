@@ -3340,6 +3340,7 @@ const HERMES_PROVIDER_ROUTING_SORTS = new Set(['price', 'throughput', 'latency']
 const HERMES_PROVIDER_ROUTING_DATA_COLLECTION = new Set(['allow', 'deny'])
 const HERMES_DISPLAY_TOOL_PROGRESS_VALUES = new Set(['off', 'new', 'all', 'verbose'])
 const HERMES_DISPLAY_STREAMING_VALUES = new Set(['inherit', 'true', 'false'])
+const HERMES_TELEGRAM_REPLY_TO_MODE_VALUES = new Set(['off', 'first', 'all'])
 const HERMES_DISPLAY_RESUME_VALUES = new Set(['full', 'minimal'])
 const HERMES_DISPLAY_BUSY_INPUT_MODES = new Set(['interrupt', 'queue', 'steer'])
 const HERMES_DISPLAY_BACKGROUND_PROCESS_NOTIFICATIONS = new Set(['off', 'result', 'error', 'all'])
@@ -5386,6 +5387,13 @@ function normalizeHermesGroupPolicy(raw) {
   return 'allowlist'
 }
 
+function normalizeHermesTelegramReplyToMode(raw, strict = false) {
+  const value = String(raw || '').trim().toLowerCase() || 'first'
+  if (HERMES_TELEGRAM_REPLY_TO_MODE_VALUES.has(value)) return value
+  if (strict) throw new Error('platforms.telegram.extra.reply_to_mode 必须是 off、first 或 all')
+  return 'first'
+}
+
 function readHermesPlatform(config, platform) {
   const platforms = config?.platforms && typeof config.platforms === 'object' ? config.platforms : {}
   const entry = platforms?.[platform] && typeof platforms[platform] === 'object' ? platforms[platform] : {}
@@ -5400,6 +5408,12 @@ export function buildHermesChannelConfigValues(config = {}, envValues = {}) {
     const form = { enabled: entry.enabled === true }
     if (platform === 'telegram') {
       form.botToken = hermesEnvValue(envValues, 'TELEGRAM_BOT_TOKEN') || (typeof entry.token === 'string' ? entry.token : '')
+      putHermesString(form, extra, 'reply_to_mode')
+      putHermesBool(form, extra, 'guest_mode')
+      putHermesBool(form, extra, 'disable_link_previews')
+      form.replyToMode = normalizeHermesTelegramReplyToMode(hermesEnvValue(envValues, 'TELEGRAM_REPLY_TO_MODE') || form.replyToMode, false)
+      putHermesEnvBool(form, envValues, 'TELEGRAM_GUEST_MODE', 'guestMode')
+      putHermesEnvBool(form, envValues, 'TELEGRAM_DISABLE_LINK_PREVIEWS', 'disableLinkPreviews')
     } else if (platform === 'discord') {
       form.token = hermesEnvValue(envValues, 'DISCORD_BOT_TOKEN') || (typeof entry.token === 'string' ? entry.token : '')
       for (const [yamlKey, formKey] of [
@@ -5611,6 +5625,11 @@ function normalizeHermesChannelForm(platform, form = {}) {
     normalized.historyBackfillLimit = String(normalized.historyBackfillLimit || '').trim()
     normalized.replyToMode = String(normalized.replyToMode || '').trim()
   }
+  if (platform === 'telegram') {
+    normalized.replyToMode = normalizeHermesTelegramReplyToMode(normalized.replyToMode, true)
+    if (Object.hasOwn(normalized, 'guestMode')) normalized.guestMode = normalized.guestMode === true || normalized.guestMode === 'true' || normalized.guestMode === 'on'
+    if (Object.hasOwn(normalized, 'disableLinkPreviews')) normalized.disableLinkPreviews = normalized.disableLinkPreviews === true || normalized.disableLinkPreviews === 'true' || normalized.disableLinkPreviews === 'on'
+  }
   if (platform === 'irc') {
     if (Object.hasOwn(normalized, 'useTls')) normalized.useTls = normalized.useTls === true || normalized.useTls === 'true' || normalized.useTls === 'on'
   }
@@ -5697,6 +5716,9 @@ export function mergeHermesChannelConfig(config = {}, platform, form = {}) {
   entry.enabled = normalized.enabled
   if (normalizedPlatform === 'telegram') {
     deleteHermesEntryKey(entry, 'token')
+    setHermesExtra(entry, 'reply_to_mode', normalized.replyToMode)
+    if (Object.hasOwn(normalized, 'guestMode')) setHermesExtra(entry, 'guest_mode', !!normalized.guestMode)
+    if (Object.hasOwn(normalized, 'disableLinkPreviews')) setHermesExtra(entry, 'disable_link_previews', !!normalized.disableLinkPreviews)
   } else if (normalizedPlatform === 'discord') {
     deleteHermesEntryKey(entry, 'token')
     for (const [formKey, extraKey] of [
@@ -5860,6 +5882,9 @@ export function buildHermesChannelEnvUpdates(platform, form = {}) {
     updates.TELEGRAM_ALLOWED_USERS = csvEnvValue(form.allowFrom)
     updates.TELEGRAM_GROUP_ALLOWED_USERS = csvEnvValue(form.groupAllowFrom)
     if (Object.hasOwn(form, 'requireMention')) updates.TELEGRAM_REQUIRE_MENTION = boolEnvValue(form.requireMention)
+    updates.TELEGRAM_REPLY_TO_MODE = normalizeHermesTelegramReplyToMode(form.replyToMode, true)
+    if (Object.hasOwn(form, 'guestMode')) updates.TELEGRAM_GUEST_MODE = boolEnvValue(form.guestMode)
+    if (Object.hasOwn(form, 'disableLinkPreviews')) updates.TELEGRAM_DISABLE_LINK_PREVIEWS = boolEnvValue(form.disableLinkPreviews)
   } else if (platform === 'discord') {
     updates.DISCORD_BOT_TOKEN = String(form.token || '').trim()
     updates.DISCORD_ALLOWED_USERS = csvEnvValue(form.allowFrom)

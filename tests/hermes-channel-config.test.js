@@ -18,6 +18,9 @@ test('Hermes 渠道读取会从 platforms 平台配置生成稳定表单值', ()
           group_policy: 'allowlist',
           allow_from: ['1001', '1002'],
           require_mention: true,
+          reply_to_mode: 'all',
+          guest_mode: true,
+          disable_link_previews: true,
         },
       },
     },
@@ -29,6 +32,9 @@ test('Hermes 渠道读取会从 platforms 平台配置生成稳定表单值', ()
   assert.equal(values.telegram.groupPolicy, 'allowlist')
   assert.equal(values.telegram.allowFrom, '1001, 1002')
   assert.equal(values.telegram.requireMention, true)
+  assert.equal(values.telegram.replyToMode, 'all')
+  assert.equal(values.telegram.guestMode, true)
+  assert.equal(values.telegram.disableLinkPreviews, true)
 })
 
 test('Hermes 渠道读取会按运行时优先级合并 .env 凭证', () => {
@@ -101,6 +107,9 @@ test('Hermes 渠道保存会写入 Hermes 最新 platforms 配置并保留无关
     groupPolicy: 'allowlist',
     allowFrom: '1001, 1002',
     requireMention: true,
+    replyToMode: 'off',
+    guestMode: true,
+    disableLinkPreviews: true,
   })
 
   assert.deepEqual(next.model, { provider: 'anthropic', default: 'claude-sonnet-4-6' })
@@ -110,7 +119,17 @@ test('Hermes 渠道保存会写入 Hermes 最新 platforms 配置并保留无关
   assert.equal(next.platforms.telegram.extra.group_policy, 'allowlist')
   assert.deepEqual(next.platforms.telegram.extra.allow_from, ['1001', '1002'])
   assert.equal(next.platforms.telegram.extra.require_mention, true)
+  assert.equal(next.platforms.telegram.extra.reply_to_mode, 'off')
+  assert.equal(next.platforms.telegram.extra.guest_mode, true)
+  assert.equal(next.platforms.telegram.extra.disable_link_previews, true)
   assert.equal(next.platforms.telegram.extra.unknown_option, 'keep-me')
+})
+
+test('Hermes Telegram 保存会校验回复模式选项', () => {
+  assert.throws(() => mergeHermesChannelConfig({}, 'telegram', {
+    enabled: true,
+    replyToMode: 'sometimes',
+  }), /platforms\.telegram\.extra\.reply_to_mode/)
 })
 
 test('Hermes 飞书保存会补齐可运行默认项并使用 Hermes snake_case 字段', () => {
@@ -143,12 +162,18 @@ test('Hermes 渠道保存会生成运行时仍会读取的环境变量', () => {
     allowFrom: '1001, 1002',
     groupAllowFrom: 'group-a\ngroup-b',
     requireMention: true,
+    replyToMode: 'off',
+    guestMode: true,
+    disableLinkPreviews: true,
   })
 
   assert.equal(telegramEnv.TELEGRAM_BOT_TOKEN, '123:token')
   assert.equal(telegramEnv.TELEGRAM_ALLOWED_USERS, '1001,1002')
   assert.equal(telegramEnv.TELEGRAM_GROUP_ALLOWED_USERS, 'group-a,group-b')
   assert.equal(telegramEnv.TELEGRAM_REQUIRE_MENTION, 'true')
+  assert.equal(telegramEnv.TELEGRAM_REPLY_TO_MODE, 'off')
+  assert.equal(telegramEnv.TELEGRAM_GUEST_MODE, 'true')
+  assert.equal(telegramEnv.TELEGRAM_DISABLE_LINK_PREVIEWS, 'true')
 
   const feishuEnv = buildHermesChannelEnvUpdates('feishu', {
     appId: 'cli_xxx',

@@ -2167,6 +2167,7 @@ const HERMES_CHANNEL_PLATFORMS: [&str; 10] = [
 
 const HERMES_DISPLAY_TOOL_PROGRESS_VALUES: [&str; 4] = ["off", "new", "all", "verbose"];
 const HERMES_DISPLAY_STREAMING_VALUES: [&str; 3] = ["inherit", "true", "false"];
+const HERMES_TELEGRAM_REPLY_TO_MODE_VALUES: [&str; 3] = ["off", "first", "all"];
 const HERMES_PROMPT_CACHE_TTLS: [&str; 2] = ["5m", "1h"];
 const HERMES_PROVIDER_ROUTING_SORTS: [&str; 3] = ["price", "throughput", "latency"];
 const HERMES_PROVIDER_ROUTING_DATA_COLLECTION: [&str; 2] = ["allow", "deny"];
@@ -2225,6 +2226,25 @@ fn normalize_hermes_display_streaming_text(
         Err(format!("{key} 必须是 inherit、true 或 false"))
     } else {
         Ok("inherit".to_string())
+    }
+}
+
+fn normalize_hermes_telegram_reply_to_mode(
+    value: Option<String>,
+    strict: bool,
+) -> Result<String, String> {
+    let mode = value.unwrap_or_default().trim().to_ascii_lowercase();
+    let mode = if mode.is_empty() {
+        "first".to_string()
+    } else {
+        mode
+    };
+    if HERMES_TELEGRAM_REPLY_TO_MODE_VALUES.contains(&mode.as_str()) {
+        Ok(mode)
+    } else if strict {
+        Err("platforms.telegram.extra.reply_to_mode 必须是 off、first 或 all".to_string())
+    } else {
+        Ok("first".to_string())
     }
 }
 
@@ -2712,6 +2732,27 @@ fn build_hermes_channel_config_values(
                     .or_else(|| yaml_string_field(&entry, "token"))
                     .unwrap_or_default();
                 form.insert("botToken".to_string(), Value::String(token));
+                let reply_to_mode = normalize_hermes_telegram_reply_to_mode(
+                    hermes_env_value(env_values, "TELEGRAM_REPLY_TO_MODE")
+                        .or_else(|| yaml_string_field(&extra, "reply_to_mode")),
+                    false,
+                )
+                .unwrap_or_else(|_| "first".to_string());
+                form.insert("replyToMode".to_string(), Value::String(reply_to_mode));
+                insert_json_bool_if_present(&mut form, &extra, "guest_mode", "guestMode");
+                insert_json_bool_if_present(
+                    &mut form,
+                    &extra,
+                    "disable_link_previews",
+                    "disableLinkPreviews",
+                );
+                put_json_bool_from_env(&mut form, env_values, "TELEGRAM_GUEST_MODE", "guestMode");
+                put_json_bool_from_env(
+                    &mut form,
+                    env_values,
+                    "TELEGRAM_DISABLE_LINK_PREVIEWS",
+                    "disableLinkPreviews",
+                );
             }
             "discord" => {
                 let token = hermes_env_value(env_values, "DISCORD_BOT_TOKEN")
@@ -8296,7 +8337,23 @@ fn merge_hermes_channel_config(
     );
 
     match platform {
-        "telegram" => delete_yaml_key(entry, "token"),
+        "telegram" => {
+            delete_yaml_key(entry, "token");
+            set_extra_string_if_present(
+                entry,
+                "reply_to_mode",
+                Some(normalize_hermes_telegram_reply_to_mode(
+                    form_string(form, "replyToMode"),
+                    true,
+                )?),
+            );
+            if let Some(value) = form_bool(form, "guestMode") {
+                set_extra_bool(entry, "guest_mode", value);
+            }
+            if let Some(value) = form_bool(form, "disableLinkPreviews") {
+                set_extra_bool(entry, "disable_link_previews", value);
+            }
+        }
         "discord" => {
             delete_yaml_key(entry, "token");
             for (form_key_name, extra_key_name) in [
@@ -8543,6 +8600,17 @@ fn build_hermes_channel_env_updates(platform: &str, form: &Value) -> Vec<(String
             );
             if let Some(value) = form_bool(form, "requireMention") {
                 push("TELEGRAM_REQUIRE_MENTION", bool_env_value(value));
+            }
+            push(
+                "TELEGRAM_REPLY_TO_MODE",
+                normalize_hermes_telegram_reply_to_mode(form_string(form, "replyToMode"), true)
+                    .unwrap_or_else(|_| "first".to_string()),
+            );
+            if let Some(value) = form_bool(form, "guestMode") {
+                push("TELEGRAM_GUEST_MODE", bool_env_value(value));
+            }
+            if let Some(value) = form_bool(form, "disableLinkPreviews") {
+                push("TELEGRAM_DISABLE_LINK_PREVIEWS", bool_env_value(value));
             }
         }
         "discord" => {
@@ -19280,6 +19348,9 @@ platforms:
                 "groupPolicy": "allowlist",
                 "allowFrom": "1001, 1002",
                 "requireMention": true,
+                "replyToMode": "off",
+                "guestMode": true,
+                "disableLinkPreviews": true,
             }),
         )
         .unwrap();
@@ -19296,15 +19367,39 @@ platforms:
             config["platforms"]["telegram"]["extra"]["unknown_option"].as_str(),
             Some("keep-me")
         );
+        assert_eq!(
+            config["platforms"]["telegram"]["extra"]["reply_to_mode"].as_str(),
+            Some("off")
+        );
+        assert_eq!(
+            config["platforms"]["telegram"]["extra"]["guest_mode"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            config["platforms"]["telegram"]["extra"]["disable_link_previews"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(values["telegram"]["replyToMode"], "off");
+        assert_eq!(values["telegram"]["guestMode"], true);
+        assert_eq!(values["telegram"]["disableLinkPreviews"], true);
         let env = build_hermes_channel_env_updates(
             "telegram",
             &json!({
                 "botToken": "123:token",
                 "allowFrom": "1001, 1002",
                 "requireMention": true,
+                "replyToMode": "off",
+                "guestMode": true,
+                "disableLinkPreviews": true,
             }),
         );
         assert!(env.contains(&("TELEGRAM_BOT_TOKEN".to_string(), "123:token".to_string())));
+        assert!(env.contains(&("TELEGRAM_REPLY_TO_MODE".to_string(), "off".to_string())));
+        assert!(env.contains(&("TELEGRAM_GUEST_MODE".to_string(), "true".to_string())));
+        assert!(env.contains(&(
+            "TELEGRAM_DISABLE_LINK_PREVIEWS".to_string(),
+            "true".to_string()
+        )));
     }
 
     #[test]
