@@ -431,6 +431,17 @@ test('Hermes 配置页会暴露浏览器基础结构化配置字段', () => {
   }
 })
 
+test('Hermes 配置页会暴露 Web 工具后端结构化配置字段', () => {
+  for (const id of [
+    'hm-web-config-save',
+    'hm-web-backend',
+    'hm-web-search-backend',
+    'hm-web-extract-backend',
+  ]) {
+    assert.match(source, new RegExp(`id="${id}"`), `缺少 ${id}`)
+  }
+})
+
 test('Hermes 配置页会暴露终端执行结构化配置字段', () => {
   for (const id of [
     'hm-terminal-save',
@@ -553,6 +564,7 @@ test('Hermes 配置页新增结构化配置不会暴露翻译 key', () => {
     key.includes('ExecutionLimits') ||
     key.includes('PrivacyConfig') ||
     key.includes('BrowserConfig') ||
+    key.includes('WebConfig') ||
     key.includes('TerminalConfig') ||
     key.includes('SttConfig') ||
     key.includes('KanbanConfig') ||

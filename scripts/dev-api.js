@@ -3328,6 +3328,7 @@ const HERMES_TERMINAL_MODAL_MODES = new Set(['auto', 'managed', 'direct'])
 const HERMES_TERMINAL_VERCEL_RUNTIMES = new Set(['node24', 'node22', 'python3.13'])
 const HERMES_BROWSER_ENGINES = new Set(['auto', 'lightpanda', 'chrome'])
 const HERMES_BROWSER_DIALOG_POLICIES = new Set(['must_respond', 'auto_dismiss', 'auto_accept'])
+const HERMES_WEB_BACKENDS = new Set(['tavily', 'firecrawl', 'parallel', 'exa', 'searxng', 'brave', 'brave_free', 'ddgs', 'xai', 'native'])
 const HERMES_STT_PROVIDERS = new Set(['auto', 'local', 'groq', 'openai', 'mistral'])
 const HERMES_STT_LOCAL_MODELS = new Set(['tiny', 'base', 'small', 'medium', 'large-v3', 'turbo'])
 const HERMES_STT_OPENAI_MODELS = new Set(['whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe'])
@@ -3486,6 +3487,14 @@ function normalizeHermesBrowserDialogPolicy(value, strict = false) {
   if (HERMES_BROWSER_DIALOG_POLICIES.has(policy)) return policy
   if (strict) throw new Error('browser.dialog_policy 必须是 must_respond、auto_dismiss 或 auto_accept')
   return 'must_respond'
+}
+
+function normalizeHermesWebBackend(value, key, strict = false) {
+  const backend = String(value ?? '').trim().toLowerCase()
+  if (!backend) return ''
+  if (HERMES_WEB_BACKENDS.has(backend)) return backend
+  if (strict) throw new Error(`${key} 必须为空或 tavily、firecrawl、parallel、exa、searxng、brave、brave_free、ddgs、xai、native`)
+  return ''
 }
 
 function normalizeHermesSttProvider(value, strict = false) {
@@ -5492,6 +5501,37 @@ export function mergeHermesBrowserConfig(config = {}, form = {}) {
   browser.dialog_policy = normalizeHermesBrowserDialogPolicy(Object.hasOwn(form, 'browserDialogPolicy') ? form.browserDialogPolicy : currentValues.browserDialogPolicy, true)
   browser.dialog_timeout_s = parseHermesInteger(Object.hasOwn(form, 'browserDialogTimeout') ? form.browserDialogTimeout : currentValues.browserDialogTimeout, 'browser.dialog_timeout_s', 300, 1, 86400, true)
   next.browser = browser
+  return next
+}
+
+export function buildHermesWebConfigValues(config = {}) {
+  const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
+  const web = root.web && typeof root.web === 'object' && !Array.isArray(root.web)
+    ? root.web
+    : {}
+  return {
+    webBackend: normalizeHermesWebBackend(web.backend, 'web.backend', false),
+    webSearchBackend: normalizeHermesWebBackend(web.search_backend, 'web.search_backend', false),
+    webExtractBackend: normalizeHermesWebBackend(web.extract_backend, 'web.extract_backend', false),
+  }
+}
+
+export function mergeHermesWebConfig(config = {}, form = {}) {
+  const next = mergeConfigsPreservingFields({}, config && typeof config === 'object' && !Array.isArray(config) ? config : {})
+  const currentValues = buildHermesWebConfigValues(next)
+  const web = next.web && typeof next.web === 'object' && !Array.isArray(next.web)
+    ? mergeConfigsPreservingFields(next.web, {})
+    : {}
+  const backend = normalizeHermesWebBackend(Object.hasOwn(form, 'webBackend') ? form.webBackend : currentValues.webBackend, 'web.backend', true)
+  const searchBackend = normalizeHermesWebBackend(Object.hasOwn(form, 'webSearchBackend') ? form.webSearchBackend : currentValues.webSearchBackend, 'web.search_backend', true)
+  const extractBackend = normalizeHermesWebBackend(Object.hasOwn(form, 'webExtractBackend') ? form.webExtractBackend : currentValues.webExtractBackend, 'web.extract_backend', true)
+  if (backend) web.backend = backend
+  else delete web.backend
+  if (searchBackend) web.search_backend = searchBackend
+  else delete web.search_backend
+  if (extractBackend) web.extract_backend = extractBackend
+  else delete web.extract_backend
+  next.web = web
   return next
 }
 
@@ -12774,6 +12814,27 @@ const handlers = {
       configPath,
       backup,
       values: buildHermesBrowserConfigValues(next),
+    }
+  },
+
+  hermes_web_config_read() {
+    const { configPath, exists, config } = readHermesConfigYamlObject()
+    return {
+      exists,
+      configPath,
+      values: buildHermesWebConfigValues(config),
+    }
+  },
+
+  hermes_web_config_save({ form } = {}) {
+    const { configPath, config } = readHermesConfigYamlObject()
+    const next = mergeHermesWebConfig(config, form || {})
+    const backup = writeHermesConfigYamlObject(configPath, next)
+    return {
+      ok: true,
+      configPath,
+      backup,
+      values: buildHermesWebConfigValues(next),
     }
   },
 

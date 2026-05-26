@@ -7159,6 +7159,37 @@ fn normalize_hermes_browser_dialog_policy(
     }
 }
 
+fn normalize_hermes_web_backend(
+    value: Option<String>,
+    key: &str,
+    strict: bool,
+) -> Result<String, String> {
+    let backend = value.unwrap_or_default().trim().to_ascii_lowercase();
+    if backend.is_empty() {
+        return Ok(String::new());
+    }
+    if matches!(
+        backend.as_str(),
+        "tavily"
+            | "firecrawl"
+            | "parallel"
+            | "exa"
+            | "searxng"
+            | "brave"
+            | "brave_free"
+            | "ddgs"
+            | "xai"
+            | "native"
+    ) {
+        return Ok(backend);
+    }
+    if strict {
+        Err(format!("{key} 必须为空或 tavily、firecrawl、parallel、exa、searxng、brave、brave_free、ddgs、xai、native"))
+    } else {
+        Ok(String::new())
+    }
+}
+
 fn normalize_hermes_stt_provider(value: Option<String>, strict: bool) -> Result<String, String> {
     let provider = value.unwrap_or_default().trim().to_ascii_lowercase();
     let provider = if provider.is_empty() {
@@ -8418,6 +8449,77 @@ fn merge_hermes_browser_config(config: &mut serde_yaml::Value, form: &Value) -> 
         yaml_key("dialog_timeout_s"),
         serde_yaml::Value::Number(browser_dialog_timeout.into()),
     );
+    Ok(())
+}
+
+fn build_hermes_web_config_values(config: &serde_yaml::Value) -> Value {
+    let root = config.as_mapping();
+    let web = root.and_then(|map| yaml_get_mapping(map, "web"));
+    let web_backend = normalize_hermes_web_backend(
+        web.and_then(|map| yaml_string_field(map, "backend")),
+        "web.backend",
+        false,
+    )
+    .unwrap_or_default();
+    let web_search_backend = normalize_hermes_web_backend(
+        web.and_then(|map| yaml_string_field(map, "search_backend")),
+        "web.search_backend",
+        false,
+    )
+    .unwrap_or_default();
+    let web_extract_backend = normalize_hermes_web_backend(
+        web.and_then(|map| yaml_string_field(map, "extract_backend")),
+        "web.extract_backend",
+        false,
+    )
+    .unwrap_or_default();
+
+    serde_json::json!({
+        "webBackend": web_backend,
+        "webSearchBackend": web_search_backend,
+        "webExtractBackend": web_extract_backend,
+    })
+}
+
+fn merge_hermes_web_config(config: &mut serde_yaml::Value, form: &Value) -> Result<(), String> {
+    let current = build_hermes_web_config_values(config);
+    let web_backend = normalize_hermes_web_backend(
+        if form.get("webBackend").is_some() {
+            form_string(form, "webBackend")
+        } else {
+            current["webBackend"].as_str().map(ToString::to_string)
+        },
+        "web.backend",
+        true,
+    )?;
+    let web_search_backend = normalize_hermes_web_backend(
+        if form.get("webSearchBackend").is_some() {
+            form_string(form, "webSearchBackend")
+        } else {
+            current["webSearchBackend"]
+                .as_str()
+                .map(ToString::to_string)
+        },
+        "web.search_backend",
+        true,
+    )?;
+    let web_extract_backend = normalize_hermes_web_backend(
+        if form.get("webExtractBackend").is_some() {
+            form_string(form, "webExtractBackend")
+        } else {
+            current["webExtractBackend"]
+                .as_str()
+                .map(ToString::to_string)
+        },
+        "web.extract_backend",
+        true,
+    )?;
+
+    let root = ensure_yaml_object(config)?;
+    let web = yaml_child_object(root, "web")?;
+    set_optional_yaml_string(web, "backend", web_backend);
+    set_optional_yaml_string(web, "search_backend", web_search_backend);
+    set_optional_yaml_string(web, "extract_backend", web_extract_backend);
     Ok(())
 }
 
@@ -11047,6 +11149,30 @@ pub fn hermes_browser_config_save(form: Value) -> Result<Value, String> {
         "configPath": config_path.to_string_lossy(),
         "backup": backup,
         "values": build_hermes_browser_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_web_config_read() -> Result<Value, String> {
+    let (config_path, exists, config) = read_hermes_channel_yaml_config()?;
+    ensure_yaml_object(&mut config.clone())?;
+    Ok(serde_json::json!({
+        "exists": exists,
+        "configPath": config_path.to_string_lossy(),
+        "values": build_hermes_web_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_web_config_save(form: Value) -> Result<Value, String> {
+    let (config_path, _exists, mut config) = read_hermes_channel_yaml_config()?;
+    merge_hermes_web_config(&mut config, &form)?;
+    let backup = write_hermes_yaml_config(&config_path, &config)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "configPath": config_path.to_string_lossy(),
+        "backup": backup,
+        "values": build_hermes_web_config_values(&config),
     }))
 }
 
@@ -17530,6 +17656,116 @@ browser:
         let err =
             merge_hermes_browser_config(&mut config, &json!({ "browserCdpUrl": 123 })).unwrap_err();
         assert!(err.contains("browser.cdp_url"));
+    }
+}
+
+#[cfg(test)]
+mod hermes_web_config_tests {
+    use super::{build_hermes_web_config_values, merge_hermes_web_config};
+    use serde_json::json;
+
+    #[test]
+    fn web_values_have_upstream_defaults() {
+        let config: serde_yaml::Value = serde_yaml::from_str("{}").unwrap();
+        let values = build_hermes_web_config_values(&config);
+        assert_eq!(values["webBackend"], "");
+        assert_eq!(values["webSearchBackend"], "");
+        assert_eq!(values["webExtractBackend"], "");
+    }
+
+    #[test]
+    fn web_values_read_yaml_fields() {
+        let config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+web:
+  backend: tavily
+  search_backend: searxng
+  extract_backend: firecrawl
+"#,
+        )
+        .unwrap();
+        let values = build_hermes_web_config_values(&config);
+        assert_eq!(values["webBackend"], "tavily");
+        assert_eq!(values["webSearchBackend"], "searxng");
+        assert_eq!(values["webExtractBackend"], "firecrawl");
+    }
+
+    #[test]
+    fn merge_web_config_preserves_unknown_fields() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+model:
+  provider: anthropic
+web:
+  backend: tavily
+  search_backend: searxng
+  extract_backend: firecrawl
+  custom_flag: keep-web
+streaming:
+  enabled: true
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_web_config(
+            &mut config,
+            &json!({
+                "webBackend": "parallel",
+                "webSearchBackend": "exa",
+                "webExtractBackend": "native",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(config["model"]["provider"].as_str(), Some("anthropic"));
+        assert_eq!(config["streaming"]["enabled"].as_bool(), Some(true));
+        assert_eq!(config["web"]["backend"].as_str(), Some("parallel"));
+        assert_eq!(config["web"]["search_backend"].as_str(), Some("exa"));
+        assert_eq!(config["web"]["extract_backend"].as_str(), Some("native"));
+        assert_eq!(config["web"]["custom_flag"].as_str(), Some("keep-web"));
+    }
+
+    #[test]
+    fn merge_web_config_removes_empty_optional_fields() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+web:
+  backend: tavily
+  search_backend: searxng
+  extract_backend: firecrawl
+  custom_flag: keep-web
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_web_config(
+            &mut config,
+            &json!({
+                "webBackend": "   ",
+                "webSearchBackend": "",
+                "webExtractBackend": "  ",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(config["web"]["custom_flag"].as_str(), Some("keep-web"));
+        assert!(config["web"].get("backend").is_none());
+        assert!(config["web"].get("search_backend").is_none());
+        assert!(config["web"].get("extract_backend").is_none());
+    }
+
+    #[test]
+    fn merge_web_config_rejects_invalid_backends() {
+        let mut config = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let err =
+            merge_hermes_web_config(&mut config, &json!({ "webBackend": "unsafe" })).unwrap_err();
+        assert!(err.contains("web.backend"));
+        let err = merge_hermes_web_config(&mut config, &json!({ "webSearchBackend": "unsafe" }))
+            .unwrap_err();
+        assert!(err.contains("web.search_backend"));
+        let err = merge_hermes_web_config(&mut config, &json!({ "webExtractBackend": "unsafe" }))
+            .unwrap_err();
+        assert!(err.contains("web.extract_backend"));
     }
 }
 

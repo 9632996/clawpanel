@@ -294,6 +294,12 @@ const BROWSER_DEFAULTS = {
   browserDialogTimeout: 300,
 }
 
+const WEB_DEFAULTS = {
+  webBackend: '',
+  webSearchBackend: '',
+  webExtractBackend: '',
+}
+
 const STT_DEFAULTS = {
   sttEnabled: true,
   sttProvider: 'auto',
@@ -361,6 +367,7 @@ const TERMINAL_MODAL_MODES = ['auto', 'managed', 'direct']
 const TERMINAL_VERCEL_RUNTIMES = ['node24', 'node22', 'python3.13']
 const BROWSER_ENGINES = ['auto', 'lightpanda', 'chrome']
 const BROWSER_DIALOG_POLICIES = ['must_respond', 'auto_dismiss', 'auto_accept']
+const WEB_BACKENDS = ['', 'tavily', 'firecrawl', 'parallel', 'exa', 'searxng', 'brave', 'brave_free', 'ddgs', 'xai', 'native']
 const STT_PROVIDERS = ['auto', 'local', 'groq', 'openai', 'mistral']
 const STT_LOCAL_MODELS = ['tiny', 'base', 'small', 'medium', 'large-v3', 'turbo']
 const STT_OPENAI_MODELS = ['whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe']
@@ -426,6 +433,7 @@ export function render() {
   let approvalsValues = { ...APPROVALS_DEFAULTS }
   let privacyValues = { ...PRIVACY_DEFAULTS }
   let browserValues = { ...BROWSER_DEFAULTS }
+  let webValues = { ...WEB_DEFAULTS }
   let sttValues = { ...STT_DEFAULTS }
   let ttsVoiceValues = { ...TTS_VOICE_DEFAULTS }
   let terminalValues = { ...TERMINAL_DEFAULTS }
@@ -465,6 +473,7 @@ export function render() {
   let approvalsLoading = true
   let privacyLoading = true
   let browserLoading = true
+  let webLoading = true
   let sttLoading = true
   let ttsVoiceLoading = true
   let terminalLoading = true
@@ -504,6 +513,7 @@ export function render() {
   let approvalsSaving = false
   let privacySaving = false
   let browserSaving = false
+  let webSaving = false
   let sttSaving = false
   let ttsVoiceSaving = false
   let terminalSaving = false
@@ -543,6 +553,7 @@ export function render() {
   let approvalsError = null
   let privacyError = null
   let browserError = null
+  let webError = null
   let sttError = null
   let ttsVoiceError = null
   let terminalError = null
@@ -556,7 +567,7 @@ export function render() {
   }
 
   function isBusy() {
-    return loading || runtimeLoading || sessionsMaintenanceLoading || updatesLoading || compressionLoading || promptCachingLoading || openrouterCacheLoading || providerRoutingLoading || auxiliaryLoading || toolGuardrailsLoading || memoryLoading || skillsLoading || curatorLoading || quickCommandsLoading || modelLoading || modelAliasesLoading || hooksLoading || providerOverridesLoading || mcpServersLoading || agentToolsetsLoading || platformToolsetsLoading || agentRuntimeLoading || unauthorizedDmLoading || securityLoading || displayLoading || humanDelayLoading || kanbanLoading || streamingLoading || executionLimitsLoading || ioSafetyLoading || checkpointsLoading || cronLoading || loggingLoading || approvalsLoading || privacyLoading || browserLoading || sttLoading || ttsVoiceLoading || terminalLoading || saving || runtimeSaving || sessionsMaintenanceSaving || updatesSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || curatorSaving || quickCommandsSaving || modelSaving || modelAliasesSaving || hooksSaving || providerOverridesSaving || mcpServersSaving || agentToolsetsSaving || platformToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || securitySaving || displaySaving || humanDelaySaving || kanbanSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || privacySaving || browserSaving || sttSaving || ttsVoiceSaving || terminalSaving
+    return loading || runtimeLoading || sessionsMaintenanceLoading || updatesLoading || compressionLoading || promptCachingLoading || openrouterCacheLoading || providerRoutingLoading || auxiliaryLoading || toolGuardrailsLoading || memoryLoading || skillsLoading || curatorLoading || quickCommandsLoading || modelLoading || modelAliasesLoading || hooksLoading || providerOverridesLoading || mcpServersLoading || agentToolsetsLoading || platformToolsetsLoading || agentRuntimeLoading || unauthorizedDmLoading || securityLoading || displayLoading || humanDelayLoading || kanbanLoading || streamingLoading || executionLimitsLoading || ioSafetyLoading || checkpointsLoading || cronLoading || loggingLoading || approvalsLoading || privacyLoading || browserLoading || webLoading || sttLoading || ttsVoiceLoading || terminalLoading || saving || runtimeSaving || sessionsMaintenanceSaving || updatesSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || curatorSaving || quickCommandsSaving || modelSaving || modelAliasesSaving || hooksSaving || providerOverridesSaving || mcpServersSaving || agentToolsetsSaving || platformToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || securitySaving || displaySaving || humanDelaySaving || kanbanSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || privacySaving || browserSaving || webSaving || sttSaving || ttsVoiceSaving || terminalSaving
   }
 
   function option(labelKey, value, selected) {
@@ -2180,7 +2191,7 @@ export function render() {
   }
 
   function renderBrowserPanel() {
-    const disabled = loading || saving || browserLoading || browserSaving || approvalsSaving || cronSaving || loggingSaving || privacySaving || sttSaving || terminalSaving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || providerOverridesSaving || agentToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving
+    const disabled = loading || saving || browserLoading || browserSaving || webSaving || approvalsSaving || cronSaving || loggingSaving || privacySaving || sttSaving || terminalSaving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || providerOverridesSaving || agentToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving
     return `
       <div class="hm-panel hm-config-runtime-panel hm-config-browser-panel">
         <div class="hm-panel-header">
@@ -2245,8 +2256,50 @@ export function render() {
     `
   }
 
+  function renderWebConfigPanel() {
+    const disabled = loading || saving || webLoading || webSaving || browserSaving || approvalsSaving || cronSaving || loggingSaving || privacySaving || sttSaving || terminalSaving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || providerOverridesSaving || agentToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving
+    return `
+      <div class="hm-panel hm-config-runtime-panel hm-config-web-panel">
+        <div class="hm-panel-header">
+          <div>
+            <div class="hm-panel-title">${t('engine.hermesWebConfigTitle')}</div>
+            <div class="hm-channel-panel-desc">${t('engine.hermesWebConfigDesc')}</div>
+          </div>
+          <div class="hm-panel-actions">
+            <span class="hm-muted">${webSaving ? t('engine.hermesConfigStatusSaving') : webLoading ? t('engine.hermesConfigStatusLoading') : t('engine.hermesWebConfigStatusReady')}</span>
+            <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-web-config-save" ${disabled ? 'disabled' : ''}>${t('engine.hermesWebConfigSave')}</button>
+          </div>
+        </div>
+        <div class="hm-panel-body">
+          ${renderError(webError)}
+          <div class="hm-config-runtime-grid hm-config-web-grid">
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesWebConfigBackend')}</span>
+              <select id="hm-web-backend" class="hm-input" ${disabled ? 'disabled' : ''}>
+                ${WEB_BACKENDS.map(backend => option(`engine.hermesWebConfigBackend_${backend || 'auto'}`, backend, webValues.webBackend)).join('')}
+              </select>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesWebConfigSearchBackend')}</span>
+              <select id="hm-web-search-backend" class="hm-input" ${disabled ? 'disabled' : ''}>
+                ${WEB_BACKENDS.map(backend => option(`engine.hermesWebConfigBackend_${backend || 'auto'}`, backend, webValues.webSearchBackend)).join('')}
+              </select>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesWebConfigExtractBackend')}</span>
+              <select id="hm-web-extract-backend" class="hm-input" ${disabled ? 'disabled' : ''}>
+                ${WEB_BACKENDS.map(backend => option(`engine.hermesWebConfigBackend_${backend || 'auto'}`, backend, webValues.webExtractBackend)).join('')}
+              </select>
+            </label>
+          </div>
+          <div class="hm-channel-footnote">${t('engine.hermesWebConfigFootnote')}</div>
+        </div>
+      </div>
+    `
+  }
+
   function renderSttPanel() {
-    const disabled = loading || saving || sttLoading || sttSaving || approvalsSaving || cronSaving || loggingSaving || privacySaving || browserSaving || terminalSaving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || providerOverridesSaving || agentToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving
+    const disabled = loading || saving || sttLoading || sttSaving || webSaving || approvalsSaving || cronSaving || loggingSaving || privacySaving || browserSaving || terminalSaving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || providerOverridesSaving || agentToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving
     return `
       <div class="hm-panel hm-config-runtime-panel hm-config-stt-panel">
         <div class="hm-panel-header">
@@ -2574,6 +2627,7 @@ export function render() {
       ${renderApprovalsPanel()}
       ${renderPrivacyPanel()}
       ${renderBrowserPanel()}
+      ${renderWebConfigPanel()}
       ${renderSttPanel()}
       ${renderTtsVoicePanel()}
       ${renderCompressionPanel()}
@@ -2653,6 +2707,7 @@ export function render() {
     el.querySelector('#hm-approvals-save')?.addEventListener('click', saveApprovalsConfig)
     el.querySelector('#hm-privacy-save')?.addEventListener('click', savePrivacyConfig)
     el.querySelector('#hm-browser-save')?.addEventListener('click', saveBrowserConfig)
+    el.querySelector('#hm-web-config-save')?.addEventListener('click', saveWebConfig)
     el.querySelector('#hm-stt-save')?.addEventListener('click', saveSttConfig)
     el.querySelector('#hm-tts-voice-save')?.addEventListener('click', saveTtsVoiceConfig)
     el.querySelector('#hm-terminal-save')?.addEventListener('click', saveTerminal)
@@ -2838,6 +2893,11 @@ export function render() {
     browserValues = { ...BROWSER_DEFAULTS, ...(data?.values || {}) }
   }
 
+  async function loadWebConfig() {
+    const data = await api.hermesWebConfigRead()
+    webValues = { ...WEB_DEFAULTS, ...(data?.values || {}) }
+  }
+
   async function loadSttConfig() {
     const data = await api.hermesSttConfigRead()
     sttValues = { ...STT_DEFAULTS, ...(data?.values || {}) }
@@ -2890,6 +2950,7 @@ export function render() {
     approvalsLoading = true
     privacyLoading = true
     browserLoading = true
+    webLoading = true
     sttLoading = true
     ttsVoiceLoading = true
     terminalLoading = true
@@ -2928,6 +2989,7 @@ export function render() {
     approvalsError = null
     privacyError = null
     browserError = null
+    webError = null
     sttError = null
     ttsVoiceError = null
     terminalError = null
@@ -3081,6 +3143,14 @@ export function render() {
       browserError = humanizeError(err, t('engine.hermesBrowserConfigLoadFailed') || 'Load browser config failed')
     } finally {
       browserLoading = false
+      draw()
+    }
+    try {
+      await loadWebConfig()
+    } catch (err) {
+      webError = humanizeError(err, t('engine.hermesWebConfigLoadFailed') || 'Load web tool config failed')
+    } finally {
+      webLoading = false
       draw()
     }
     try {
@@ -4397,6 +4467,33 @@ export function render() {
       toast(browserError, 'error')
     } finally {
       browserSaving = false
+      draw()
+    }
+  }
+
+  async function saveWebConfig() {
+    const form = {
+      webBackend: el.querySelector('#hm-web-backend')?.value || '',
+      webSearchBackend: el.querySelector('#hm-web-search-backend')?.value || '',
+      webExtractBackend: el.querySelector('#hm-web-extract-backend')?.value || '',
+    }
+    webSaving = true
+    webError = null
+    draw()
+    try {
+      const result = await api.hermesWebConfigSave(form)
+      webValues = { ...WEB_DEFAULTS, ...(result?.values || form) }
+      await refreshRawAfterStructuredSave()
+      const backup = result?.backup || ''
+      toast({
+        message: t('engine.hermesWebConfigSaveSuccess'),
+        hint: backup ? t('engine.hermesConfigBackupHint', { path: backup }) : '',
+      }, 'success')
+    } catch (err) {
+      webError = humanizeError(err, t('engine.hermesWebConfigSaveFailed') || 'Save web tool config failed')
+      toast(webError, 'error')
+    } finally {
+      webSaving = false
       draw()
     }
   }
