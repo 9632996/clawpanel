@@ -23,6 +23,19 @@ test('Hermes 配置页会暴露会话安全结构化配置字段', () => {
   }
 })
 
+test('Hermes 配置页会暴露会话维护结构化配置字段', () => {
+  for (const id of [
+    'hm-sessions-maintenance-save',
+    'hm-sessions-auto-prune',
+    'hm-sessions-retention-days',
+    'hm-sessions-vacuum-after-prune',
+    'hm-sessions-min-interval-hours',
+    'hm-sessions-write-json-snapshots',
+  ]) {
+    assert.match(source, new RegExp(`id="${id}"`), `缺少 ${id}`)
+  }
+})
+
 test('Hermes 配置页会暴露工具循环防护结构化配置字段', () => {
   for (const id of [
     'hm-tool-guardrails-save',

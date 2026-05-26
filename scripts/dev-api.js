@@ -5255,6 +5255,36 @@ export function mergeHermesCronConfig(config = {}, form = {}) {
   return next
 }
 
+export function buildHermesSessionsMaintenanceConfigValues(config = {}) {
+  const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
+  const sessions = root.sessions && typeof root.sessions === 'object' && !Array.isArray(root.sessions)
+    ? root.sessions
+    : {}
+  return {
+    sessionsAutoPrune: readHermesBool(sessions.auto_prune, false),
+    sessionsRetentionDays: parseHermesInteger(sessions.retention_days, 'sessions.retention_days', 90, 1, 36500, false),
+    sessionsVacuumAfterPrune: readHermesBool(sessions.vacuum_after_prune, true),
+    sessionsMinIntervalHours: parseHermesInteger(sessions.min_interval_hours, 'sessions.min_interval_hours', 24, 0, 87600, false),
+    sessionsWriteJsonSnapshots: readHermesBool(sessions.write_json_snapshots, false),
+  }
+}
+
+export function mergeHermesSessionsMaintenanceConfig(config = {}, form = {}) {
+  const next = mergeConfigsPreservingFields({}, config && typeof config === 'object' && !Array.isArray(config) ? config : {})
+  const currentValues = buildHermesSessionsMaintenanceConfigValues(next)
+  const sessions = next.sessions && typeof next.sessions === 'object' && !Array.isArray(next.sessions)
+    ? mergeConfigsPreservingFields(next.sessions, {})
+    : {}
+
+  sessions.auto_prune = formHermesBool(form, 'sessionsAutoPrune', currentValues.sessionsAutoPrune)
+  sessions.retention_days = parseHermesInteger(Object.hasOwn(form, 'sessionsRetentionDays') ? form.sessionsRetentionDays : currentValues.sessionsRetentionDays, 'sessions.retention_days', 90, 1, 36500, true)
+  sessions.vacuum_after_prune = formHermesBool(form, 'sessionsVacuumAfterPrune', currentValues.sessionsVacuumAfterPrune)
+  sessions.min_interval_hours = parseHermesInteger(Object.hasOwn(form, 'sessionsMinIntervalHours') ? form.sessionsMinIntervalHours : currentValues.sessionsMinIntervalHours, 'sessions.min_interval_hours', 24, 0, 87600, true)
+  sessions.write_json_snapshots = formHermesBool(form, 'sessionsWriteJsonSnapshots', currentValues.sessionsWriteJsonSnapshots)
+  next.sessions = sessions
+  return next
+}
+
 export function buildHermesLoggingConfigValues(config = {}) {
   const root = config && typeof config === 'object' && !Array.isArray(config) ? config : {}
   const logging = root.logging && typeof root.logging === 'object' && !Array.isArray(root.logging)
@@ -12433,6 +12463,27 @@ const handlers = {
       configPath,
       backup,
       values: buildHermesCronConfigValues(next),
+    }
+  },
+
+  hermes_sessions_maintenance_config_read() {
+    const { configPath, exists, config } = readHermesConfigYamlObject()
+    return {
+      exists,
+      configPath,
+      values: buildHermesSessionsMaintenanceConfigValues(config),
+    }
+  },
+
+  hermes_sessions_maintenance_config_save({ form } = {}) {
+    const { configPath, config } = readHermesConfigYamlObject()
+    const next = mergeHermesSessionsMaintenanceConfig(config, form || {})
+    const backup = writeHermesConfigYamlObject(configPath, next)
+    return {
+      ok: true,
+      configPath,
+      backup,
+      values: buildHermesSessionsMaintenanceConfigValues(next),
     }
   },
 

@@ -315,6 +315,8 @@ pub fn run() {
             hermes::hermes_checkpoints_config_save,
             hermes::hermes_cron_config_read,
             hermes::hermes_cron_config_save,
+            hermes::hermes_sessions_maintenance_config_read,
+            hermes::hermes_sessions_maintenance_config_save,
             hermes::hermes_logging_config_read,
             hermes::hermes_logging_config_save,
             hermes::hermes_approvals_config_read,

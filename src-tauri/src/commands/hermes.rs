@@ -7730,6 +7730,102 @@ fn merge_hermes_cron_config(config: &mut serde_yaml::Value, form: &Value) -> Res
     Ok(())
 }
 
+fn build_hermes_sessions_maintenance_config_values(config: &serde_yaml::Value) -> Value {
+    let root = config.as_mapping();
+    let sessions = root.and_then(|map| yaml_get_mapping(map, "sessions"));
+    let sessions_auto_prune = sessions
+        .and_then(|map| yaml_bool_field(map, "auto_prune"))
+        .unwrap_or(false);
+    let sessions_retention_days = sessions
+        .map(|map| bounded_hermes_i64(yaml_i64_field(map, "retention_days"), 90, 1, 36500))
+        .unwrap_or(90);
+    let sessions_vacuum_after_prune = sessions
+        .and_then(|map| yaml_bool_field(map, "vacuum_after_prune"))
+        .unwrap_or(true);
+    let sessions_min_interval_hours = sessions
+        .map(|map| bounded_hermes_i64(yaml_i64_field(map, "min_interval_hours"), 24, 0, 87600))
+        .unwrap_or(24);
+    let sessions_write_json_snapshots = sessions
+        .and_then(|map| yaml_bool_field(map, "write_json_snapshots"))
+        .unwrap_or(false);
+
+    serde_json::json!({
+        "sessionsAutoPrune": sessions_auto_prune,
+        "sessionsRetentionDays": sessions_retention_days,
+        "sessionsVacuumAfterPrune": sessions_vacuum_after_prune,
+        "sessionsMinIntervalHours": sessions_min_interval_hours,
+        "sessionsWriteJsonSnapshots": sessions_write_json_snapshots,
+    })
+}
+
+fn merge_hermes_sessions_maintenance_config(
+    config: &mut serde_yaml::Value,
+    form: &Value,
+) -> Result<(), String> {
+    let current = build_hermes_sessions_maintenance_config_values(config);
+    let sessions_retention_days = validate_hermes_i64(
+        if form.get("sessionsRetentionDays").is_some() {
+            form_i64(form, "sessionsRetentionDays")
+        } else {
+            Some(current["sessionsRetentionDays"].as_i64().unwrap_or(90))
+        },
+        "sessions.retention_days",
+        90,
+        1,
+        36500,
+    )?;
+    let sessions_min_interval_hours = validate_hermes_i64(
+        if form.get("sessionsMinIntervalHours").is_some() {
+            form_i64(form, "sessionsMinIntervalHours")
+        } else {
+            Some(current["sessionsMinIntervalHours"].as_i64().unwrap_or(24))
+        },
+        "sessions.min_interval_hours",
+        24,
+        0,
+        87600,
+    )?;
+
+    let root = ensure_yaml_object(config)?;
+    let sessions = yaml_child_object(root, "sessions")?;
+    sessions.insert(
+        yaml_key("auto_prune"),
+        serde_yaml::Value::Bool(
+            form_bool(form, "sessionsAutoPrune")
+                .unwrap_or_else(|| current["sessionsAutoPrune"].as_bool().unwrap_or(false)),
+        ),
+    );
+    sessions.insert(
+        yaml_key("retention_days"),
+        serde_yaml::Value::Number(sessions_retention_days.into()),
+    );
+    sessions.insert(
+        yaml_key("vacuum_after_prune"),
+        serde_yaml::Value::Bool(
+            form_bool(form, "sessionsVacuumAfterPrune").unwrap_or_else(|| {
+                current["sessionsVacuumAfterPrune"]
+                    .as_bool()
+                    .unwrap_or(true)
+            }),
+        ),
+    );
+    sessions.insert(
+        yaml_key("min_interval_hours"),
+        serde_yaml::Value::Number(sessions_min_interval_hours.into()),
+    );
+    sessions.insert(
+        yaml_key("write_json_snapshots"),
+        serde_yaml::Value::Bool(
+            form_bool(form, "sessionsWriteJsonSnapshots").unwrap_or_else(|| {
+                current["sessionsWriteJsonSnapshots"]
+                    .as_bool()
+                    .unwrap_or(false)
+            }),
+        ),
+    );
+    Ok(())
+}
+
 fn build_hermes_logging_config_values(config: &serde_yaml::Value) -> Value {
     let root = config.as_mapping();
     let logging = root.and_then(|map| yaml_get_mapping(map, "logging"));
@@ -10269,6 +10365,30 @@ pub fn hermes_cron_config_save(form: Value) -> Result<Value, String> {
         "configPath": config_path.to_string_lossy(),
         "backup": backup,
         "values": build_hermes_cron_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_sessions_maintenance_config_read() -> Result<Value, String> {
+    let (config_path, exists, config) = read_hermes_channel_yaml_config()?;
+    ensure_yaml_object(&mut config.clone())?;
+    Ok(serde_json::json!({
+        "exists": exists,
+        "configPath": config_path.to_string_lossy(),
+        "values": build_hermes_sessions_maintenance_config_values(&config),
+    }))
+}
+
+#[tauri::command]
+pub fn hermes_sessions_maintenance_config_save(form: Value) -> Result<Value, String> {
+    let (config_path, _exists, mut config) = read_hermes_channel_yaml_config()?;
+    merge_hermes_sessions_maintenance_config(&mut config, &form)?;
+    let backup = write_hermes_yaml_config(&config_path, &config)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "configPath": config_path.to_string_lossy(),
+        "backup": backup,
+        "values": build_hermes_sessions_maintenance_config_values(&config),
     }))
 }
 
@@ -17157,6 +17277,121 @@ cron:
         let err = merge_hermes_cron_config(&mut config, &json!({ "cronMaxParallelJobs": 10001 }))
             .unwrap_err();
         assert!(err.contains("cron.max_parallel_jobs"));
+    }
+}
+
+#[cfg(test)]
+mod hermes_sessions_maintenance_config_tests {
+    use super::{
+        build_hermes_sessions_maintenance_config_values, merge_hermes_sessions_maintenance_config,
+    };
+    use serde_json::json;
+
+    #[test]
+    fn sessions_maintenance_values_have_upstream_defaults() {
+        let config: serde_yaml::Value = serde_yaml::from_str("{}").unwrap();
+        let values = build_hermes_sessions_maintenance_config_values(&config);
+        assert_eq!(values["sessionsAutoPrune"], false);
+        assert_eq!(values["sessionsRetentionDays"], 90);
+        assert_eq!(values["sessionsVacuumAfterPrune"], true);
+        assert_eq!(values["sessionsMinIntervalHours"], 24);
+        assert_eq!(values["sessionsWriteJsonSnapshots"], false);
+    }
+
+    #[test]
+    fn sessions_maintenance_values_read_yaml_fields() {
+        let config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+sessions:
+  auto_prune: true
+  retention_days: 14
+  vacuum_after_prune: false
+  min_interval_hours: 6
+  write_json_snapshots: true
+"#,
+        )
+        .unwrap();
+        let values = build_hermes_sessions_maintenance_config_values(&config);
+        assert_eq!(values["sessionsAutoPrune"], true);
+        assert_eq!(values["sessionsRetentionDays"], 14);
+        assert_eq!(values["sessionsVacuumAfterPrune"], false);
+        assert_eq!(values["sessionsMinIntervalHours"], 6);
+        assert_eq!(values["sessionsWriteJsonSnapshots"], true);
+    }
+
+    #[test]
+    fn merge_sessions_maintenance_config_preserves_unknown_fields() {
+        let mut config: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+sessions:
+  auto_prune: false
+  custom_flag: keep-sessions
+model:
+  provider: anthropic
+streaming:
+  enabled: true
+"#,
+        )
+        .unwrap();
+
+        merge_hermes_sessions_maintenance_config(
+            &mut config,
+            &json!({
+                "sessionsAutoPrune": true,
+                "sessionsRetentionDays": "30",
+                "sessionsVacuumAfterPrune": false,
+                "sessionsMinIntervalHours": "12",
+                "sessionsWriteJsonSnapshots": true,
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(config["model"]["provider"].as_str(), Some("anthropic"));
+        assert_eq!(config["streaming"]["enabled"].as_bool(), Some(true));
+        assert_eq!(config["sessions"]["auto_prune"].as_bool(), Some(true));
+        assert_eq!(config["sessions"]["retention_days"].as_i64(), Some(30));
+        assert_eq!(
+            config["sessions"]["vacuum_after_prune"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(config["sessions"]["min_interval_hours"].as_i64(), Some(12));
+        assert_eq!(
+            config["sessions"]["write_json_snapshots"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            config["sessions"]["custom_flag"].as_str(),
+            Some("keep-sessions")
+        );
+    }
+
+    #[test]
+    fn merge_sessions_maintenance_config_rejects_invalid_values() {
+        let mut config = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let err = merge_hermes_sessions_maintenance_config(
+            &mut config,
+            &json!({ "sessionsRetentionDays": 0 }),
+        )
+        .unwrap_err();
+        assert!(err.contains("sessions.retention_days"));
+        let err = merge_hermes_sessions_maintenance_config(
+            &mut config,
+            &json!({ "sessionsRetentionDays": 36501 }),
+        )
+        .unwrap_err();
+        assert!(err.contains("sessions.retention_days"));
+        let err = merge_hermes_sessions_maintenance_config(
+            &mut config,
+            &json!({ "sessionsMinIntervalHours": -1 }),
+        )
+        .unwrap_err();
+        assert!(err.contains("sessions.min_interval_hours"));
+        let err = merge_hermes_sessions_maintenance_config(
+            &mut config,
+            &json!({ "sessionsMinIntervalHours": 87601 }),
+        )
+        .unwrap_err();
+        assert!(err.contains("sessions.min_interval_hours"));
     }
 }
 

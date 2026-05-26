@@ -15,6 +15,14 @@ const SESSION_RUNTIME_DEFAULTS = {
   worktreeEnabled: false,
 }
 
+const SESSIONS_MAINTENANCE_DEFAULTS = {
+  sessionsAutoPrune: false,
+  sessionsRetentionDays: 90,
+  sessionsVacuumAfterPrune: true,
+  sessionsMinIntervalHours: 24,
+  sessionsWriteJsonSnapshots: false,
+}
+
 const COMPRESSION_DEFAULTS = {
   enabled: true,
   threshold: 0.5,
@@ -345,9 +353,10 @@ export function render() {
   const el = document.createElement('div')
   el.className = 'page'
   el.dataset.engine = 'hermes'
-  let yaml = ''
-  let runtimeValues = { ...SESSION_RUNTIME_DEFAULTS }
-  let compressionValues = { ...COMPRESSION_DEFAULTS }
+    let yaml = ''
+    let runtimeValues = { ...SESSION_RUNTIME_DEFAULTS }
+    let sessionsMaintenanceValues = { ...SESSIONS_MAINTENANCE_DEFAULTS }
+    let compressionValues = { ...COMPRESSION_DEFAULTS }
   let promptCachingValues = { ...PROMPT_CACHING_DEFAULTS }
   let openrouterCacheValues = { ...OPENROUTER_CACHE_DEFAULTS }
   let providerRoutingValues = { ...PROVIDER_ROUTING_DEFAULTS }
@@ -381,9 +390,10 @@ export function render() {
   let browserValues = { ...BROWSER_DEFAULTS }
   let sttValues = { ...STT_DEFAULTS }
   let terminalValues = { ...TERMINAL_DEFAULTS }
-  let loading = true
-  let runtimeLoading = true
-  let compressionLoading = true
+    let loading = true
+    let runtimeLoading = true
+    let sessionsMaintenanceLoading = true
+    let compressionLoading = true
   let promptCachingLoading = true
   let openrouterCacheLoading = true
   let providerRoutingLoading = true
@@ -417,9 +427,10 @@ export function render() {
   let browserLoading = true
   let sttLoading = true
   let terminalLoading = true
-  let saving = false
-  let runtimeSaving = false
-  let compressionSaving = false
+    let saving = false
+    let runtimeSaving = false
+    let sessionsMaintenanceSaving = false
+    let compressionSaving = false
   let promptCachingSaving = false
   let openrouterCacheSaving = false
   let providerRoutingSaving = false
@@ -453,9 +464,10 @@ export function render() {
   let browserSaving = false
   let sttSaving = false
   let terminalSaving = false
-  let error = null
-  let runtimeError = null
-  let compressionError = null
+    let error = null
+    let runtimeError = null
+    let sessionsMaintenanceError = null
+    let compressionError = null
   let promptCachingError = null
   let openrouterCacheError = null
   let providerRoutingError = null
@@ -499,7 +511,7 @@ export function render() {
   }
 
   function isBusy() {
-    return loading || runtimeLoading || compressionLoading || promptCachingLoading || openrouterCacheLoading || providerRoutingLoading || auxiliaryLoading || toolGuardrailsLoading || memoryLoading || skillsLoading || curatorLoading || quickCommandsLoading || modelLoading || modelAliasesLoading || hooksLoading || providerOverridesLoading || mcpServersLoading || agentToolsetsLoading || platformToolsetsLoading || agentRuntimeLoading || unauthorizedDmLoading || securityLoading || displayLoading || humanDelayLoading || kanbanLoading || streamingLoading || executionLimitsLoading || ioSafetyLoading || checkpointsLoading || cronLoading || loggingLoading || approvalsLoading || privacyLoading || browserLoading || sttLoading || terminalLoading || saving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || curatorSaving || quickCommandsSaving || modelSaving || modelAliasesSaving || hooksSaving || providerOverridesSaving || mcpServersSaving || agentToolsetsSaving || platformToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || securitySaving || displaySaving || humanDelaySaving || kanbanSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || privacySaving || browserSaving || sttSaving || terminalSaving
+    return loading || runtimeLoading || sessionsMaintenanceLoading || compressionLoading || promptCachingLoading || openrouterCacheLoading || providerRoutingLoading || auxiliaryLoading || toolGuardrailsLoading || memoryLoading || skillsLoading || curatorLoading || quickCommandsLoading || modelLoading || modelAliasesLoading || hooksLoading || providerOverridesLoading || mcpServersLoading || agentToolsetsLoading || platformToolsetsLoading || agentRuntimeLoading || unauthorizedDmLoading || securityLoading || displayLoading || humanDelayLoading || kanbanLoading || streamingLoading || executionLimitsLoading || ioSafetyLoading || checkpointsLoading || cronLoading || loggingLoading || approvalsLoading || privacyLoading || browserLoading || sttLoading || terminalLoading || saving || runtimeSaving || sessionsMaintenanceSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || curatorSaving || quickCommandsSaving || modelSaving || modelAliasesSaving || hooksSaving || providerOverridesSaving || mcpServersSaving || agentToolsetsSaving || platformToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || securitySaving || displaySaving || humanDelaySaving || kanbanSaving || streamingSaving || executionLimitsSaving || ioSafetySaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || privacySaving || browserSaving || sttSaving || terminalSaving
   }
 
   function option(labelKey, value, selected) {
@@ -516,7 +528,7 @@ export function render() {
   }
 
   function renderRuntimePanel() {
-    const disabled = loading || saving || runtimeLoading || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || providerOverridesSaving || agentToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || terminalSaving
+    const disabled = loading || saving || runtimeLoading || runtimeSaving || sessionsMaintenanceSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || providerOverridesSaving || agentToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || terminalSaving
     return `
       <div class="hm-panel hm-config-runtime-panel">
         <div class="hm-panel-header">
@@ -562,6 +574,52 @@ export function render() {
             </label>
           </div>
           <div class="hm-channel-footnote">${t('engine.hermesSessionRuntimeFootnote')}</div>
+        </div>
+      </div>
+    `
+  }
+
+  function renderSessionsMaintenancePanel() {
+    const disabled = loading || saving || sessionsMaintenanceLoading || sessionsMaintenanceSaving || runtimeSaving || compressionSaving || promptCachingSaving || openrouterCacheSaving || providerRoutingSaving || auxiliarySaving || toolGuardrailsSaving || memorySaving || skillsSaving || quickCommandsSaving || providerOverridesSaving || agentToolsetsSaving || agentRuntimeSaving || unauthorizedDmSaving || streamingSaving || executionLimitsSaving || checkpointsSaving || cronSaving || loggingSaving || approvalsSaving || terminalSaving
+    return `
+      <div class="hm-panel hm-config-runtime-panel">
+        <div class="hm-panel-header">
+          <div>
+            <div class="hm-panel-title">${t('engine.hermesSessionsMaintenanceTitle')}</div>
+            <div class="hm-channel-panel-desc">${t('engine.hermesSessionsMaintenanceDesc')}</div>
+          </div>
+          <div class="hm-panel-actions">
+            <span class="hm-muted">${sessionsMaintenanceSaving ? t('engine.hermesConfigStatusSaving') : sessionsMaintenanceLoading ? t('engine.hermesConfigStatusLoading') : t('engine.hermesSessionsMaintenanceStatusReady')}</span>
+            <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-sessions-maintenance-save" ${disabled ? 'disabled' : ''}>${t('engine.hermesSessionsMaintenanceSave')}</button>
+          </div>
+        </div>
+        <div class="hm-panel-body">
+          ${renderError(sessionsMaintenanceError)}
+          <div class="hm-config-check-grid">
+            <label class="hm-channel-check">
+              <input id="hm-sessions-auto-prune" type="checkbox" ${sessionsMaintenanceValues.sessionsAutoPrune ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesSessionsMaintenanceAutoPrune')}</span>
+            </label>
+            <label class="hm-channel-check">
+              <input id="hm-sessions-vacuum-after-prune" type="checkbox" ${sessionsMaintenanceValues.sessionsVacuumAfterPrune ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesSessionsMaintenanceVacuumAfterPrune')}</span>
+            </label>
+            <label class="hm-channel-check">
+              <input id="hm-sessions-write-json-snapshots" type="checkbox" ${sessionsMaintenanceValues.sessionsWriteJsonSnapshots ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+              <span>${t('engine.hermesSessionsMaintenanceWriteJsonSnapshots')}</span>
+            </label>
+          </div>
+          <div class="hm-config-runtime-grid">
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesSessionsMaintenanceRetentionDays')}</span>
+              <input id="hm-sessions-retention-days" class="hm-input" type="number" inputmode="numeric" min="1" max="36500" step="1" value="${esc(sessionsMaintenanceValues.sessionsRetentionDays)}" ${disabled ? 'disabled' : ''}>
+            </label>
+            <label class="hm-field">
+              <span class="hm-field-label">${t('engine.hermesSessionsMaintenanceMinIntervalHours')}</span>
+              <input id="hm-sessions-min-interval-hours" class="hm-input" type="number" inputmode="numeric" min="0" max="87600" step="1" value="${esc(sessionsMaintenanceValues.sessionsMinIntervalHours)}" ${disabled ? 'disabled' : ''}>
+            </label>
+          </div>
+          <div class="hm-channel-footnote">${t('engine.hermesSessionsMaintenanceFootnote')}</div>
         </div>
       </div>
     `
@@ -2291,6 +2349,7 @@ export function render() {
       </div>
 
       ${renderRuntimePanel()}
+      ${renderSessionsMaintenancePanel()}
       ${renderTerminalPanel()}
       ${renderStreamingPanel()}
       ${renderExecutionLimitsPanel()}
@@ -2345,6 +2404,7 @@ export function render() {
     el.querySelector('#hm-config-reload')?.addEventListener('click', load)
     el.querySelector('#hm-config-save')?.addEventListener('click', save)
     el.querySelector('#hm-runtime-save')?.addEventListener('click', saveRuntime)
+    el.querySelector('#hm-sessions-maintenance-save')?.addEventListener('click', saveSessionsMaintenance)
     el.querySelector('#hm-compression-save')?.addEventListener('click', saveCompression)
     el.querySelector('#hm-prompt-caching-save')?.addEventListener('click', savePromptCaching)
     el.querySelector('#hm-openrouter-cache-save')?.addEventListener('click', saveOpenrouterCache)
@@ -2389,6 +2449,11 @@ export function render() {
   async function loadRuntime() {
     const data = await api.hermesSessionRuntimeConfigRead()
     runtimeValues = { ...SESSION_RUNTIME_DEFAULTS, ...(data?.values || {}) }
+  }
+
+  async function loadSessionsMaintenance() {
+    const data = await api.hermesSessionsMaintenanceConfigRead()
+    sessionsMaintenanceValues = { ...SESSIONS_MAINTENANCE_DEFAULTS, ...(data?.values || {}) }
   }
 
   async function loadCompression() {
@@ -2564,6 +2629,7 @@ export function render() {
   async function load() {
     loading = true
     runtimeLoading = true
+    sessionsMaintenanceLoading = true
     compressionLoading = true
     promptCachingLoading = true
     openrouterCacheLoading = true
@@ -2600,6 +2666,7 @@ export function render() {
     terminalLoading = true
     error = null
     runtimeError = null
+    sessionsMaintenanceError = null
     compressionError = null
     promptCachingError = null
     openrouterCacheError = null
@@ -2647,6 +2714,14 @@ export function render() {
       runtimeError = humanizeError(err, t('engine.hermesSessionRuntimeLoadFailed') || 'Load runtime config failed')
     } finally {
       runtimeLoading = false
+      draw()
+    }
+    try {
+      await loadSessionsMaintenance()
+    } catch (err) {
+      sessionsMaintenanceError = humanizeError(err, t('engine.hermesSessionsMaintenanceLoadFailed') || 'Load session maintenance config failed')
+    } finally {
+      sessionsMaintenanceLoading = false
       draw()
     }
     try {
@@ -2946,6 +3021,9 @@ export function render() {
         await loadRuntime()
       } catch {}
       try {
+        await loadSessionsMaintenance()
+      } catch {}
+      try {
         await loadCompression()
       } catch {}
       try {
@@ -3076,6 +3154,35 @@ export function render() {
       toast(runtimeError, 'error')
     } finally {
       runtimeSaving = false
+      draw()
+    }
+  }
+
+  async function saveSessionsMaintenance() {
+    const form = {
+      sessionsAutoPrune: !!el.querySelector('#hm-sessions-auto-prune')?.checked,
+      sessionsRetentionDays: el.querySelector('#hm-sessions-retention-days')?.value || '90',
+      sessionsVacuumAfterPrune: !!el.querySelector('#hm-sessions-vacuum-after-prune')?.checked,
+      sessionsMinIntervalHours: el.querySelector('#hm-sessions-min-interval-hours')?.value || '24',
+      sessionsWriteJsonSnapshots: !!el.querySelector('#hm-sessions-write-json-snapshots')?.checked,
+    }
+    sessionsMaintenanceSaving = true
+    sessionsMaintenanceError = null
+    draw()
+    try {
+      const result = await api.hermesSessionsMaintenanceConfigSave(form)
+      sessionsMaintenanceValues = { ...SESSIONS_MAINTENANCE_DEFAULTS, ...(result?.values || form) }
+      await refreshRawAfterStructuredSave()
+      const backup = result?.backup || ''
+      toast({
+        message: t('engine.hermesSessionsMaintenanceSaveSuccess'),
+        hint: backup ? t('engine.hermesConfigBackupHint', { path: backup }) : '',
+      }, 'success')
+    } catch (err) {
+      sessionsMaintenanceError = humanizeError(err, t('engine.hermesSessionsMaintenanceSaveFailed') || 'Save session maintenance config failed')
+      toast(sessionsMaintenanceError, 'error')
+    } finally {
+      sessionsMaintenanceSaving = false
       draw()
     }
   }
