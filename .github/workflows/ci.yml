@@ -7,6 +7,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    # 默认 types 不含 ready_for_review，导致 draft → ready 转换不会触发 CI；显式列出确保所有人为状态变化都会跑 CI
+    types: [opened, synchronize, reopened, ready_for_review]
 
 # 同一分支的新提交会取消正在运行的旧工作流
 concurrency:
