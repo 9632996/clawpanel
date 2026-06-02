@@ -30,10 +30,6 @@ export async function render() {
       <div class="stat-card loading-placeholder"></div>
     </div>
     <div class="config-section">
-      <div class="config-section-title">${t('about.sectionCommunity')}</div>
-      <div id="community-section"></div>
-    </div>
-    <div class="config-section">
       <div class="config-section-title">${t('about.sectionProjects')}</div>
       <div id="projects-list"></div>
     </div>
@@ -64,13 +60,6 @@ export async function render() {
     loadHermesData(page)
   } else {
     loadData(page)
-  }
-
-  // 社群二维码是 OpenClaw 专属渠道，对 xintian 用户不相关
-  if (activeEngineId === 'xintian') {
-    page.querySelector('#community-section')?.closest('.config-section')?.remove()
-  } else {
-    renderCommunity(page)
   }
 
   renderProjects(page)
@@ -690,46 +679,6 @@ function compareVersions(a, b) {
     if (na < nb) return -1
   }
   return 0
-}
-
-function renderCommunity(page) {
-  const el = page.querySelector('#community-section')
-  el.innerHTML = `
-    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
-      <div style="text-align:center">
-        <img src="/images/OpenClaw-QQ.png" alt="${t('about.qqGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
-        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.qqGroup')}</div>
-      </div>
-      <div style="text-align:center">
-        <img src="/images/OpenClawWx.png" alt="${t('about.wechatGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
-        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.wechatGroup')}</div>
-      </div>
-      <div style="text-align:center">
-        <img src="/images/logo-brand.png" alt="${t('about.douyinGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary);object-fit:contain;background:#fff">
-        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.douyinGroup')}</div>
-      </div>
-      <div style="text-align:center">
-        <img src="/images/logo-brand.png" alt="${t('about.feishuGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary);object-fit:contain;background:#fff">
-        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.feishuGroup')}</div>
-      </div>
-      <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px;padding-top:4px">
-        <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">${t('about.communityWelcome')}</div>
-        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);font-style:italic">${t('about.communityWelcomeIntl')}</div>
-        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-top:4px">${t('about.communityDesc')}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-          <a class="btn btn-sm" href="https://discord.gg/U9AttmsNHh" target="_blank" rel="noopener" style="background:#5865F2;color:#fff;display:inline-flex;align-items:center;gap:4px;border:none">${icon('message-circle', 14)} ${t('about.joinDiscord')}</a>
-          <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener">${t('about.joinQQ')}</a>
-          <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener">${t('about.joinWechat')}</a>
-          <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener">${t('about.joinDouyin')}</a>
-          <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener">${t('about.joinFeishu')}</a>
-          <a class="btn btn-secondary btn-sm" href="https://yb.tencent.com/gp/i/IIGXzcMcdh84" target="_blank" rel="noopener">${t('about.joinYuanbao')}</a>
-        </div>
-        <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px">
-          ${t('about.communityNote')}
-        </div>
-      </div>
-    </div>
-  `
 }
 
 const PROJECTS = [

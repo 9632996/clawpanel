@@ -4,7 +4,6 @@
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { humanizeError } from '../lib/humanize-error.js'
-import { tryShowEngagement } from '../components/engagement.js'
 import { t } from '../lib/i18n.js'
 import { termHelpHtml, attachTermTooltips } from '../lib/term-tooltip.js'
 
@@ -347,7 +346,6 @@ async function saveConfig(page, state) {
     try {
       await api.reloadGateway()
       toast(t('gateway.reloaded'), 'success')
-      setTimeout(tryShowEngagement, 3000)
     } catch (e) {
       toast(humanizeError(e, t('gateway.savedButReloadFailed')), 'warning')
     }
