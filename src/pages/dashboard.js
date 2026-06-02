@@ -141,6 +141,22 @@ let _dashboardStatusSummaryCache = null
 let _dashboardInstanceId = ''
 let _dashboardLoadSeq = 0
 
+function isDesktopRuntime() {
+  return !!window.__TAURI_INTERNALS__ || !!window.__TAURI__ || window.location?.hostname === 'tauri.localhost'
+}
+
+async function loadServicesStatusForDashboard(withTimeout, fullRefresh) {
+  const initialTimeout = isDesktopRuntime() && !_dashboardInitialized && !fullRefresh ? 6000 : 2500
+  try {
+    return await withTimeout(api.getServicesStatus(), initialTimeout)
+  } catch (firstError) {
+    if (!isDesktopRuntime()) throw firstError
+    invalidate('get_services_status')
+    await new Promise(resolve => setTimeout(resolve, 180))
+    return withTimeout(api.getServicesStatus(), 5000)
+  }
+}
+
 function syncDashboardInstanceScope() {
   const instanceId = getActiveInstance()?.id || 'local'
   if (_dashboardInstanceId && _dashboardInstanceId !== instanceId) {
@@ -239,7 +255,7 @@ async function _loadDashboardDataInner(page, fullRefresh, loadSeq) {
   }
   // 每个请求独立超时：避免单个慢请求拖垮整体渲染
   const coreP = Promise.allSettled([
-    withTimeout(api.getServicesStatus(), 2500),
+    loadServicesStatusForDashboard(withTimeout, fullRefresh),
     withTimeout(api.readOpenclawConfig(), 2000),
     withTimeout(api.readPanelConfig(), 2000),
   ])
@@ -260,7 +276,7 @@ async function _loadDashboardDataInner(page, fullRefresh, loadSeq) {
   }
   if (servicesRes.status === 'rejected') {
     console.warn('[dashboard] getServicesStatus slow/failed:', servicesRes.reason)
-    toast(t('dashboard.servicesLoadFail'), 'error')
+    if (_dashboardInitialized || fullRefresh) toast(t('dashboard.servicesLoadFail'), 'error')
   }
   if (configRes.status === 'rejected') console.warn('[dashboard] readOpenclawConfig slow/failed:', configRes.reason)
   if (panelConfigRes.status === 'rejected') console.warn('[dashboard] readPanelConfig slow/failed:', panelConfigRes.reason)

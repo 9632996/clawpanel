@@ -1167,6 +1167,7 @@ mod platform {
 
     /// 记录当前活跃的 Gateway 子进程（用于 stop 时精确 kill）
     static ACTIVE_GATEWAY_CHILD: Mutex<Option<u32>> = Mutex::new(None);
+    static GATEWAY_START_IN_PROGRESS: Mutex<bool> = Mutex::new(false);
 
     /// 检查 Gateway 端口是否有响应（阻塞式 HTTP /health，3s 超时）
     /// 单次探测；若需要对瞬态抖动更宽容，使用 `is_gateway_port_responsive_with_retry`
@@ -1539,11 +1540,17 @@ mod platform {
             Ok(a) => a,
             Err(_) => return (false, None),
         };
-        // 两次尝试：第一次 1 秒，失败后短暂等待再用 2 秒重试，避免瞬态超时误判
-        let connected =
-            std::net::TcpStream::connect_timeout(&socket_addr, Duration::from_secs(1)).is_ok() || {
-                std::thread::sleep(Duration::from_millis(300));
-                std::net::TcpStream::connect_timeout(&socket_addr, Duration::from_secs(2)).is_ok()
+        // localhost 状态探测需要快速失败，否则仪表盘会把"已停止"误判成"状态加载失败"。
+        // 这里仅做 TCP connect，不依赖应用层响应；Gateway 真在监听时本地握手会非常快。
+        let connected = std::net::TcpStream::connect_timeout(
+            &socket_addr,
+            Duration::from_millis(250),
+        )
+        .is_ok()
+            || {
+                std::thread::sleep(Duration::from_millis(120));
+                std::net::TcpStream::connect_timeout(&socket_addr, Duration::from_millis(450))
+                    .is_ok()
             };
         if !connected {
             // 端口不通，先清空已知的僵死 PID
@@ -1603,31 +1610,6 @@ mod platform {
 
     const GATEWAY_WINDOW_TITLE: &str = "OpenClaw Gateway";
 
-    fn quote_batch_path(value: &str) -> String {
-        format!("\"{}\"", value.replace('"', ""))
-    }
-
-    fn gateway_terminal_command(cli: &str) -> String {
-        if cli.eq_ignore_ascii_case("openclaw") {
-            return "openclaw gateway".into();
-        }
-        if cli.to_ascii_lowercase().ends_with(".js") {
-            return format!("node {} gateway", quote_batch_path(cli));
-        }
-        format!("{} gateway", quote_batch_path(cli))
-    }
-
-    fn write_gateway_terminal_runner(openclaw_dir: &Path, cli: &str) -> Result<PathBuf, String> {
-        fs::create_dir_all(openclaw_dir).map_err(|e| format!("创建 OpenClaw 目录失败: {e}"))?;
-        let runner_path = openclaw_dir.join("clawpanel-gateway.cmd");
-        let content = format!(
-            "@echo off\r\ntitle {GATEWAY_WINDOW_TITLE}\r\necho OpenClaw Gateway is running. Keep this window open.\r\necho Close this window to stop Gateway.\r\necho.\r\n{}\r\necho.\r\necho Gateway exited. You can close this window.\r\n",
-            gateway_terminal_command(cli)
-        );
-        fs::write(&runner_path, content).map_err(|e| format!("写入 Gateway 启动脚本失败: {e}"))?;
-        Ok(runner_path)
-    }
-
     /// 在 Windows 上打开一个可见终端启动 Gateway
     ///
     /// 关键：必须通过 `cmd.exe` 内置的 `start` 命令拉起新控制台。
@@ -1637,6 +1619,25 @@ mod platform {
     /// 通过外层 `cmd /c start "<title>" cmd /K runner.cmd` 让 `start` 用全新的
     /// `CreateProcess` 拉起子进程，stdio 不继承、控制台真正分离，稳定弹出可见窗口。
     pub async fn start_service_impl(_label: &str) -> Result<(), String> {
+        if !is_cli_installed() {
+            return Err(
+                "openclaw CLI 未安装，请先通过 npm install -g @qingchencloud/openclaw-zh 安装"
+                    .into(),
+            );
+        }
+        {
+            let mut starting = GATEWAY_START_IN_PROGRESS.lock().unwrap();
+            if *starting {
+                return Err("Gateway 正在启动中，请稍候再试".into());
+            }
+            *starting = true;
+        }
+        let result = start_service_impl_inner().await;
+        *GATEWAY_START_IN_PROGRESS.lock().unwrap() = false;
+        result
+    }
+
+    async fn start_service_impl_inner() -> Result<(), String> {
         if !is_cli_installed() {
             return Err(
                 "openclaw CLI 未安装，请先通过 npm install -g @qingchencloud/openclaw-zh 安装"
@@ -1661,46 +1662,55 @@ mod platform {
         let cli = crate::utils::resolve_openclaw_cli_path().unwrap_or_else(|| "openclaw".into());
         let openclaw_dir = crate::commands::openclaw_dir();
         let config_path = openclaw_dir.join("openclaw.json");
-        let runner_path = write_gateway_terminal_runner(&openclaw_dir, &cli)?;
-        let runner_path_str = runner_path.to_string_lossy().to_string();
-        let openclaw_dir_str = openclaw_dir.to_string_lossy().to_string();
-
-        // 外层 cmd /c 自身用 CREATE_NO_WINDOW 隐藏（短命桥接进程），
-        // 内部 `start` 会创建一个真正可见的新控制台窗口运行 runner.cmd。
-        let mut cmd = StdCommand::new("cmd");
-        cmd.args([
-            "/c",
-            "start",
-            GATEWAY_WINDOW_TITLE,
-            "/D",
-            openclaw_dir_str.as_str(),
-            "cmd",
-            "/D",
-            "/K",
-            runner_path_str.as_str(),
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .env("PATH", crate::commands::enhanced_path())
-        .env("OPENCLAW_HOME", &openclaw_dir)
-        .env("OPENCLAW_STATE_DIR", &openclaw_dir)
-        .env("OPENCLAW_CONFIG_PATH", &config_path)
-        .current_dir(&openclaw_dir);
+        let log_dir = openclaw_dir.join("logs");
+        fs::create_dir_all(&log_dir).map_err(|e| format!("创建日志目录失败: {e}"))?;
+        let stdout_log = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_dir.join("gateway.log"))
+            .map_err(|e| format!("创建 Gateway 日志失败: {e}"))?;
+        let stderr_log = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_dir.join("gateway.err.log"))
+            .map_err(|e| format!("创建 Gateway 错误日志失败: {e}"))?;
+        let port_arg = crate::commands::gateway_listen_port().to_string();
+        let cli_lower = cli.to_ascii_lowercase();
+        let mut cmd = if cli_lower.ends_with(".js") {
+            let mut command = StdCommand::new("node");
+            command.arg(&cli);
+            command
+        } else if cli_lower.ends_with(".cmd") || cli_lower.ends_with(".bat") {
+            let mut command = StdCommand::new("cmd");
+            command.args(["/D", "/C"]).arg(&cli);
+            command
+        } else {
+            StdCommand::new(&cli)
+        };
+        cmd.args(["gateway", "run", "--port"])
+            .arg(&port_arg)
+            .creation_flags(CREATE_NO_WINDOW)
+            .env("PATH", crate::commands::enhanced_path())
+            .env("OPENCLAW_HOME", &openclaw_dir)
+            .env("OPENCLAW_STATE_DIR", &openclaw_dir)
+            .env("OPENCLAW_CONFIG_PATH", &config_path)
+            .env("OPENCLAW_WRAPPER_LOG_REDIRECT", "0")
+            .current_dir(&openclaw_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::from(stdout_log))
+            .stderr(std::process::Stdio::from(stderr_log));
         crate::commands::apply_proxy_env(&mut cmd);
 
-        let status = cmd
-            .status()
-            .map_err(|e| format!("启动 Gateway 失败: {e}"))?;
-        if !status.success() {
-            return Err(format!(
-                "启动 Gateway 失败：cmd /c start 退出码 {:?}",
-                status.code()
-            ));
+        let child = cmd.spawn().map_err(|e| format!("启动 Gateway 失败: {e}"))?;
+        {
+            let mut active = ACTIVE_GATEWAY_CHILD.lock().unwrap();
+            *active = Some(child.id());
         }
 
         // 轮询等待：端口就绪 AND PID 与之前不同（新 Gateway 进程已接管端口）
         // 外层 cmd /c start 是 detached 桥接进程，无法用 spawn().id() 跟踪真正的 Gateway。
         // 改为 polling netstat 拿到监听端口的 PID，作为真实 Gateway PID 记录。
-        let deadline = Instant::now() + Duration::from_secs(20);
+        let deadline = Instant::now() + Duration::from_secs(90);
         while Instant::now() < deadline {
             tokio::time::sleep(Duration::from_millis(300)).await;
             let (running2, pid2) = check_service_status(0, "");
@@ -1716,7 +1726,12 @@ mod platform {
             }
         }
 
-        Err("Gateway 启动超时，请查看弹出的终端窗口或 gateway.err.log".into())
+        let excerpt = super::read_gateway_error_log_excerpt(4096);
+        if excerpt.trim().is_empty() {
+            Err("Gateway 启动超时，请查看 gateway.err.log".into())
+        } else {
+            Err(format!("Gateway 启动超时，请查看 gateway.err.log\n{excerpt}"))
+        }
     }
 
     /// 关闭 Gateway：精确 kill Gateway 进程，不误杀其他 node.exe
