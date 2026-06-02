@@ -110,20 +110,20 @@ export function tryShowEngagement() {
 
       <div class="engage-section-label">${t('engagement.communityLabel')}</div>
       <div class="engage-qrcodes">
-        <a class="engage-qr-item" href="https://qt.cool/c/OpenClaw" target="_blank" rel="noopener">
+        <a class="engage-qr-item" href="https://ai.aizuopin.com" target="_blank" rel="noopener">
           <img src="/images/OpenClaw-QQ.png" alt="${t('engagement.qqAlt')}" />
           <div class="engage-qr-label">${t('engagement.qqLabel')}</div>
         </a>
-        <a class="engage-qr-item" href="https://qt.cool/c/OpenClawWx" target="_blank" rel="noopener">
+        <a class="engage-qr-item" href="https://ai.aizuopin.com" target="_blank" rel="noopener">
           <img src="/images/OpenClawWx.png" alt="${t('engagement.wechatAlt')}" />
           <div class="engage-qr-label">${t('engagement.wechatLabel')}</div>
         </a>
-        <a class="engage-qr-item" href="https://qt.cool/c/OpenClawDY" target="_blank" rel="noopener">
+        <a class="engage-qr-item" href="https://ai.aizuopin.com" target="_blank" rel="noopener">
           <img src="/images/OpenClaw-DY.png" alt="${t('engagement.douyinAlt')}" />
           <div class="engage-qr-label">${t('engagement.douyinLabel')}</div>
         </a>
-        <a class="engage-qr-item" href="https://qt.cool/c/feishu" target="_blank" rel="noopener">
-          <img src="https://qt.cool/c/feishu/qr.png" alt="${t('engagement.feishuAlt')}" />
+        <a class="engage-qr-item" href="https://ai.aizuopin.com" target="_blank" rel="noopener">
+          <img src="/images/logo-brand.png" alt="${t('engagement.feishuAlt')}" />
           <div class="engage-qr-label">${t('engagement.feishuLabel')}</div>
         </a>
       </div>

@@ -1893,7 +1893,7 @@ export default {
   xtFeatChatTitle: _('流式对话 × 思维链', 'Streaming chat × CoT', '串流對話 × 思維鏈'),
   xtFeatChatDesc: _('工具调用与思考过程全程可见，Markdown / 代码 / 表格原生渲染。', 'Full visibility into tool calls and reasoning, with native Markdown / code / table rendering.', '工具調用與思考過程全程可見，Markdown / 程式碼 / 表格原生渲染。'),
   xtFeatAgentTitle: _('多智能体 Agent 体系', 'Multi-agent roster', '多智能體 Agent 體系'),
-  xtFeatAgentDesc: _('预置心甜 + 晴辰两个助手，独立人设与记忆，可随时自定义。', 'Bundled Xintian & Qingchen assistants, each with its own persona and memory — fully customizable.', '預置心甜 + 晴辰兩個助手，獨立人設與記憶，可隨時自定義。'),
+  xtFeatAgentDesc: _('预置多位助手，独立人设与记忆，可随时自定义。', 'Bundled assistants, each with its own persona and memory, fully customizable.', '預置多位助手，獨立人設與記憶，可隨時自定義。'),
   xtFeatMemoryTitle: _('心甜智脑 · 长期记忆', 'Sweet Brain · Long-term memory', '心甜智腦 · 長期記憶'),
   xtFeatMemoryDesc: _('事实 + 对话双层记忆，跨渠道共享，桌面说过的话微信也能想起来。', 'Dual-layer memory (facts + conversations) shared across channels — it remembers what you said, everywhere.', '事實 + 對話雙層記憶，跨頻道共享，桌面說過的話微信也能想起來。'),
   xtFeatRagTitle: _('知识库 × RAG', 'Knowledge base × RAG', '知識庫 × RAG'),

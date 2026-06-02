@@ -1170,7 +1170,7 @@ function bindTopActions(page, state) {
   page.querySelector('#btn-import-client').onclick = () => importClientConfigs(page, state)
   page.querySelector('#btn-undo').onclick = () => undo(page, state)
 
-  // 晴辰云:获取模型列表 → 弹窗让用户选择要添加的模型
+  // AI作品模型服务：获取模型列表 → 弹窗让用户选择要添加的模型
   page.querySelector('#btn-qtcool-oneclick').onclick = async () => {
     if (!state.config) { toast(t('models.configNotReady'), 'warning'); return }
 

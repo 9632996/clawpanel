@@ -3,7 +3,7 @@
  * 解析 npm 错误信息，返回用户友好的提示和修复建议
  */
 
-const NPM_CMD = 'npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com'
+const NPM_CMD = 'npm install -g openclaw --registry https://registry.npmmirror.com'
 const GIT_HTTPS_CMD = 'git config --global url."https://github.com/".insteadOf ssh://git@github.com/ && git config --global --add url."https://github.com/".insteadOf ssh://git@github.com && git config --global --add url."https://github.com/".insteadOf ssh://git@://github.com/ && git config --global --add url."https://github.com/".insteadOf git@github.com: && git config --global --add url."https://github.com/".insteadOf git://github.com/ && git config --global --add url."https://github.com/".insteadOf git+ssh://git@github.com/'
 const GIT_HTTPS_ROOT_CMD = 'sudo git config --global url."https://github.com/".insteadOf ssh://git@github.com/ && sudo git config --global --add url."https://github.com/".insteadOf ssh://git@github.com && sudo git config --global --add url."https://github.com/".insteadOf ssh://git@://github.com/ && sudo git config --global --add url."https://github.com/".insteadOf git@github.com: && sudo git config --global --add url."https://github.com/".insteadOf git://github.com/ && sudo git config --global --add url."https://github.com/".insteadOf git+ssh://git@github.com/'
 
@@ -51,7 +51,7 @@ export function diagnoseInstallError(errStr) {
     return {
       title: '安装失败 — 原生依赖缺失',
       hint: 'OpenClaw 的原生模块未正确安装。这通常是 npm optional dependencies 的 bug。请尝试在终端手动重装：',
-      command: 'npm i -g @qingchencloud/openclaw-zh@latest --registry https://registry.npmmirror.com',
+      command: NPM_CMD,
     }
   }
 
@@ -71,7 +71,7 @@ export function diagnoseInstallError(errStr) {
     return {
       title: '安装失败 — 文件冲突',
       hint: '旧版本的 openclaw 命令文件仍然存在。当前工作台已尝试自动清理，如仍失败请手动处理后重试：',
-      command: 'npm install -g @qingchencloud/openclaw-zh --force --registry https://registry.npmmirror.com',
+      command: NPM_CMD,
     }
   }
 

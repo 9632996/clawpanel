@@ -705,11 +705,11 @@ function renderCommunity(page) {
         <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.wechatGroup')}</div>
       </div>
       <div style="text-align:center">
-        <img src="https://qt.cool/c/OpenClawDY/qr.png" alt="${t('about.douyinGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary);object-fit:contain;background:#fff">
+        <img src="/images/logo-brand.png" alt="${t('about.douyinGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary);object-fit:contain;background:#fff">
         <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.douyinGroup')}</div>
       </div>
       <div style="text-align:center">
-        <img src="https://qt.cool/c/feishu/qr.png" alt="${t('about.feishuGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary);object-fit:contain;background:#fff">
+        <img src="/images/logo-brand.png" alt="${t('about.feishuGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary);object-fit:contain;background:#fff">
         <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.feishuGroup')}</div>
       </div>
       <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px;padding-top:4px">
@@ -718,10 +718,10 @@ function renderCommunity(page) {
         <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-top:4px">${t('about.communityDesc')}</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
           <a class="btn btn-sm" href="https://discord.gg/U9AttmsNHh" target="_blank" rel="noopener" style="background:#5865F2;color:#fff;display:inline-flex;align-items:center;gap:4px;border:none">${icon('message-circle', 14)} ${t('about.joinDiscord')}</a>
-          <a class="btn btn-primary btn-sm" href="https://qt.cool/c/OpenClaw" target="_blank" rel="noopener">${t('about.joinQQ')}</a>
-          <a class="btn btn-primary btn-sm" href="https://qt.cool/c/OpenClawWx" target="_blank" rel="noopener">${t('about.joinWechat')}</a>
-          <a class="btn btn-primary btn-sm" href="https://qt.cool/c/OpenClawDY" target="_blank" rel="noopener">${t('about.joinDouyin')}</a>
-          <a class="btn btn-primary btn-sm" href="https://qt.cool/c/feishu" target="_blank" rel="noopener">${t('about.joinFeishu')}</a>
+          <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener">${t('about.joinQQ')}</a>
+          <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener">${t('about.joinWechat')}</a>
+          <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener">${t('about.joinDouyin')}</a>
+          <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener">${t('about.joinFeishu')}</a>
           <a class="btn btn-secondary btn-sm" href="https://yb.tencent.com/gp/i/IIGXzcMcdh84" target="_blank" rel="noopener">${t('about.joinYuanbao')}</a>
         </div>
         <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px">
@@ -748,16 +748,6 @@ const PROJECTS = [
     desc: t('about.projectClawPanel'),
     url: 'https://ai.aizuopin.com',
   },
-  {
-    name: 'ClawApp',
-    desc: t('about.projectClawApp'),
-    url: 'https://github.com/qingchencloud/clawapp',
-  },
-  {
-    name: 'cftunnel',
-    desc: t('about.projectCftunnel'),
-    url: 'https://github.com/qingchencloud/cftunnel',
-  },
 ]
 
 function renderProjects(page) {
@@ -780,9 +770,8 @@ function renderProjects(page) {
 
 const LINKS = [
   { label: t('about.linkWebsite'), url: 'https://ai.aizuopin.com', primary: true },
+  { label: t('about.linkMainWebsite'), url: 'https://aizuopin.com' },
   { label: t('about.linkOpenClawZh'), url: 'https://github.com/1186258278/OpenClawChineseTranslation' },
-  { label: t('about.linkClawApp'), url: 'https://clawapp.qt.cool' },
-  { label: t('about.linkCftunnel'), url: 'https://cftunnel.qt.cool' },
 ]
 
 function renderContribute(page) {
@@ -812,16 +801,16 @@ function renderCompany(page) {
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px">
       <div style="display:flex;align-items:center;gap:12px">
-        <img src="/images/logo-brand.png" alt="QingchenCloud" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
+        <img src="/images/logo-brand.png" alt="AI作品" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
         <div>
           <div style="font-weight:700;font-size:var(--font-size-md)">${t('about.companyName')}</div>
-          <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">QingchenCloud</div>
+          <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">${PRODUCT_NAME}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:var(--font-size-sm)">
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.officialWebsite')}</div>
-          <a href="https://qingchencloud.com" target="_blank" rel="noopener" style="color:var(--accent)">qingchencloud.com</a>
+          <a href="https://aizuopin.com" target="_blank" rel="noopener" style="color:var(--accent)">aizuopin.com</a>
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.productWebsite')}</div>
@@ -829,11 +818,11 @@ function renderCompany(page) {
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.openSourceRepo')}</div>
-          <a href="https://github.com/qingchencloud" target="_blank" rel="noopener" style="color:var(--accent)">github.com/qingchencloud</a>
+          <a href="https://ai.aizuopin.com" target="_blank" rel="noopener" style="color:var(--accent)">ai.aizuopin.com</a>
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.businessCoop')}</div>
-          <a href="mailto:support@qctx.net" style="color:var(--accent)">support@qctx.net</a>
+          <a href="https://ai.aizuopin.com" target="_blank" rel="noopener" style="color:var(--accent)">${t('about.contactViaWebsite')}</a>
         </div>
       </div>
       <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6">

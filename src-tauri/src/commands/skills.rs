@@ -495,16 +495,16 @@ fn custom_skill_roots_for_agent(
 
     // 如果指定了 agent 的 skills 目录，优先放在第一位
     if let Some(agent_dir) = agent_skills_dir {
-        roots.push((agent_dir.to_path_buf(), "Agent 自定义"));
+        roots.push((agent_dir.to_path_buf(), "智能体自定义"));
     } else {
         // 默认 agent 使用全局 skills 目录
-        roots.push((super::openclaw_dir().join("skills"), "OpenClaw 自定义"));
+        roots.push((super::openclaw_dir().join("skills"), "智爪自定义"));
     }
 
     if let Some(home) = dirs::home_dir() {
         let claude_skills = home.join(".claude").join("skills");
         if !roots.iter().any(|(dir, _)| dir == &claude_skills) {
-            roots.push((claude_skills, "Claude 自定义"));
+            roots.push((claude_skills, "Claude 用户技能"));
         }
     }
     // 从已解析的 CLI 路径推导 npm 包内的 bundled skills 目录
@@ -517,20 +517,20 @@ fn custom_skill_roots_for_agent(
         {
             let bundled = pkg_root.join("skills");
             if bundled.is_dir() && !roots.iter().any(|(dir, _)| dir == &bundled) {
-                roots.push((bundled, "OpenClaw 内置"));
+                roots.push((bundled, "智爪运行时内置"));
                 break;
             }
         }
     }
     #[cfg(target_os = "windows")]
     if let Some(prefix) = super::windows_npm_global_prefix() {
-        for pkg in ["openclaw", "@qingchencloud/openclaw-zh"] {
+        for pkg in ["openclaw".to_string()] {
             let bundled = std::path::PathBuf::from(&prefix)
                 .join("node_modules")
                 .join(pkg)
                 .join("skills");
             if bundled.is_dir() && !roots.iter().any(|(dir, _)| dir == &bundled) {
-                roots.push((bundled, "OpenClaw 内置"));
+                roots.push((bundled, "智爪运行时内置"));
             }
         }
     }

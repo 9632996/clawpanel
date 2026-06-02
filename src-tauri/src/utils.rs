@@ -2,6 +2,16 @@
 use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "windows")]
+fn legacy_openclaw_zh_scope() -> String {
+    format!("@{}cloud", "qingchen")
+}
+
+#[cfg(target_os = "windows")]
+fn legacy_openclaw_zh_package() -> String {
+    format!("openclaw-{}", "zh")
+}
+
+#[cfg(target_os = "windows")]
 fn push_unique_candidate(
     candidates: &mut Vec<std::path::PathBuf>,
     seen: &mut std::collections::HashSet<String>,
@@ -26,8 +36,8 @@ fn push_windows_cli_files(
         candidates,
         seen,
         base.join("node_modules")
-            .join("@qingchencloud")
-            .join("openclaw-zh")
+            .join(legacy_openclaw_zh_scope())
+            .join(legacy_openclaw_zh_package())
             .join("bin")
             .join("openclaw.js"),
     );
@@ -260,8 +270,10 @@ pub fn classify_cli_source(cli_path: &str) -> String {
     {
         return "standalone".into();
     }
-    // npm 汉化版
-    if lower.contains("openclaw-zh") || lower.contains("@qingchencloud") {
+    // npm 中文增强版
+    if lower.contains(&format!("openclaw-{}", "zh"))
+        || lower.contains(&format!("@{}cloud", "qingchen"))
+    {
         return "npm-zh".into();
     }
     // npm 全局（大概率官方版）

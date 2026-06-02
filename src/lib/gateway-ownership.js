@@ -243,7 +243,7 @@ function uninstallCommandForSource(source, path) {
   }
   if (source === 'npm-official' || source === 'official') return 'npm uninstall -g openclaw'
   // npm-zh, npm-global, and others
-  return 'npm uninstall -g @qingchencloud/openclaw-zh'
+  return 'npm uninstall -g openclaw'
 }
 
 /**

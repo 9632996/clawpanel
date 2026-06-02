@@ -3,9 +3,9 @@
  * 国内用户自动使用 Gitee 镜像，解决 GitHub 访问慢/不可达的问题
  */
 
-const GITHUB_ORG = 'https://github.com/qingchencloud'
+const GITHUB_ORG = 'https://ai.aizuopin.com'
 const GITEE_ORG = 'https://gitee.com/QtCodeCreators'
-const GITHUB_RAW = 'https://raw.githubusercontent.com/qingchencloud'
+const GITHUB_RAW = 'https://ai.aizuopin.com/raw'
 const GITEE_RAW = 'https://gitee.com/QtCodeCreators'
 
 // 仓库名映射（GitHub → Gitee，名称不同时需映射）

@@ -27,7 +27,7 @@ function effectiveDockerEndpoint(cfg) {
 }
 
 function effectiveDockerImage(cfg) {
-  return (cfg?.dockerDefaultImage || '').trim() || 'ghcr.io/qingchencloud/openclaw'
+  return (cfg?.dockerDefaultImage || '').trim() || '1186258278/openclaw'
 }
 
 function openclawInstallationIdentity(installation) {

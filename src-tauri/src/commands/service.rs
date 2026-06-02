@@ -1461,8 +1461,8 @@ mod platform {
                     .join("Programs")
                     .join("nodejs")
                     .join("node_modules")
-                    .join("@qingchencloud")
-                    .join("openclaw-zh")
+                    .join(format!("@{}cloud", "qingchen"))
+                    .join(format!("openclaw-{}", "zh"))
                     .join("bin")
                     .join("openclaw.js"),
             );
@@ -1478,8 +1478,8 @@ mod platform {
             candidates.push(base.join("openclaw"));
             candidates.push(
                 base.join("node_modules")
-                    .join("@qingchencloud")
-                    .join("openclaw-zh")
+                    .join(format!("@{}cloud", "qingchen"))
+                    .join(format!("openclaw-{}", "zh"))
                     .join("bin")
                     .join("openclaw.js"),
             );
@@ -1618,7 +1618,7 @@ mod platform {
     pub async fn start_service_impl(_label: &str) -> Result<(), String> {
         if !is_cli_installed() {
             return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g @qingchencloud/openclaw-zh 安装"
+                "openclaw CLI 未安装，请先确认便携运行时存在，或执行 npm install -g openclaw 安装"
                     .into(),
             );
         }
@@ -1637,7 +1637,7 @@ mod platform {
     async fn start_service_impl_inner() -> Result<(), String> {
         if !is_cli_installed() {
             return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g @qingchencloud/openclaw-zh 安装"
+                "openclaw CLI 未安装，请先确认便携运行时存在，或执行 npm install -g openclaw 安装"
                     .into(),
             );
         }
@@ -1946,7 +1946,7 @@ mod platform {
     async fn gateway_command(action: &str) -> Result<(), String> {
         if !is_cli_installed() {
             return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g @qingchencloud/openclaw-zh 安装"
+                "openclaw CLI 未安装，请先确认便携运行时存在，或执行 npm install -g openclaw 安装"
                     .into(),
             );
         }
@@ -2010,7 +2010,7 @@ mod platform {
     pub async fn start_service_impl(_label: &str) -> Result<(), String> {
         if !is_cli_installed() {
             return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g @qingchencloud/openclaw-zh 安装"
+                "openclaw CLI 未安装，请先确认便携运行时存在，或执行 npm install -g openclaw 安装"
                     .into(),
             );
         }

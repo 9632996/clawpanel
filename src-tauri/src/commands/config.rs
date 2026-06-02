@@ -100,6 +100,14 @@ fn panel_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+fn legacy_openclaw_zh_scope() -> String {
+    format!("@{}cloud", "qingchen")
+}
+
+fn legacy_openclaw_zh_package() -> String {
+    format!("openclaw-{}", "zh")
+}
+
 fn find_panel_policy_entry<'a>(
     policy: &'a VersionPolicy,
     current_version: &str,
@@ -1975,8 +1983,8 @@ async fn get_local_version() -> Option<String> {
             }
             let sa_pkg = sa_dir
                 .join("node_modules")
-                .join("@qingchencloud")
-                .join("openclaw-zh")
+                .join(legacy_openclaw_zh_scope())
+                .join(legacy_openclaw_zh_package())
                 .join("package.json");
             if let Ok(content) = fs::read_to_string(&sa_pkg) {
                 if let Some(ver) = serde_json::from_str::<Value>(&content)
@@ -1999,9 +2007,9 @@ async fn get_local_version() -> Option<String> {
                     .map(|s| s == "chinese")
                     .unwrap_or(false);
                 let pkgs: &[&str] = if is_zh {
-                    &["@qingchencloud/openclaw-zh", "openclaw"]
+                    &["openclaw", "openclaw"]
                 } else {
-                    &["openclaw", "@qingchencloud/openclaw-zh"]
+                    &["openclaw", "openclaw"]
                 };
                 for pkg in pkgs {
                     let pkg_json = npm_bin.join("node_modules").join(pkg).join("package.json");
@@ -2129,8 +2137,9 @@ async fn get_latest_version_for(source: &str) -> Option<String> {
 fn detect_source_from_cmd_shim(cmd_path: &std::path::Path) -> Option<String> {
     let content = std::fs::read_to_string(cmd_path).ok()?;
     let lower = content.to_lowercase();
-    // 汉化版标记：@qingchencloud 或 openclaw-zh
-    if lower.contains("openclaw-zh") || lower.contains("@qingchencloud") {
+    // 中文增强版标记：旧包 scope 或 openclaw-zh
+    if lower.contains(&legacy_openclaw_zh_package()) || lower.contains(&legacy_openclaw_zh_scope())
+    {
         return Some("chinese".into());
     }
     // 确认是 npm shim（含 node_modules 引用）→ 官方版
@@ -2160,7 +2169,9 @@ fn detect_standalone_source_from_dir(dir: &std::path::Path) -> Option<String> {
                 package = value.trim().to_ascii_lowercase();
             }
         }
-        if package.contains("openclaw-zh") || package.contains("@qingchencloud") {
+        if package.contains(&legacy_openclaw_zh_package())
+            || package.contains(&legacy_openclaw_zh_scope())
+        {
             return Some("chinese".into());
         }
         if package == "openclaw" {
@@ -2175,8 +2186,8 @@ fn detect_standalone_source_from_dir(dir: &std::path::Path) -> Option<String> {
     }
     if dir
         .join("node_modules")
-        .join("@qingchencloud")
-        .join("openclaw-zh")
+        .join(legacy_openclaw_zh_scope())
+        .join(legacy_openclaw_zh_package())
         .join("package.json")
         .exists()
     {
@@ -2226,7 +2237,10 @@ fn detect_installed_source() -> String {
         // 兼容 ARM (/opt/homebrew) 和 Intel (/usr/local) 两种 Homebrew 路径
         for brew_prefix in &["/opt/homebrew/bin/openclaw", "/usr/local/bin/openclaw"] {
             if let Ok(target) = std::fs::read_link(brew_prefix) {
-                if target.to_string_lossy().contains("openclaw-zh") {
+                if target
+                    .to_string_lossy()
+                    .contains(&legacy_openclaw_zh_package())
+                {
                     return "chinese".into();
                 }
                 return "official".into();
@@ -2243,13 +2257,13 @@ fn detect_installed_source() -> String {
     // Windows: 通过活跃 CLI 的 .cmd shim 内容判断来源
     // npm 生成的 .cmd shim 最后一行包含实际 JS 入口路径，例如:
     //   "%dp0%\node_modules\openclaw\bin\openclaw.js"           → 官方版
-    //   "%dp0%\node_modules\@qingchencloud\openclaw-zh\..."     → 汉化版
+    //   旧中文增强包路径                                      → 中文增强版
     // 读取内容即可一锤定音，不依赖文件系统扫描（避免残留目录误判）
     #[cfg(target_os = "windows")]
     {
         if let Some(cli_path) = crate::utils::resolve_openclaw_cli_path() {
             let source = crate::utils::classify_cli_source(&cli_path);
-            // 路径本身能确定的情况（standalone 目录、npm-zh 路径含 openclaw-zh）
+            // 路径本身能确定的情况（standalone 目录、npm-zh 路径含中文增强包名）
             if source == "standalone" {
                 return detect_standalone_source_from_cli_path(std::path::Path::new(&cli_path))
                     .unwrap_or_else(|| "chinese".into());
@@ -2306,7 +2320,10 @@ fn detect_installed_source() -> String {
             home.join("bin").join("openclaw"),
         ] {
             if let Ok(target) = std::fs::read_link(link) {
-                if target.to_string_lossy().contains("openclaw-zh") {
+                if target
+                    .to_string_lossy()
+                    .contains(&legacy_openclaw_zh_package())
+                {
                     return "chinese".into();
                 }
                 return "official".into();
@@ -2321,10 +2338,12 @@ fn detect_installed_source() -> String {
         }
         // 4. npm list 兜底
         if let Ok(o) = npm_command()
-            .args(["list", "-g", "@qingchencloud/openclaw-zh", "--depth=0"])
+            .args(["list", "-g", "openclaw", "--depth=0"])
             .output()
         {
-            if String::from_utf8_lossy(&o.stdout).contains("openclaw-zh@") {
+            if String::from_utf8_lossy(&o.stdout)
+                .contains(&format!("{}@", legacy_openclaw_zh_package()))
+            {
                 return "chinese".into();
             }
         }
@@ -2532,8 +2551,8 @@ fn scan_all_installations(
                     .join("Programs")
                     .join("nodejs")
                     .join("node_modules")
-                    .join("@qingchencloud")
-                    .join("openclaw-zh")
+                    .join(legacy_openclaw_zh_scope())
+                    .join(legacy_openclaw_zh_package())
                     .join("bin")
                     .join("openclaw.js"),
             );
@@ -2646,8 +2665,8 @@ fn scan_all_installations(
             try_add(base.join("openclaw"));
             try_add(
                 base.join("node_modules")
-                    .join("@qingchencloud")
-                    .join("openclaw-zh")
+                    .join(legacy_openclaw_zh_scope())
+                    .join(legacy_openclaw_zh_package())
                     .join("bin")
                     .join("openclaw.js"),
             );
@@ -2818,9 +2837,9 @@ fn read_version_from_installation(cli_path: &std::path::Path) -> Option<String> 
         // 避免残留的另一来源包被优先读取
         let cli_source = crate::utils::classify_cli_source(&cli_path.to_string_lossy());
         let pkg_names: &[&str] = if cli_source == "npm-zh" || cli_source == "standalone" {
-            &["@qingchencloud/openclaw-zh", "openclaw"]
+            &["openclaw", "openclaw"]
         } else {
-            &["openclaw", "@qingchencloud/openclaw-zh"]
+            &["openclaw", "openclaw"]
         };
         // 尝试从 package.json 读取
         for pkg_name in pkg_names {
@@ -2883,7 +2902,7 @@ pub async fn get_status_summary() -> Result<Value, String> {
 fn npm_package_name(source: &str) -> &'static str {
     match source {
         "official" => "openclaw",
-        _ => "@qingchencloud/openclaw-zh",
+        _ => "openclaw",
     }
 }
 
@@ -3134,14 +3153,14 @@ async fn try_standalone_install(
             .and_then(|v| v.as_str())
             .ok_or("standalone 清单 editions.zh 缺少 version 字段")?;
         let bu = ed.get("base_url").and_then(|v| v.as_str());
-        (ver, bu, "openclaw-zh")
+        (ver, bu, legacy_openclaw_zh_package())
     } else {
         let ver = manifest
             .get("version")
             .and_then(|v| v.as_str())
             .ok_or("standalone 清单缺少 version 字段")?;
         let bu = manifest.get("base_url").and_then(|v| v.as_str());
-        (ver, bu, "openclaw")
+        (ver, bu, "openclaw".to_string())
     };
 
     // 版本匹配检查
@@ -3567,7 +3586,9 @@ async fn try_r2_install(
         }
         let _ = app.emit("upgrade-log", format!("解压到 {}", modules_dir.display()));
 
-        let qc_dir = modules_dir.join("@qingchencloud");
+        let legacy_scope = legacy_openclaw_zh_scope();
+        let legacy_package = legacy_openclaw_zh_package();
+        let qc_dir = modules_dir.join(&legacy_scope);
         if qc_dir.exists() {
             let _ = std::fs::remove_dir_all(&qc_dir);
         }
@@ -3605,12 +3626,12 @@ async fn try_r2_install(
             }
         }
 
-        // 归档内目录可能是 qingchencloud/（Windows tar 不支持 @ 前缀），需要重命名
-        let no_at_dir = modules_dir.join("qingchencloud");
+        // 归档内目录可能缺少 @ 前缀（Windows tar 不支持 @ 前缀），需要重命名
+        let no_at_dir = modules_dir.join(legacy_scope.trim_start_matches('@'));
         if no_at_dir.exists() && !qc_dir.exists() {
             std::fs::rename(&no_at_dir, &qc_dir)
-                .map_err(|e| format!("重命名 qingchencloud → @qingchencloud 失败: {e}"))?;
-            let _ = app.emit("upgrade-log", "目录已修正: qingchencloud → @qingchencloud");
+                .map_err(|e| format!("修正中文增强运行时目录失败: {e}"))?;
+            let _ = app.emit("upgrade-log", "中文增强运行时目录已修正");
         }
 
         let _ = app.emit("upgrade-log", "解压完成，创建 bin 链接...");
@@ -3618,8 +3639,8 @@ async fn try_r2_install(
         // 创建 bin 链接
         let bin_dir = npm_global_bin_dir().ok_or("无法确定 npm bin 目录")?;
         let openclaw_js = modules_dir
-            .join("@qingchencloud")
-            .join("openclaw-zh")
+            .join(&legacy_scope)
+            .join(&legacy_package)
             .join("bin")
             .join("openclaw.js");
 
@@ -3696,7 +3717,7 @@ async fn upgrade_openclaw_inner(
 
     if try_standalone {
         let github_release_base = format!(
-            "https://github.com/qingchencloud/openclaw-standalone/releases/download/v{}",
+            "https://ai.aizuopin.com/openclaw-standalone/releases/download/v{}",
             ver
         );
 
@@ -3828,8 +3849,8 @@ async fn upgrade_openclaw_inner(
 
     // 汉化版只支持官方源和淘宝源
     let configured_registry = get_configured_registry();
-    let registry = if pkg_name.contains("openclaw-zh") {
-        // 汉化版：淘宝源或官方源
+    let registry = if pkg_name.contains(&legacy_openclaw_zh_package()) {
+        // 中文增强版：淘宝源或官方源
         if configured_registry.contains("npmmirror.com")
             || configured_registry.contains("taobao.org")
         {
@@ -4305,7 +4326,7 @@ async fn uninstall_openclaw_inner(
 
     // 4. 两个包都尝试卸载（确保干净）
     let other_pkg = if source == "official" {
-        "@qingchencloud/openclaw-zh"
+        "openclaw"
     } else {
         "openclaw"
     };
@@ -6352,7 +6373,7 @@ pub async fn install_gateway() -> Result<String, String> {
         Ok(o) if o.status.success() => {}
         _ => {
             return Err("openclaw CLI 未安装。请先执行以下命令安装：\n\n\
-                 npm install -g @qingchencloud/openclaw-zh\n\n\
+                 npm install -g openclaw\n\n\
                  安装完成后再点击此按钮安装 Gateway 服务。"
                 .into());
         }

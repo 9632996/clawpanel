@@ -57,7 +57,7 @@ export default {
   goSecurity: _('前往安全设置', 'Open Security', '前往安全設定', 'セキュリティ設定へ', '보안 설정으로 이동', 'Mở Bảo mật'),
   pageLoadFailed: _('页面加载失败', 'Page failed to load', '頁面載入失敗', 'ページの読み込みに失敗しました', '페이지 로드 실패', 'Tải trang thất bại'),
   reloadRetry: _('刷新重试', 'Reload', '重新整理重試', '再読み込み', '새로고침', 'Tải lại'),
-  pageLoadFailedHint: _('如果问题持续出现，请尝试重新安装本产品，或通过产品官网联系我们。', 'If the problem persists, try reinstalling the product or contact us through the product website.', '如果問題持續出現，請嘗試重新安裝本產品，或透過產品官網聯絡我們。', '問題が続く場合は本製品を再インストールするか、製品サイトからお問い合わせください。', '문제가 계속되면 제품을 다시 설치하거나 제품 웹사이트를 통해 문의하세요.', 'Nếu lỗi vẫn lặp lại, hãy thử cài lại sản phẩm hoặc liên hệ qua website sản phẩm.'),
+  pageLoadFailedHint: _('如果问题持续出现，请尝试重新安装本产品，或通过智爪工具入口联系我们。', 'If the problem persists, try reinstalling the product or contact us through the Zhizhua tool portal.', '如果問題持續出現，請嘗試重新安裝本產品，或透過智爪工具入口聯絡我們。', '問題が続く場合は本製品を再インストールするか、ツールポータルからお問い合わせください。', '문제가 계속되면 제품을 다시 설치하거나 도구 포털을 통해 문의하세요.', 'Nếu lỗi vẫn lặp lại, hãy thử cài lại sản phẩm hoặc liên hệ qua cổng công cụ Zhizhua.'),
   confirmAction: _('确认操作', 'Confirm action', '確認操作', '操作を確認', '작업 확인', 'Xác nhận thao tác'),
   viewDetails: _('查看详情', 'View details', '查看詳情', '詳細を見る', '자세히 보기', 'Xem chi tiết'),
   preparing: _('准备中...', 'Preparing...', '準備中...', '準備中...', '준비 중...', 'Đang chuẩn bị...'),

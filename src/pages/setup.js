@@ -496,7 +496,7 @@ function renderInstallSection() {
           <input type="radio" name="install-source" value="chinese" checked style="margin-right:6px">
           <div>
             <div style="font-weight:600;font-size:var(--font-size-sm)">${t('setup.sourceChineseLabel')}</div>
-            <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">@qingchencloud/openclaw-zh</div>
+            <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">内置 OpenClaw 中文增强运行时</div>
           </div>
         </label>
         <label class="setup-source-option" style="flex:1;cursor:pointer">
@@ -570,7 +570,7 @@ function renderEnvironmentHint() {
           <div class="setup-help-block">
             <div class="setup-help-label">${t('setup.dockerHint')}</div>
             <div class="setup-help-copy">${t('setup.dockerDesc')}</div>
-            <code class="setup-help-code">npm i -g @qingchencloud/openclaw-zh</code>
+            <code class="setup-help-code">npm install -g openclaw</code>
             <code class="setup-help-code">curl -fsSL https://ai.aizuopin.com/raw/main/deploy.sh | bash</code>
             <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://ai.aizuopin.com/raw/main/deploy.sh | bash</code></div>
           </div>

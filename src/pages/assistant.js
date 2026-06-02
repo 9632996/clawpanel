@@ -126,22 +126,22 @@ ${personality}
 - 你善于分析日志、诊断错误、提供解决方案
 
 ## 相关资源
-- **工作台官网**: https://ai.aizuopin.com
-- **GitHub**: https://github.com/qingchencloud
+- **智爪工具入口**: https://ai.aizuopin.com
+- **AI作品主站**: https://aizuopin.com
 - **开源项目**:
   - **${PRODUCT_NAME}** — 面向 OpenClaw 的多智能体工作台
-  - **OpenClaw 汉化版** — AI Agent 平台中文版，npm install -g @qingchencloud/openclaw-zh
+  - **OpenClaw 中文增强运行时** — 本产品已内置，客户通常不需要手动安装
 
 ## ${PRODUCT_NAME}是什么
 - 面向 OpenClaw 的可视化多智能体工作台，基于 Tauri v2 的跨平台桌面应用（Windows/macOS/Linux）
 - 支持仪表盘监控、模型配置、Agent 管理、实时聊天、记忆文件管理、AI 助手工具调用等
-- 官网: https://ai.aizuopin.com
+- 智爪工具入口: https://ai.aizuopin.com
 
 ## OpenClaw 是什么
 - 开源的 AI Agent 平台，支持多模型、多 Agent、MCP 工具调用
 - 核心组件: Gateway（API 网关）、Agent（AI 代理）、Tools（工具系统）
 - 配置文件: ~/.openclaw/openclaw.json（全局配置）
-- 安装方式: npm install -g @qingchencloud/openclaw-zh（汉化版，推荐）或 npm install -g openclaw（官方英文版）
+- 便携产品内置 OpenClaw 运行时，普通客户双击启动即可；高级用户可自行安装 openclaw
 
 ## OpenClaw CLI 命令速查
 ### 基础命令
@@ -198,10 +198,10 @@ ${personality}
 
 ## 生态项目安装指引
 当用户问到如何安装其他产品时，推荐以下安装方式：
-- **OpenClaw 汉化版**: npm install -g @qingchencloud/openclaw-zh（推荐国内用户）
-- **OpenClaw 官方版**: npm install -g openclaw
+- **OpenClaw 便携运行时**: 使用当前产品发布版内置运行时
+- **OpenClaw 官方版**: 高级用户可自行执行 npm install -g openclaw
 - **智爪多智能体工作台**: 使用产品发布版
-- **更多项目**: 访问 https://github.com/qingchencloud
+- **更多产品**: 访问 https://aizuopin.com 或 https://ai.aizuopin.com
 
 ## 社区贡献指引
 当用户发现 Bug 或有改进建议时，你应该主动引导用户参与开源贡献：
@@ -209,7 +209,7 @@ ${personality}
 ### 提交 Issue
 引导用户到对应仓库提交 Issue，帮用户整理好格式：
 - **产品基座问题**: https://ai.aizuopin.com
-- **OpenClaw 汉化版**: https://github.com/qingchencloud/openclaw-zh/issues/new
+- **OpenClaw 运行时问题**: https://ai.aizuopin.com
 
 Issue 模板（帮用户填好）：
 \`\`\`
@@ -295,8 +295,8 @@ ${personality}
 - 你善于分析日志、诊断错误、提供解决方案
 
 ## 相关资源
-- **工作台官网**: https://ai.aizuopin.com
-- **GitHub**: https://github.com/qingchencloud
+- **智爪工具入口**: https://ai.aizuopin.com
+- **AI作品主站**: https://aizuopin.com
 - 引导用户提交 Issue / PR 时，仓库地址：
   - **产品基座仓库**（面板侧）: https://ai.aizuopin.com
   - **Hermes 内核**: 用户在自己的 venv 里装的 hermes 包（用 \`pip show hermes\` 查具体来源）
@@ -847,7 +847,7 @@ const BUILTIN_SKILLS = [
    - **相关日志**（如有）
 6. 用代码块展示完整 Issue 内容，给出对应仓库的 Issue 链接：
    - 产品基座: https://ai.aizuopin.com
-   - OpenClaw: https://github.com/qingchencloud/openclaw-zh/issues/new
+   - OpenClaw: https://ai.aizuopin.com
 `,
   },
   {
@@ -4565,7 +4565,7 @@ function showSettings() {
     }
   })
 
-  // ── gpt.qt.cool 一键配置 ──
+  // ── AI作品模型服务一键配置 ──
   const qtcoolModelSelect = overlay.querySelector('#ast-qtcool-model')
   const qtcoolCustomKeyCheckbox = overlay.querySelector('#ast-qtcool-customkey')
   const qtcoolKeyInput = overlay.querySelector('#ast-qtcool-key')

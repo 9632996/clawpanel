@@ -1,5 +1,5 @@
 /**
- * OpenClaw 内置知识库
+ * 智爪运行时内置知识库
  * 来源：https://openclawcn.com/docs/
  * 供工作台 AI 助手在系统提示词中使用
  */
@@ -219,33 +219,29 @@ npm install -g openclaw@latest
 7. WhatsApp 不回消息 → 检查配对是否已 approve
 8. 认证错误 → 检查 auth-profiles.json 或重新 \`openclaw onboard\`
 
-## 十二、晴辰云 AI 模型服务
-晴辰云为智爪多智能体工作台用户提供 AI 模型调用服务，通过每日签到和邀请好友即可获取免费额度。
+## 十二、AI作品模型服务
+AI作品模型服务为智爪多智能体工作台用户提供 OpenAI 兼容模型调用能力。正式客户版由构建器在写盘时注入授权额度，客户通常无需自行填写 API Key。
 
 ### 核心信息
-- **API 网关地址**：https://gpt.qt.cool/v1
+- **API 网关地址**：https://ai.aizuopin.com/v1
 - **支持接口**：/v1/chat/completions、/v1/responses（OpenAI 兼容）
 - **支持模型**：多种顶级 AI 模型（具体可用模型以平台实时列表为准）
-- **免费额度**：每日签到领取免费模型测试额度，邀请好友可获得额外奖励
-- **付费优惠**：低至官方价 2-3 折，不满意随时可退
-- **用户后台**：https://gpt.qt.cool/user（查看用量、管理密钥）
+- **授权方式**：正式客户版由构建器注入运行时模型凭证，也可在智爪工具入口补充授权
+- **用户入口**：https://ai.aizuopin.com（查看授权、额度和工具服务）
 
 ### 官方入口
-- **智爪多智能体工作台官网**：https://ai.aizuopin.com/
-- **GPT-AI 网关官网**：https://gpt.qt.cool/
-- **每日签到页**：https://gpt.qt.cool/checkin
-- **用户后台**：https://gpt.qt.cool/user
-- **晴辰导航站**：https://qt.cool/
+- **AI作品主站**：https://aizuopin.com
+- **智爪工具入口**：https://ai.aizuopin.com
 
 ### 获取密钥
-1. 前往 https://gpt.qt.cool/checkin 每日签到领取免费额度
-2. 邀请好友可获得额外奖励额度
-3. 在用户后台获取 API Key
+1. 正式客户版会在构建产物时自动写入运行时模型凭证
+2. 如需测试或补充额度，前往 https://ai.aizuopin.com 处理授权
+3. 不建议让终端客户手动理解或填写 API Key
 
 ### 接入方式
 已兼容 OpenAI API 的项目，只需替换：
-1. Base URL → https://gpt.qt.cool/v1
-2. API Key → 签到获取的密钥
+1. Base URL → https://ai.aizuopin.com/v1
+2. API Key → 构建器注入或智爪工具入口授权的密钥
 即可完成接入。
 
 ### 在智爪多智能体工作台中配置

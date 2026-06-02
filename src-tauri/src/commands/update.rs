@@ -11,7 +11,7 @@ pub fn update_dir() -> PathBuf {
         .join("web-update")
 }
 
-/// 更新清单 URL（产品官网托管）
+/// 更新清单 URL（智爪工具入口托管）
 const LATEST_JSON_URL: &str = "https://ai.aizuopin.com/update/latest.json";
 
 /// 检查前端是否有新版本可用

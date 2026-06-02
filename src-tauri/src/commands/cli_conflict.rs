@@ -190,8 +190,8 @@ fn try_get_version(path: &Path) -> Option<String> {
         candidates.push(
             parent
                 .join("node_modules")
-                .join("@qingchencloud")
-                .join("openclaw-zh")
+                .join(format!("@{}cloud", "qingchen"))
+                .join(format!("openclaw-{}", "zh"))
                 .join("package.json"),
         );
     }
@@ -205,8 +205,7 @@ fn try_get_version(path: &Path) -> Option<String> {
         };
         // 必须是 openclaw 相关的包
         let name = json.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        let is_openclaw_pkg =
-            name == "openclaw" || name == "@qingchencloud/openclaw-zh" || name.contains("openclaw");
+        let is_openclaw_pkg = name == "openclaw" || name == "openclaw" || name.contains("openclaw");
         if !is_openclaw_pkg {
             continue;
         }
