@@ -1,6 +1,6 @@
 /**
  * AI 助手页面
- * 独立模型配置，不依赖 OpenClaw
+ * 默认继承 OpenClaw 便携模型配置，也支持用户单独覆盖
  * 支持：流式响应、Markdown 渲染、会话管理、日志分析、上下文注入
  */
 import { renderMarkdown } from '../lib/markdown.js'
@@ -67,6 +67,27 @@ function normalizeApiType(raw) {
 function requiresApiKey(apiType) {
   const type = normalizeApiType(apiType)
   return type === 'anthropic-messages' || type === 'google-generative-ai'
+}
+
+function isEnvRefApiKey(value) {
+  const raw = String(value || '').trim()
+  return /^\$env:[A-Za-z_][A-Za-z0-9_]*$/.test(raw) ||
+    /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(raw) ||
+    /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(raw)
+}
+
+function hasUsableApiKey(apiType, apiKey, baseUrl) {
+  const type = normalizeApiType(apiType)
+  if (type === 'ollama') return true
+  const base = String(baseUrl || '').trim()
+  if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?(?:\/|$)/i.test(base)) return true
+  const key = String(apiKey || '').trim()
+  return !!key && !isEnvRefApiKey(key)
+}
+
+function assistantModelConfigComplete(config) {
+  if (!config?.baseUrl || !config?.model) return false
+  return hasUsableApiKey(config.apiType, config.apiKey, config.baseUrl)
 }
 
 function apiHintText(apiType) {
@@ -2424,10 +2445,47 @@ function loadConfig() {
   return _config
 }
 
+function configForStorage(config) {
+  const copy = { ...config }
+  if (copy.apiKeyManaged) copy.apiKey = ''
+  return copy
+}
+
 function saveConfig() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(_config))
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(configForStorage(_config)))
   // Fix #226: 配置变更后重置熔断状态，让用户改了 API/模型/key 后能立刻重试
   resetCircuit()
+}
+
+async function hydrateAssistantDefaultsFromOpenClaw(force = false) {
+  if (!_config || !api.getAssistantDefaultModelConfig) return null
+  if (!force && assistantModelConfigComplete(_config) && !_config.apiKeyManaged && !_config.inheritedFromOpenClaw) {
+    return null
+  }
+
+  try {
+    const defaults = await api.getAssistantDefaultModelConfig()
+    if (!defaults?.configured) {
+      console.warn('[assistant] 默认模型配置不可用:', defaults?.reason || '未配置')
+      return defaults || null
+    }
+
+    _config.baseUrl = defaults.baseUrl || _config.baseUrl || ''
+    _config.apiKey = defaults.apiKey || ''
+    _config.model = defaults.model || _config.model || ''
+    _config.apiType = normalizeApiType(defaults.apiType || _config.apiType)
+    _config.providerKey = defaults.providerKey || ''
+    _config.modelRef = defaults.modelRef || ''
+    _config.apiKeySource = defaults.apiKeySource || ''
+    _config.apiKeyManaged = !!defaults.apiKey
+    _config.inheritedFromOpenClaw = true
+    _config.inheritedAt = Date.now()
+    saveConfig()
+    return defaults
+  } catch (err) {
+    console.warn('[assistant] 读取默认模型配置失败:', err)
+    return null
+  }
 }
 
 // ── 会话管理 ──
@@ -2572,7 +2630,7 @@ function buildActiveSlots() {
     if (!fb || fb.enabled === false) continue
     if (!fb.baseUrl || !fb.model) continue
     const apiType = normalizeApiType(fb.apiType)
-    if (requiresApiKey(apiType) && !fb.apiKey) continue
+    if (!hasUsableApiKey(apiType, fb.apiKey, fb.baseUrl)) continue
     slots.push({
       label: fb.label || fb.model,
       baseUrl: fb.baseUrl,
@@ -2649,7 +2707,7 @@ async function callAIWithSlot(slot, messages, onChunk) {
 
 async function _callAIOnce(messages, onChunk) {
   const apiType = normalizeApiType(_config.apiType)
-  if (!_config.baseUrl || !_config.model || (requiresApiKey(apiType) && !_config.apiKey)) {
+  if (!_config.baseUrl || !_config.model || !hasUsableApiKey(apiType, _config.apiKey, _config.baseUrl)) {
     throw new Error(t('assistant.errConfigFirst'))
   }
 
@@ -2665,6 +2723,31 @@ async function _callAIOnce(messages, onChunk) {
   }, TIMEOUT_TOTAL)
 
   try {
+    if (api.assistantCallModel) {
+      const result = await api.assistantCallModel(
+        base,
+        _config.apiKey || '',
+        _config.model,
+        apiType,
+        allMessages,
+        _config.temperature || 0.7,
+      )
+      _lastDebugInfo = {
+        url: result?.reqUrl || base,
+        method: 'POST',
+        requestBody: result?.reqBody || { model: _config.model, messages: '[omitted]' },
+        status: result?.status || 0,
+        responseBody: result?.respBody ? '[captured by native client]' : '',
+        usedApi: result?.usedApi || apiType,
+        responseTime: new Date().toLocaleString('zh-CN'),
+        nativeClient: true,
+      }
+      const reply = result?.reply || ''
+      if (!reply) throw new Error(t('assistant.errInvalidResponse'))
+      onChunk(reply)
+      return
+    }
+
     if (apiType === 'anthropic-messages') {
       await callAnthropicMessages(base, allMessages, onChunk)
       return
@@ -4609,10 +4692,20 @@ function showSettings() {
     return qtcoolProviderApiKey || typed
   }
 
+  const readResolvedDefaultModelConfig = async () => {
+    try {
+      const defaults = await api.getAssistantDefaultModelConfig()
+      return defaults?.configured ? defaults : null
+    } catch {
+      return null
+    }
+  }
+
   // 动态获取模型列表（共享逻辑）
   ;(async () => {
     const { provider } = await readQtcoolProvider()
-    const displayKey = apiKeyDisplayValue(provider?.apiKey || '')
+    const defaults = await readResolvedDefaultModelConfig()
+    const displayKey = defaults?.apiKey || apiKeyDisplayValue(provider?.apiKey || '')
     if (displayKey) qtcoolKeyInput.value = displayKey
     try {
       const models = await fetchQtcoolModels()
@@ -4755,6 +4848,23 @@ function showSettings() {
   // 从 OpenClaw 读取：将 openclaw.json 的 AI作品 provider 配置填入助手
   overlay.querySelector('#ast-qtcool-sync-from')?.addEventListener('click', async () => {
     try {
+      const defaults = await readResolvedDefaultModelConfig()
+      if (defaults) {
+        const yes = await showConfirm(
+          t('assistant.qtcoolSyncFrom'),
+          t('assistant.qtcoolSyncFromDesc', { baseUrl: defaults.baseUrl, apiKey: defaults.apiKey ? '****' + defaults.apiKey.slice(-6) : '(—)', model: defaults.model || '' }),
+          { confirmText: t('assistant.qtcoolConfirmRead'), cancelText: t('common.cancel') }
+        )
+        if (!yes) return
+        overlay.querySelector('#ast-baseurl').value = defaults.baseUrl || ''
+        overlay.querySelector('#ast-apikey').value = defaults.apiKey || ''
+        qtcoolKeyInput.value = defaults.apiKey || ''
+        overlay.querySelector('#ast-apitype').value = normalizeApiType(defaults.apiType || 'openai-completions')
+        if (defaults.model) overlay.querySelector('#ast-model').value = defaults.model
+        toast(t('assistant.qtcoolSyncFromDone'), 'success')
+        return
+      }
+
       const config = await api.readOpenclawConfig()
       const providers = config?.models?.providers || {}
       const qtProvider = providers[qtcoolProviderKey] || providers.aizuopin || providers.qtcool
@@ -4797,8 +4907,8 @@ function showSettings() {
     const apiKey = overlay.querySelector('#ast-apikey').value.trim()
     const model = overlay.querySelector('#ast-model').value.trim()
     const selApiType = normalizeApiType(overlay.querySelector('#ast-apitype').value || 'openai-completions')
-    if (!baseUrl || (requiresApiKey(selApiType) && !apiKey)) {
-      resultEl.innerHTML = '<span style="color:var(--warning)">' + escHtml(requiresApiKey(selApiType) ? t('assistant.testFillUrlKey') : t('assistant.testFillUrl')) + '</span>'
+    if (!baseUrl || !hasUsableApiKey(selApiType, apiKey, baseUrl)) {
+      resultEl.innerHTML = '<span style="color:var(--warning)">' + escHtml(t('assistant.testFillUrlKey')) + '</span>'
       return
     }
     if (!model) {
@@ -4853,8 +4963,8 @@ function showSettings() {
     const baseUrl = overlay.querySelector('#ast-baseurl').value.trim()
     const apiKey = overlay.querySelector('#ast-apikey').value.trim()
     const selApiType = normalizeApiType(overlay.querySelector('#ast-apitype').value || 'openai-completions')
-    if (!baseUrl || (requiresApiKey(selApiType) && !apiKey)) {
-      resultEl.innerHTML = '<span style="color:var(--warning)">' + escHtml(requiresApiKey(selApiType) ? t('assistant.testFillUrlKey') : t('assistant.testFillUrl')) + '</span>'
+    if (!baseUrl || !hasUsableApiKey(selApiType, apiKey, baseUrl)) {
+      resultEl.innerHTML = '<span style="color:var(--warning)">' + escHtml(t('assistant.testFillUrlKey')) + '</span>'
       return
     }
     btn.disabled = true
@@ -5017,13 +5127,17 @@ function showSettings() {
 
   overlay.querySelector('[data-action="cancel"]').onclick = () => overlay.remove()
   overlay.querySelector('[data-action="confirm"]').onclick = () => {
+    const enteredApiKey = overlay.querySelector('#ast-apikey').value.trim()
+    const keepManagedKey = !!_config.apiKeyManaged && enteredApiKey === (_config.apiKey || '')
     _config.assistantName = overlay.querySelector('#ast-name').value.trim() || DEFAULT_NAME
     _config.assistantPersonality = overlay.querySelector('#ast-personality').value.trim() || DEFAULT_PERSONALITY
     _config.baseUrl = overlay.querySelector('#ast-baseurl').value.trim()
-    _config.apiKey = overlay.querySelector('#ast-apikey').value.trim()
+    _config.apiKey = enteredApiKey
     _config.model = overlay.querySelector('#ast-model').value.trim()
     _config.temperature = parseFloat(overlay.querySelector('#ast-temp').value) || 0.7
     _config.apiType = normalizeApiType(overlay.querySelector('#ast-apitype').value || 'openai-completions')
+    _config.apiKeyManaged = keepManagedKey
+    _config.inheritedFromOpenClaw = keepManagedKey
     // 工具开关
     _config.tools.terminal = overlay.querySelector('#ast-tool-terminal').checked
     _config.tools.fileOps = overlay.querySelector('#ast-tool-fileops').checked
@@ -5533,6 +5647,7 @@ function stopIcon() {
 // ── 页面渲染 ──
 export async function render() {
   loadConfig()
+  await hydrateAssistantDefaultsFromOpenClaw()
   loadSessions()
 
   // 确保数据目录存在（~/.openclaw/clawpanel/images/ 等）

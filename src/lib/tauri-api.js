@@ -303,6 +303,8 @@ export const api = {
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),
   testModelVerbose: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model_verbose', { baseUrl, apiKey, modelId, apiType }),
   listRemoteModels: (baseUrl, apiKey, apiType = null) => invoke('list_remote_models', { baseUrl, apiKey, apiType }),
+  getAssistantDefaultModelConfig: () => invoke('get_assistant_default_model_config'),
+  assistantCallModel: (baseUrl, apiKey, modelId, apiType, messages, temperature) => invoke('assistant_call_model', { baseUrl, apiKey, modelId, apiType, messages, temperature }),
   scanModelClientConfigs: () => invoke('scan_model_client_configs'),
 
   // Agent 管理

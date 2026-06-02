@@ -5900,6 +5900,156 @@ fn resolve_model_api_key(api_key: &str) -> Result<String, String> {
     ))
 }
 
+fn model_entry_id(entry: &Value) -> Option<&str> {
+    entry
+        .as_str()
+        .or_else(|| entry.get("id").and_then(|v| v.as_str()))
+        .or_else(|| entry.get("name").and_then(|v| v.as_str()))
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+}
+
+fn first_provider_model_id(provider: &Value) -> Option<String> {
+    provider
+        .get("models")
+        .and_then(|v| v.as_array())
+        .and_then(|models| models.iter().filter_map(model_entry_id).next())
+        .map(str::to_string)
+}
+
+fn provider_model_api(provider: &Value, model_id: &str) -> Option<String> {
+    provider
+        .get("models")
+        .and_then(|v| v.as_array())
+        .and_then(|models| {
+            models.iter().find_map(|entry| {
+                if model_entry_id(entry)? == model_id {
+                    entry
+                        .get("api")
+                        .and_then(|v| v.as_str())
+                        .map(|v| v.trim().to_string())
+                } else {
+                    None
+                }
+            })
+        })
+        .filter(|v| !v.is_empty())
+}
+
+/// 读取助手可直接使用的默认模型配置。
+///
+/// OpenClaw 配置允许 apiKey 写成环境变量引用对象，浏览器侧助手不能直接解析。
+/// 这里在本地后端解析 openclaw.json / model-credentials.env 后返回可用值，
+/// 使便携版首次启动就能使用内置 AI 服务。
+#[tauri::command]
+pub fn get_assistant_default_model_config() -> Result<Value, String> {
+    let config = load_openclaw_json()?;
+    let Some(providers) = config
+        .pointer("/models/providers")
+        .and_then(|value| value.as_object())
+    else {
+        return Ok(json!({
+            "configured": false,
+            "reason": "openclaw.json 未配置 models.providers"
+        }));
+    };
+
+    let primary = config
+        .pointer("/agents/defaults/model/primary")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let mut selected: Option<(String, String)> = primary.and_then(|value| {
+        let (provider_key, model_id) = value.split_once('/')?;
+        let provider_key = provider_key.trim();
+        let model_id = model_id.trim();
+        if provider_key.is_empty() || model_id.is_empty() {
+            None
+        } else {
+            Some((provider_key.to_string(), model_id.to_string()))
+        }
+    });
+
+    if selected.is_none() {
+        selected = providers.iter().find_map(|(provider_key, provider)| {
+            first_provider_model_id(provider).map(|model_id| (provider_key.clone(), model_id))
+        });
+    }
+
+    let Some((provider_key, model_id)) = selected else {
+        return Ok(json!({
+            "configured": false,
+            "reason": "openclaw.json 未配置默认模型"
+        }));
+    };
+
+    let Some(provider) = providers.get(&provider_key) else {
+        return Ok(json!({
+            "configured": false,
+            "reason": format!("默认模型服务商不存在: {provider_key}")
+        }));
+    };
+
+    let base_url = provider
+        .get("baseUrl")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("");
+    if base_url.is_empty() {
+        return Ok(json!({
+            "configured": false,
+            "providerKey": provider_key,
+            "model": model_id,
+            "reason": "默认模型服务商未配置 baseUrl"
+        }));
+    }
+
+    let raw_api_type = provider_model_api(provider, &model_id)
+        .or_else(|| {
+            provider
+                .get("api")
+                .and_then(|value| value.as_str())
+                .map(|value| value.trim().to_string())
+        })
+        .unwrap_or_else(|| "openai-completions".to_string());
+    let api_type = normalize_model_api_type(&raw_api_type);
+
+    let (api_key, api_key_source) = if let Some(api_key_value) = provider.get("apiKey") {
+        let source = model_api_key_env_ref_from_value(api_key_value)?
+            .map(|key| format!("env:{key}"))
+            .unwrap_or_else(|| "openclaw".to_string());
+        match resolve_model_api_key_value(api_key_value) {
+            Ok(value) => (value, source),
+            Err(err) => {
+                return Ok(json!({
+                    "configured": false,
+                    "providerKey": provider_key,
+                    "model": model_id,
+                    "baseUrl": normalize_base_url_for_api(base_url, api_type),
+                    "apiType": api_type,
+                    "apiKeySource": source,
+                    "reason": err
+                }));
+            }
+        }
+    } else {
+        (String::new(), String::new())
+    };
+
+    Ok(json!({
+        "configured": true,
+        "providerKey": provider_key,
+        "model": model_id,
+        "modelRef": format!("{provider_key}/{model_id}"),
+        "baseUrl": normalize_base_url_for_api(base_url, api_type),
+        "apiType": api_type,
+        "apiKey": api_key,
+        "apiKeySource": api_key_source
+    }))
+}
+
 fn extract_error_message(text: &str, status: reqwest::StatusCode) -> String {
     serde_json::from_str::<serde_json::Value>(text)
         .ok()
@@ -6415,6 +6565,175 @@ pub async fn test_model_verbose(
         "error": error,
         "elapsedMs": elapsed_ms,
         "usedApi": used_api,
+    }))
+}
+
+#[tauri::command]
+pub async fn assistant_call_model(
+    base_url: String,
+    api_key: Value,
+    model_id: String,
+    api_type: Option<String>,
+    messages: Vec<Value>,
+    temperature: Option<f64>,
+) -> Result<Value, String> {
+    let api_type_norm =
+        normalize_model_api_type(api_type.as_deref().unwrap_or("openai-completions"));
+    let base = normalize_base_url_for_api(&base_url, api_type_norm);
+    let api_key = resolve_model_api_key_value(&api_key)?;
+    let temperature = temperature.unwrap_or(0.7);
+
+    let client =
+        crate::commands::build_http_client_no_proxy(std::time::Duration::from_secs(120), None)
+            .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+
+    let (used_api, req_url, req_body_json, req_builder) = match api_type_norm {
+        "anthropic-messages" => {
+            let url = format!("{}/messages", base);
+            let system = messages
+                .iter()
+                .find(|message| message.get("role").and_then(|v| v.as_str()) == Some("system"))
+                .and_then(|message| message.get("content").and_then(|v| v.as_str()))
+                .unwrap_or("");
+            let chat_messages: Vec<Value> = messages
+                .iter()
+                .filter(|message| message.get("role").and_then(|v| v.as_str()) != Some("system"))
+                .cloned()
+                .collect();
+            let mut body = json!({
+                "model": model_id,
+                "messages": chat_messages,
+                "max_tokens": 8192,
+                "stream": true,
+                "temperature": temperature,
+            });
+            if !system.is_empty() {
+                body["system"] = json!(system);
+            }
+            let mut req = client
+                .post(&url)
+                .header("anthropic-version", "2023-06-01")
+                .header("Accept-Encoding", "identity")
+                .header("Accept", "text/event-stream")
+                .json(&body);
+            if !api_key.is_empty() {
+                req = req.header("x-api-key", api_key.clone());
+            }
+            ("Anthropic Messages", url, body, req)
+        }
+        "google-gemini" => {
+            let url_display = format!(
+                "{}/models/{}:streamGenerateContent?alt=sse&key=***",
+                base, model_id
+            );
+            let url_real = format!(
+                "{}/models/{}:streamGenerateContent?alt=sse&key={}",
+                base, model_id, api_key
+            );
+            let system = messages
+                .iter()
+                .find(|message| message.get("role").and_then(|v| v.as_str()) == Some("system"))
+                .and_then(|message| message.get("content").and_then(|v| v.as_str()))
+                .unwrap_or("");
+            let contents: Vec<Value> = messages
+                .iter()
+                .filter(|message| message.get("role").and_then(|v| v.as_str()) != Some("system"))
+                .map(|message| {
+                    let role = if message.get("role").and_then(|v| v.as_str()) == Some("assistant")
+                    {
+                        "model"
+                    } else {
+                        "user"
+                    };
+                    let content = message
+                        .get("content")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string)
+                        .unwrap_or_else(|| {
+                            message
+                                .get("content")
+                                .cloned()
+                                .unwrap_or(Value::Null)
+                                .to_string()
+                        });
+                    json!({ "role": role, "parts": [{ "text": content }] })
+                })
+                .collect();
+            let mut body = json!({
+                "contents": contents,
+                "generationConfig": { "temperature": temperature },
+            });
+            if !system.is_empty() {
+                body["systemInstruction"] = json!({ "parts": [{ "text": system }] });
+            }
+            let req = client
+                .post(&url_real)
+                .header("Accept-Encoding", "identity")
+                .header("Accept", "text/event-stream")
+                .json(&body);
+            ("Gemini", url_display, body, req)
+        }
+        _ => {
+            let url = format!("{}/chat/completions", base);
+            let body = json!({
+                "model": model_id,
+                "messages": messages,
+                "stream": true,
+                "temperature": temperature,
+            });
+            let mut req = client
+                .post(&url)
+                .header("Accept-Encoding", "identity")
+                .header("Accept", "text/event-stream")
+                .json(&body);
+            if !api_key.is_empty() {
+                req = req.header("Authorization", format!("Bearer {api_key}"));
+            }
+            ("Chat Completions (SSE)", url, body, req)
+        }
+    };
+
+    let resp = req_builder.send().await.map_err(|e| {
+        if e.is_timeout() {
+            "请求超时 (120s)".to_string()
+        } else if e.is_connect() {
+            format!("连接失败: {e}")
+        } else {
+            format!("请求失败: {e}")
+        }
+    })?;
+    let status = resp.status();
+    let status_code = status.as_u16();
+    let text = resp.text().await.unwrap_or_default();
+
+    let reply = {
+        let sse_reply = extract_sse_reply(&text);
+        if !sse_reply.is_empty() {
+            sse_reply
+        } else {
+            extract_single_json_reply(&text)
+        }
+    };
+
+    if !status.is_success() {
+        return Err(format!(
+            "API 错误 {}: {}",
+            status_code,
+            extract_error_message(&text, status)
+        ));
+    }
+    if reply.is_empty() {
+        return Err("模型响应为空".to_string());
+    }
+
+    Ok(json!({
+        "success": true,
+        "status": status_code,
+        "reply": reply,
+        "usedApi": used_api,
+        "reqUrl": req_url,
+        "reqBody": req_body_json,
+        "respBody": text,
     }))
 }
 
