@@ -163,20 +163,151 @@ fn bound_cli_path() -> Option<std::path::PathBuf> {
     crate::commands::config::resolve_openclaw_cli_input_path(&p)
 }
 
-fn apply_openclaw_dir_env(cmd: &mut std::process::Command) {
+struct OpenClawRuntimeEnv {
+    config_dir: std::path::PathBuf,
+    home_dir: std::path::PathBuf,
+    state_dir: std::path::PathBuf,
+    cache_dir: std::path::PathBuf,
+    log_dir: std::path::PathBuf,
+    workspace_dir: std::path::PathBuf,
+    temp_dir: std::path::PathBuf,
+}
+
+fn openclaw_runtime_env() -> OpenClawRuntimeEnv {
     let openclaw_dir = crate::commands::openclaw_dir();
-    let config_path = openclaw_dir.join("openclaw.json");
-    cmd.env("OPENCLAW_HOME", &openclaw_dir);
-    cmd.env("OPENCLAW_STATE_DIR", &openclaw_dir);
-    cmd.env("OPENCLAW_CONFIG_PATH", &config_path);
+    let portable_home_dir = openclaw_dir
+        .parent()
+        .filter(|parent| parent.join("config").is_dir())
+        .map(|parent| parent.to_path_buf())
+        .unwrap_or_else(|| openclaw_dir.clone());
+    let state_dir = openclaw_dir
+        .parent()
+        .filter(|parent| parent.join("state").is_dir())
+        .map(|parent| parent.join("state"))
+        .unwrap_or_else(|| openclaw_dir.clone());
+    let cache_dir = openclaw_dir
+        .parent()
+        .map(|parent| parent.join("cache"))
+        .unwrap_or_else(|| openclaw_dir.join("cache"));
+    let log_dir = portable_home_dir.join("logs");
+    let workspace_dir = openclaw_dir
+        .parent()
+        .map(|parent| parent.join("workspace").join("main"))
+        .unwrap_or_else(|| openclaw_dir.join("workspace").join("main"));
+    let temp_dir = cache_dir.join("temp");
+    OpenClawRuntimeEnv {
+        config_dir: openclaw_dir,
+        home_dir: portable_home_dir,
+        state_dir,
+        cache_dir,
+        log_dir,
+        workspace_dir,
+        temp_dir,
+    }
+}
+
+fn load_model_credentials_env(config_dir: &std::path::Path) -> Vec<(String, String)> {
+    let credentials_path = config_dir.join("model-credentials.env");
+    let Ok(content) = std::fs::read_to_string(credentials_path) else {
+        return Vec::new();
+    };
+    let mut values = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some((key, raw_value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if key.is_empty()
+            || !key
+                .chars()
+                .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+        {
+            continue;
+        }
+        let value = raw_value
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .to_string();
+        values.push((key.to_string(), value));
+    }
+    values
+}
+
+fn ensure_runtime_dirs(envs: &OpenClawRuntimeEnv) {
+    for dir in [
+        &envs.state_dir,
+        &envs.cache_dir,
+        &envs.log_dir,
+        &envs.workspace_dir,
+        &envs.temp_dir,
+    ] {
+        let _ = std::fs::create_dir_all(dir);
+    }
+}
+
+fn apply_openclaw_dir_env(cmd: &mut std::process::Command) {
+    let envs = openclaw_runtime_env();
+    ensure_runtime_dirs(&envs);
+    cmd.env(
+        "OPENCLAW_CONFIG_PATH",
+        envs.config_dir.join("openclaw.json"),
+    );
+    cmd.env("OPENCLAW_HOME", &envs.home_dir);
+    cmd.env("OPENCLAW_STATE_DIR", &envs.state_dir);
+    cmd.env("OPENCLAW_CACHE_DIR", &envs.cache_dir);
+    cmd.env("OPENCLAW_LOG_DIR", &envs.log_dir);
+    cmd.env("OPENCLAW_WORKSPACE_DIR", &envs.workspace_dir);
+    cmd.env(
+        "OPENCLAW_GATEWAY_PORT",
+        crate::commands::gateway_listen_port().to_string(),
+    );
+    cmd.env("OPENCLAW_SHOW_SECRETS", "0");
+    cmd.env("OPENCLAW_PORTABLE", "1");
+    cmd.env(
+        "NODE_COMPILE_CACHE",
+        envs.cache_dir.join("node-compile-cache"),
+    );
+    cmd.env("TEMP", &envs.temp_dir);
+    cmd.env("TMP", &envs.temp_dir);
+    cmd.env("OPENCLAW_WRAPPER_LOG_REDIRECT", "0");
+    for (key, value) in load_model_credentials_env(&envs.config_dir) {
+        cmd.env(key, value);
+    }
 }
 
 fn apply_openclaw_dir_env_tokio(cmd: &mut tokio::process::Command) {
-    let openclaw_dir = crate::commands::openclaw_dir();
-    let config_path = openclaw_dir.join("openclaw.json");
-    cmd.env("OPENCLAW_HOME", &openclaw_dir);
-    cmd.env("OPENCLAW_STATE_DIR", &openclaw_dir);
-    cmd.env("OPENCLAW_CONFIG_PATH", &config_path);
+    let envs = openclaw_runtime_env();
+    ensure_runtime_dirs(&envs);
+    cmd.env(
+        "OPENCLAW_CONFIG_PATH",
+        envs.config_dir.join("openclaw.json"),
+    );
+    cmd.env("OPENCLAW_HOME", &envs.home_dir);
+    cmd.env("OPENCLAW_STATE_DIR", &envs.state_dir);
+    cmd.env("OPENCLAW_CACHE_DIR", &envs.cache_dir);
+    cmd.env("OPENCLAW_LOG_DIR", &envs.log_dir);
+    cmd.env("OPENCLAW_WORKSPACE_DIR", &envs.workspace_dir);
+    cmd.env(
+        "OPENCLAW_GATEWAY_PORT",
+        crate::commands::gateway_listen_port().to_string(),
+    );
+    cmd.env("OPENCLAW_SHOW_SECRETS", "0");
+    cmd.env("OPENCLAW_PORTABLE", "1");
+    cmd.env(
+        "NODE_COMPILE_CACHE",
+        envs.cache_dir.join("node-compile-cache"),
+    );
+    cmd.env("TEMP", &envs.temp_dir);
+    cmd.env("TMP", &envs.temp_dir);
+    cmd.env("OPENCLAW_WRAPPER_LOG_REDIRECT", "0");
+    for (key, value) in load_model_credentials_env(&envs.config_dir) {
+        cmd.env(key, value);
+    }
 }
 
 fn configured_cli_candidates() -> Vec<std::path::PathBuf> {

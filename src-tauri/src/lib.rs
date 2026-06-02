@@ -7,6 +7,7 @@ use commands::{
     agent, assistant, cli_conflict, config, device, diagnose, extensions, hermes, hermes_providers,
     logs, memory, messaging, pairing, service, skills, update,
 };
+use tauri::Manager;
 
 pub fn run() {
     let hot_update_dir = commands::openclaw_dir()
@@ -389,10 +390,14 @@ pub fn run() {
             hermes::hermes_cron_jobs_list,
         ])
         .on_window_event(|window, event| {
-            // 关闭窗口时最小化到托盘，不退出应用
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                let app = window.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ =
+                        crate::commands::service::stop_service("ai.openclaw.gateway".into()).await;
+                    app.exit(0);
+                });
             }
         })
         .build(tauri::generate_context!())

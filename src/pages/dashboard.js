@@ -837,14 +837,15 @@ function bindActions(page) {
       btnRestart.textContent = t('dashboard.restartGw')
       return
     }
-    // 轮询等待实际重启完成
+    // 轮询等待实际重启完成。Gateway 会先监听端口再加载插件，必须等待 /health。
     const t0 = Date.now()
-    while (Date.now() - t0 < 30000) {
+    while (Date.now() - t0 < 150000) {
       try {
-        const s = await api.getServicesStatus()
-        const gw = s?.find?.(x => x.label === 'ai.openclaw.gateway') || s?.[0]
-        if (gw?.running) {
-          toast(t('dashboard.gwRestarted', { pid: gw.pid }), 'success')
+        const healthy = await api.probeGatewayPort()
+        if (healthy) {
+          const s = await api.getServicesStatus().catch(() => [])
+          const gw = s?.find?.(x => x.label === 'ai.openclaw.gateway') || s?.[0]
+          toast(t('dashboard.gwRestarted', { pid: gw?.pid || '' }), 'success')
           btnRestart.disabled = false
           btnRestart.classList.remove('btn-loading')
           btnRestart.textContent = t('dashboard.restartGw')

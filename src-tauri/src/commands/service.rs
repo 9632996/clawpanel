@@ -214,7 +214,7 @@ async fn wait_for_gateway_running(label: &str, timeout: Duration) -> Result<(), 
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
         let (running, pid) = current_gateway_runtime(label).await;
-        if running {
+        if running && gateway_health_ready(Duration::from_secs(2)).await {
             write_gateway_owner(pid)?;
             return Ok(());
         }
@@ -227,6 +227,32 @@ async fn wait_for_gateway_running(label: &str, timeout: Duration) -> Result<(), 
             .join("gateway.err.log")
             .display()
     ))
+}
+
+async fn gateway_health_ready(timeout: Duration) -> bool {
+    let port = crate::commands::gateway_listen_port();
+    let Ok(client) = reqwest::Client::builder().timeout(timeout).build() else {
+        return false;
+    };
+    match client
+        .get(format!("http://127.0.0.1:{port}/health"))
+        .send()
+        .await
+    {
+        Ok(resp) => resp.status().is_success(),
+        Err(_) => false,
+    }
+}
+
+async fn wait_for_gateway_health(timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if gateway_health_ready(Duration::from_secs(2)).await {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    false
 }
 
 async fn wait_for_gateway_stopped(label: &str, timeout: Duration) -> Result<(), String> {
@@ -1169,28 +1195,30 @@ mod platform {
     static ACTIVE_GATEWAY_CHILD: Mutex<Option<u32>> = Mutex::new(None);
     static GATEWAY_START_IN_PROGRESS: Mutex<bool> = Mutex::new(false);
 
-    /// 检查 Gateway 端口是否有响应（阻塞式 HTTP /health，3s 超时）
-    /// 单次探测；若需要对瞬态抖动更宽容，使用 `is_gateway_port_responsive_with_retry`
-    fn is_gateway_port_responsive(port: u16) -> bool {
+    /// 检查 Gateway /health 是否已经可用。
+    /// TCP 端口监听不代表 Gateway 完成初始化；启动完成判定必须等 HTTP health。
+    fn is_gateway_health_responsive(port: u16, timeout: Duration) -> bool {
         use std::io::{Read, Write as IoWrite};
         use std::net::TcpStream;
         let addr = format!("127.0.0.1:{port}");
-        let mut stream =
-            match TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(3)) {
-                Ok(s) => s,
-                Err(_) => return false,
-            };
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
-        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
-        let req = format!("GET /health HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let mut stream = match TcpStream::connect_timeout(&addr.parse().unwrap(), timeout) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let _ = stream.set_read_timeout(Some(timeout));
+        let _ = stream.set_write_timeout(Some(timeout));
+        let req =
+            format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
         if stream.write_all(req.as_bytes()).is_err() {
             return false;
         }
-        let mut buf = [0u8; 256];
+        let mut buf = [0u8; 512];
         match stream.read(&mut buf) {
             Ok(n) if n > 0 => {
                 let resp = String::from_utf8_lossy(&buf[..n]);
-                resp.contains("200") || resp.contains("OK")
+                resp.starts_with("HTTP/1.1 200")
+                    || resp.starts_with("HTTP/1.0 200")
+                    || resp.contains("\"ok\":true")
             }
             _ => false,
         }
@@ -1208,11 +1236,41 @@ mod platform {
             if attempt > 0 {
                 std::thread::sleep(interval);
             }
-            if is_gateway_port_responsive(port) {
+            if is_gateway_health_responsive(port, Duration::from_secs(3)) {
                 return true;
             }
         }
         false
+    }
+
+    fn load_portable_model_credentials(cmd: &mut StdCommand, openclaw_dir: &std::path::Path) {
+        let credentials_path = openclaw_dir.join("model-credentials.env");
+        let Ok(content) = fs::read_to_string(credentials_path) else {
+            return;
+        };
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let Some((key, raw_value)) = trimmed.split_once('=') else {
+                continue;
+            };
+            let key = key.trim();
+            if key.is_empty()
+                || !key
+                    .chars()
+                    .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+            {
+                continue;
+            }
+            let value = raw_value
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string();
+            cmd.env(key, value);
+        }
     }
 
     /// 从 netstat 输出中提取监听指定端口的所有 PID
@@ -1645,7 +1703,13 @@ mod platform {
         let (running, pid) = check_service_status(0, "");
         if running {
             if pid.is_some() {
-                return Ok(());
+                let port = crate::commands::gateway_listen_port();
+                if is_gateway_health_responsive(port, Duration::from_secs(2)) {
+                    return Ok(());
+                }
+                return Err(format!(
+                    "端口 {port} 已被 OpenClaw Gateway 占用，但 /health 暂不可用，请稍候或重启 Gateway"
+                ));
             }
             return Err(format!(
                 "端口 {} 被未知进程占用，请先关闭占用该端口的程序",
@@ -1659,8 +1723,31 @@ mod platform {
         let cli = crate::utils::resolve_openclaw_cli_path().unwrap_or_else(|| "openclaw".into());
         let openclaw_dir = crate::commands::openclaw_dir();
         let config_path = openclaw_dir.join("openclaw.json");
-        let log_dir = openclaw_dir.join("logs");
+        let portable_home_dir = openclaw_dir
+            .parent()
+            .filter(|parent| parent.join("config").is_dir())
+            .map(|parent| parent.to_path_buf())
+            .unwrap_or_else(|| openclaw_dir.clone());
+        let log_dir = portable_home_dir.join("logs");
+        let state_dir = openclaw_dir
+            .parent()
+            .filter(|parent| parent.join("state").is_dir())
+            .map(|parent| parent.join("state"))
+            .unwrap_or_else(|| openclaw_dir.clone());
+        let cache_dir = openclaw_dir
+            .parent()
+            .map(|parent| parent.join("cache"))
+            .unwrap_or_else(|| openclaw_dir.join("cache"));
+        let workspace_dir = openclaw_dir
+            .parent()
+            .map(|parent| parent.join("workspace").join("main"))
+            .unwrap_or_else(|| openclaw_dir.join("workspace").join("main"));
+        let temp_dir = cache_dir.join("temp");
         fs::create_dir_all(&log_dir).map_err(|e| format!("创建日志目录失败: {e}"))?;
+        fs::create_dir_all(&state_dir).map_err(|e| format!("创建状态目录失败: {e}"))?;
+        fs::create_dir_all(&cache_dir).map_err(|e| format!("创建缓存目录失败: {e}"))?;
+        fs::create_dir_all(&workspace_dir).map_err(|e| format!("创建工作区目录失败: {e}"))?;
+        fs::create_dir_all(&temp_dir).map_err(|e| format!("创建临时目录失败: {e}"))?;
         let stdout_log = OpenOptions::new()
             .create(true)
             .append(true)
@@ -1688,14 +1775,22 @@ mod platform {
             .arg(&port_arg)
             .creation_flags(CREATE_NO_WINDOW)
             .env("PATH", crate::commands::enhanced_path())
-            .env("OPENCLAW_HOME", &openclaw_dir)
-            .env("OPENCLAW_STATE_DIR", &openclaw_dir)
+            .env("OPENCLAW_HOME", &portable_home_dir)
+            .env("OPENCLAW_STATE_DIR", &state_dir)
             .env("OPENCLAW_CONFIG_PATH", &config_path)
+            .env("OPENCLAW_CACHE_DIR", &cache_dir)
+            .env("OPENCLAW_LOG_DIR", &log_dir)
+            .env("OPENCLAW_WORKSPACE_DIR", &workspace_dir)
+            .env("OPENCLAW_PORTABLE", "1")
+            .env("NODE_COMPILE_CACHE", cache_dir.join("node-compile-cache"))
+            .env("TEMP", &temp_dir)
+            .env("TMP", &temp_dir)
             .env("OPENCLAW_WRAPPER_LOG_REDIRECT", "0")
             .current_dir(&openclaw_dir)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::from(stdout_log))
             .stderr(std::process::Stdio::from(stderr_log));
+        load_portable_model_credentials(&mut cmd, &openclaw_dir);
         crate::commands::apply_proxy_env(&mut cmd);
 
         let child = cmd.spawn().map_err(|e| format!("启动 Gateway 失败: {e}"))?;
@@ -1704,17 +1799,20 @@ mod platform {
             *active = Some(child.id());
         }
 
-        // 轮询等待：端口就绪 AND PID 与之前不同（新 Gateway 进程已接管端口）
-        // 外层 cmd /c start 是 detached 桥接进程，无法用 spawn().id() 跟踪真正的 Gateway。
-        // 改为 polling netstat 拿到监听端口的 PID，作为真实 Gateway PID 记录。
-        let deadline = Instant::now() + Duration::from_secs(90);
+        // 轮询等待：真实 Gateway PID 出现，且 /health 已响应。
+        // OpenClaw 会先监听端口再加载 channels/sidecars，只看 TCP 会过早判定成功。
+        let deadline = Instant::now() + Duration::from_secs(150);
+        let port = crate::commands::gateway_listen_port();
         while Instant::now() < deadline {
-            tokio::time::sleep(Duration::from_millis(300)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
             let (running2, pid2) = check_service_status(0, "");
 
             if let (true, Some(current_pid)) = (running2, pid2) {
                 let is_new = Some(current_pid) != before_pid;
-                if is_new && is_process_alive(current_pid) {
+                if is_new
+                    && is_process_alive(current_pid)
+                    && is_gateway_health_responsive(port, Duration::from_secs(2))
+                {
                     // 记录真实 Gateway PID 供 stop 时精确 kill
                     let mut active = ACTIVE_GATEWAY_CHILD.lock().unwrap();
                     *active = Some(current_pid);
@@ -2170,9 +2268,15 @@ pub async fn start_service(app: tauri::AppHandle, label: String) -> Result<(), S
     let (running, pid) = current_gateway_runtime(&label).await;
     if running {
         ensure_owned_gateway_or_err(pid)?;
-        write_gateway_owner(pid)?;
-        guardian_mark_manual_start();
-        return Ok(());
+        if wait_for_gateway_health(Duration::from_secs(150)).await {
+            write_gateway_owner(pid)?;
+            guardian_mark_manual_start();
+            return Ok(());
+        }
+        return Err(format!(
+            "Gateway 端口 {} 已监听，但 /health 长时间无响应，请重启 Gateway 或查看日志",
+            crate::commands::gateway_listen_port()
+        ));
     }
     guardian_mark_manual_start();
     start_service_impl_internal(&label, Some(&app)).await
@@ -2215,7 +2319,5 @@ pub async fn claim_gateway() -> Result<(), String> {
 /// 轻量 TCP 端口探测：检测 Gateway 端口是否可连通（用于 WS 连接前的就绪等待）
 #[tauri::command]
 pub async fn probe_gateway_port() -> bool {
-    let port = crate::commands::gateway_listen_port();
-    let addr = format!("127.0.0.1:{port}");
-    tokio::net::TcpStream::connect(&addr).await.is_ok()
+    gateway_health_ready(Duration::from_secs(2)).await
 }

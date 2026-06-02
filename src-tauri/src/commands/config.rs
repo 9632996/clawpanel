@@ -2066,6 +2066,10 @@ async fn get_local_version() -> Option<String> {
         }
     }
 
+    if is_portable_runtime_config_dir() {
+        return None;
+    }
+
     let mut status_cmd = crate::utils::openclaw_command_async();
     status_cmd.args(["status", "--json"]);
     if let Ok(Ok(output)) =
@@ -2878,24 +2882,93 @@ fn read_version_from_installation(cli_path: &std::path::Path) -> Option<String> 
 /// 包含 runtimeVersion、会话列表（含 token 用量、fastMode 等标签）
 #[tauri::command]
 pub async fn get_status_summary() -> Result<Value, String> {
-    let output = crate::utils::openclaw_command_async()
-        .args(["status", "--json"])
-        .output()
-        .await;
+    if is_portable_runtime_config_dir() {
+        return Ok(status_summary_fallback(None).await);
+    }
+
+    let mut status_cmd = crate::utils::openclaw_command_async();
+    status_cmd.args(["status", "--json"]).kill_on_drop(true);
+    let output = tokio::time::timeout(std::time::Duration::from_secs(6), status_cmd.output()).await;
 
     match output {
-        Ok(o) if o.status.success() => {
+        Ok(Ok(o)) if o.status.success() => {
             let stdout = String::from_utf8_lossy(&o.stdout);
             // CLI 输出可能含非 JSON 行，复用 skills 模块的 extract_json
-            crate::commands::skills::extract_json_pub(&stdout)
-                .ok_or_else(|| "解析失败: 输出中未找到有效 JSON".to_string())
+            if let Some(mut value) = crate::commands::skills::extract_json_pub(&stdout) {
+                if let Some(obj) = value.as_object_mut() {
+                    obj.entry("source")
+                        .or_insert_with(|| Value::String("live".into()));
+                }
+                Ok(value)
+            } else {
+                Ok(
+                    status_summary_fallback(Some("openclaw status 输出中未找到有效 JSON".into()))
+                        .await,
+                )
+            }
         }
-        Ok(o) => {
+        Ok(Ok(o)) => {
             let stderr = String::from_utf8_lossy(&o.stderr);
-            Err(format!("openclaw status 失败: {}", stderr.trim()))
+            Ok(
+                status_summary_fallback(Some(format!("openclaw status 失败: {}", stderr.trim())))
+                    .await,
+            )
         }
-        Err(e) => Err(format!("执行 openclaw 失败: {e}")),
+        Ok(Err(e)) => Ok(status_summary_fallback(Some(format!("执行 openclaw 失败: {e}"))).await),
+        Err(_) => Ok(status_summary_fallback(Some(
+            "openclaw status --json 超时，已改用本地文件摘要".into(),
+        ))
+        .await),
     }
+}
+
+async fn status_summary_fallback(reason: Option<String>) -> Value {
+    let config = load_openclaw_json().ok();
+    let default_model = config
+        .as_ref()
+        .and_then(|v| v.pointer("/agents/defaults/model/primary"))
+        .and_then(|v| v.as_str())
+        .map(|v| Value::String(v.to_string()))
+        .unwrap_or(Value::Null);
+    let default_context_tokens = config
+        .as_ref()
+        .and_then(|v| v.pointer("/agents/defaults/contextTokens"))
+        .and_then(|v| v.as_u64())
+        .map(|v| Value::Number(v.into()))
+        .unwrap_or(Value::Null);
+    let runtime_version = get_local_version()
+        .await
+        .map(Value::String)
+        .unwrap_or(Value::Null);
+    let mut value = json!({
+        "source": "file-read",
+        "runtimeVersion": runtime_version,
+        "sessions": {
+            "count": 0,
+            "recent": [],
+            "defaults": {
+                "model": default_model,
+                "contextTokens": default_context_tokens
+            }
+        }
+    });
+    if let Some(reason) = reason {
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("statusError".into(), Value::String(reason));
+        }
+    }
+    value
+}
+
+fn is_portable_runtime_config_dir() -> bool {
+    let config_dir = super::openclaw_dir();
+    let Some(data_dir) = config_dir.parent() else {
+        return false;
+    };
+    data_dir.join("config") == config_dir
+        && data_dir.join("state").is_dir()
+        && data_dir.join("cache").is_dir()
+        && data_dir.join("logs").is_dir()
 }
 
 /// npm 包名映射

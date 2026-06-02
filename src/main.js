@@ -616,10 +616,10 @@ async function autoConnectWebSocket() {
       }
     }
 
-    // TCP 端口就绪探测：等待 Gateway 端口可达后再发起 WS 连接（仅 Tauri 桌面端）
+    // 健康检查就绪探测：等待 Gateway /health 可用后再发起 WS 连接（仅 Tauri 桌面端）
     if (isTauriRuntime()) {
       const probeStart = Date.now()
-      const probeTimeout = 3000
+      const probeTimeout = 120000
       let portReady = false
       while (Date.now() - probeStart < probeTimeout) {
         try {
@@ -742,13 +742,12 @@ function setupGatewayBanner() {
           update(false)
           return
         }
-        // 轮询等待实际启动
+        // 轮询等待实际启动。OpenClaw 会先监听端口再加载插件/sidecars，冷启动可能超过 30s。
         const t0 = Date.now()
-        while (Date.now() - t0 < 30000) {
+        while (Date.now() - t0 < 150000) {
           try {
-            const s = await api.getServicesStatus()
-            const gw = s?.find?.(x => x.label === 'ai.openclaw.gateway') || s?.[0]
-            if (gw?.running) { update(true); return }
+            const healthy = await api.probeGatewayPort()
+            if (healthy) { update(true); return }
           } catch {}
           const sec = Math.floor((Date.now() - t0) / 1000)
           btn.textContent = `${t('dashboard.starting')} ${sec}s`
