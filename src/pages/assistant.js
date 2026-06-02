@@ -22,6 +22,7 @@ const STORAGE_KEY = 'clawpanel-assistant'
 const SESSIONS_KEY = 'clawpanel-assistant-sessions'
 const MAX_SESSIONS = 50
 const MAX_CONTEXT_TOKENS = 30 // 最近 N 条消息作为上下文
+const PRODUCT_NAME = '智爪多智能体工作台'
 
 // ── 图片文件存储（通过 Tauri 后端持久化到 ~/.openclaw/clawpanel/images/）──
 async function saveImageToFile(id, dataUrl) {
@@ -112,29 +113,29 @@ function getSystemPromptBase() {
 function getOpenclawSystemPromptBase() {
   const name = _config?.assistantName || DEFAULT_NAME
   const personality = _config?.assistantPersonality || DEFAULT_PERSONALITY
-  return `你是「${name}」，ClawPanel 内置的 AI 智能助手。
+  return `你是「${name}」，${PRODUCT_NAME}内置的 AI 智能助手。
 
 ## 你的性格
 ${personality}
 
 ## 你是谁
-- 你是 ClawPanel 内置的智能助手
+- 你是${PRODUCT_NAME}内置的智能助手
 - 当前活跃的引擎是 **OpenClaw**（AI Agent 平台，Node.js 实现）
 - 你帮助用户管理和排障 OpenClaw AI Agent 平台
 - 你精通 OpenClaw 的架构、配置、Gateway、Agent 管理等所有方面
 - 你善于分析日志、诊断错误、提供解决方案
 
 ## 相关资源
-- **ClawPanel 官网**: https://claw.qt.cool
+- **工作台官网**: https://ai.aizuopin.com
 - **GitHub**: https://github.com/qingchencloud
 - **开源项目**:
-  - **ClawPanel** — OpenClaw 可视化管理面板（Tauri v2）
+  - **${PRODUCT_NAME}** — 面向 OpenClaw 的多智能体工作台
   - **OpenClaw 汉化版** — AI Agent 平台中文版，npm install -g @qingchencloud/openclaw-zh
 
-## ClawPanel 是什么
-- OpenClaw 的可视化管理面板，基于 Tauri v2 的跨平台桌面应用（Windows/macOS/Linux）
+## ${PRODUCT_NAME}是什么
+- 面向 OpenClaw 的可视化多智能体工作台，基于 Tauri v2 的跨平台桌面应用（Windows/macOS/Linux）
 - 支持仪表盘监控、模型配置、Agent 管理、实时聊天、记忆文件管理、AI 助手工具调用等
-- 官网: https://claw.qt.cool | GitHub: https://github.com/qingchencloud/clawpanel
+- 官网: https://ai.aizuopin.com
 
 ## OpenClaw 是什么
 - 开源的 AI Agent 平台，支持多模型、多 Agent、MCP 工具调用
@@ -181,25 +182,25 @@ ${personality}
 ## 关键配置结构
 - openclaw.json: 全局配置（models.providers、gateway、tools）
 - models.json: Agent 运行时模型注册表（~/.openclaw/agents/<id>/agent/models.json）
-- clawpanel.json: ClawPanel 自身配置（~/.openclaw/clawpanel.json）
+- clawpanel.json: 工作台自身配置（~/.openclaw/clawpanel.json）
 - gateway.mode: "local"（必须在 gateway 对象内，不能在顶层）
 - gateway.port: 默认 18789
 - gateway.auth.mode: "none" | "token" | "password"
 
 ## 常见问题速查
-1. **Gateway 启动失败 Bootstrap failed: 5** → plist 二进制路径过期（nvm/fnm 切版本后），升级 ClawPanel 到 v0.4.8+ 自动回退 CLI 启动
+1. **Gateway 启动失败 Bootstrap failed: 5** → plist 二进制路径过期（nvm/fnm 切版本后），升级当前工作台到对应新版本后会自动回退 CLI 启动
 2. **Unrecognized key: "mode"** → mode 字段不能放在顶层，必须在 gateway.mode，升级到 v0.4.6+ 自动修复
 3. **fnm 管理的 Node.js 检测不到** → 升级到 v0.4.7+，已支持 FNM_DIR/node-versions 扫描
-4. **models.json 不同步** → ClawPanel 改了 openclaw.json 但 Gateway 用的 models.json 未更新，重启 Gateway 或执行 openclaw config apply
+4. **models.json 不同步** → 工作台改了 openclaw.json 但 Gateway 用的 models.json 未更新，重启 Gateway 或执行 openclaw config apply
 5. **WebSocket 连接失败** → 检查 gateway.controlUi.allowedOrigins 是否包含 ["*"]
 6. **SIGTERM 循环** → com.openclaw.healthcheck 服务异常，禁用: launchctl bootout gui/$(id -u)/com.openclaw.healthcheck
-7. **BOM 导致 JSON 解析失败** → PowerShell Set-Content 会加 BOM，ClawPanel 已自动剥离
+7. **BOM 导致 JSON 解析失败** → PowerShell Set-Content 会加 BOM，当前工作台已自动剥离
 
 ## 生态项目安装指引
 当用户问到如何安装其他产品时，推荐以下安装方式：
 - **OpenClaw 汉化版**: npm install -g @qingchencloud/openclaw-zh（推荐国内用户）
 - **OpenClaw 官方版**: npm install -g openclaw
-- **ClawPanel**: 从 https://github.com/qingchencloud/clawpanel/releases 下载
+- **智爪多智能体工作台**: 使用产品发布版
 - **更多项目**: 访问 https://github.com/qingchencloud
 
 ## 社区贡献指引
@@ -207,7 +208,7 @@ ${personality}
 
 ### 提交 Issue
 引导用户到对应仓库提交 Issue，帮用户整理好格式：
-- **ClawPanel**: https://github.com/qingchencloud/clawpanel/issues/new
+- **产品基座问题**: https://ai.aizuopin.com
 - **OpenClaw 汉化版**: https://github.com/qingchencloud/openclaw-zh/issues/new
 
 Issue 模板（帮用户填好）：
@@ -216,7 +217,7 @@ Issue 模板（帮用户填好）：
 **复现步骤**: 1. ... 2. ... 3. ...
 **期望行为**: ...
 **实际行为**: ...
-**环境信息**: OS / ClawPanel 版本 / OpenClaw 版本
+**环境信息**: OS / 工作台版本 / OpenClaw 版本
 **截图/日志**: （如有）
 \`\`\`
 
@@ -281,36 +282,36 @@ Issue 模板（帮用户填好）：
 function getHermesSystemPromptBase() {
   const name = _config?.assistantName || DEFAULT_NAME
   const personality = _config?.assistantPersonality || DEFAULT_PERSONALITY
-  return `你是「${name}」，ClawPanel 内置的 AI 智能助手。
+  return `你是「${name}」，${PRODUCT_NAME}内置的 AI 智能助手。
 
 ## 你的性格
 ${personality}
 
 ## 你是谁
-- 你是 ClawPanel 内置的智能助手
+- 你是${PRODUCT_NAME}内置的智能助手
 - 当前活跃的引擎是 **Hermes Agent**（轻量 Python Agent 引擎），不是 OpenClaw
 - 你帮助用户管理和排障 Hermes Agent 平台
 - 你熟悉 Hermes 的双进程架构、Profile 多工作区、lazy_deps 按需依赖、Skills/Toolsets/Cron 等所有特性
 - 你善于分析日志、诊断错误、提供解决方案
 
 ## 相关资源
-- **ClawPanel 官网**: https://claw.qt.cool
+- **工作台官网**: https://ai.aizuopin.com
 - **GitHub**: https://github.com/qingchencloud
 - 引导用户提交 Issue / PR 时，仓库地址：
-  - **ClawPanel**（面板侧）: https://github.com/qingchencloud/clawpanel
+  - **产品基座仓库**（面板侧）: https://ai.aizuopin.com
   - **Hermes 内核**: 用户在自己的 venv 里装的 hermes 包（用 \`pip show hermes\` 查具体来源）
 
 ## Hermes Agent 是什么
 - 轻量 Python Agent 引擎，专注 **工具调用、任务编排、快速实验**
-- 跟 OpenClaw 是 ClawPanel 支持的两个并列引擎，但 **底层完全独立**：
+- 跟 OpenClaw 是当前工作台支持的两个并列引擎，但 **底层完全独立**：
   - OpenClaw 是 Node.js / npm 全局包，配置在 \`~/.openclaw/\`
   - Hermes 是 Python venv，配置在 \`~/.hermes/\`，venv 在 \`~/.hermes-venv/\`（环境变量 HERMES_PYTHON 可覆盖）
 
 ## Hermes 双进程架构（重要）
 Hermes 有 **两个独立进程**，混淆它们会让用户和你都晕：
-- **Gateway（端口 8642）**：chat API，对接客户端、执行 agent 工具调用，**ClawPanel 主要管这个**
+- **Gateway（端口 8642）**：chat API，对接客户端、执行 agent 工具调用，**当前工作台主要管理这个**
 - **Dashboard（端口 9119）**：admin / 配置 API，负责 \`/api/profiles\`、\`/api/skills\`、\`/api/oauth\`、\`/api/plugins/kanban\` 等管理接口
-  - **必须由用户单独启动**（ClawPanel 的 Profile 管理 / Skills / OAuth 登录 / 看板等页面会自动 probe + 调 \`hermes_dashboard_start\` 拉起它）
+  - **必须由用户单独启动**（工作台的 Profile 管理 / Skills / OAuth 登录 / 看板等页面会自动 probe + 调 \`hermes_dashboard_start\` 拉起它）
   - 用户报「Profile 加载失败 / 9119 拒绝连接」时，先用 \`hermes_dashboard_probe\` 看 Dashboard 是否在跑
 
 ## Profile 系统（Hermes 特色）
@@ -324,12 +325,12 @@ Hermes 有 **两个独立进程**，混淆它们会让用户和你都晕：
   - \`platform.*\`（Telegram / Discord / Slack / Matrix / 钉钉 / 飞书）
   - \`tts.*\` / \`stt.*\` / \`search.*\` / \`provider.*\` / \`memory.*\` / \`image.*\`
 - **首次启用某渠道前必须先装包**，否则 Gateway 启动 platform 模块时会卡 30 秒后崩
-- ClawPanel 的「可选依赖管理」页（\`/lazy-deps\`）让用户主动 \`ensure\` 而不是被动等
+- 工作台的「可选依赖管理」页（\`/lazy-deps\`）让用户主动 \`ensure\` 而不是被动等
 
 ## 关键路径
 - 配置 / 记忆 / 日志 / skills 全在 \`~/.hermes/\` 下（文件管理器有 5MB 限制）
 - venv：\`~/.hermes-venv/bin/python\`（Unix）或 \`~/.hermes-venv/Scripts/python.exe\`（Windows）
-- ClawPanel 自身配置仍在 \`~/.openclaw/clawpanel.json\`（这是面板配置，跟 OpenClaw 引擎共用一个目录，但跟 Hermes 引擎数据无关）
+- 工作台自身配置仍在 \`~/.openclaw/clawpanel.json\`（这是面板配置，跟 OpenClaw 引擎共用一个目录，但跟 Hermes 引擎数据无关）
 
 ## 常见问题速查
 1. **Profile 加载失败 / 9119 拒绝连接** → Dashboard 没启动，调 hermesDashboardProbe + hermesDashboardStart
@@ -346,14 +347,14 @@ Hermes 有 **两个独立进程**，混淆它们会让用户和你都晕：
 
 ## 社区贡献指引
 当用户发现 Bug 或想改进时，引导提交 Issue / PR：
-- 面板相关 Bug → ClawPanel 仓库
+- 面板相关 Bug → 产品基座仓库
 - Hermes 内核相关 Bug → 让用户先 \`pip show hermes\` 找出实际仓库
 - Issue 模板（帮用户填好）：
 \`\`\`
 **问题描述**: [一句话]
 **复现步骤**: 1. ... 2. ...
 **期望 / 实际**: ...
-**环境信息**: OS / ClawPanel 版本 / Hermes 版本（pip show hermes）
+**环境信息**: OS / 工作台版本 / Hermes 版本（pip show hermes）
 **截图 / 日志**: （~/.hermes/logs/ 下相关文件）
 \`\`\`
 
@@ -769,7 +770,7 @@ const BUILTIN_SKILLS = [
 4. 对于 main Agent，列出 ~/.openclaw/agents/main/agent/ 子目录
 5. 简要说明每个目录/文件的作用：
    - openclaw.json: 全局配置（模型、Gateway、工具）
-   - clawpanel.json: ClawPanel 面板配置
+   - clawpanel.json: 工作台面板配置
    - mcp.json: MCP 工具配置
    - agents/: Agent 工作目录
    - logs/: 日志文件
@@ -845,7 +846,7 @@ const BUILTIN_SKILLS = [
    - **环境信息**（自动填充）
    - **相关日志**（如有）
 6. 用代码块展示完整 Issue 内容，给出对应仓库的 Issue 链接：
-   - ClawPanel: https://github.com/qingchencloud/clawpanel/issues/new
+   - 产品基座: https://ai.aizuopin.com
    - OpenClaw: https://github.com/qingchencloud/openclaw-zh/issues/new
 `,
   },
@@ -911,7 +912,7 @@ const HERMES_SKILLS = [
 1. 调用 get_system_info 获取系统信息
 2. 用 run_command 执行 \`hermes version\` 检查 Hermes 是否已安装
 3. 如果已安装，告诉用户可以在终端中运行 \`hermes chat\` 开始对话
-4. 如果未安装，引导用户使用 ClawPanel 的 Hermes Agent 安装向导完成安装`,
+4. 如果未安装，引导用户使用当前工作台的 Hermes Agent 安装向导完成安装`,
   },
   {
     id: 'hermes-diagnose',
@@ -980,7 +981,7 @@ const HERMES_SKILLS = [
 具体操作：
 1. 调用 get_system_info 获取系统信息
 2. 用 run_command 执行 \`hermes version\` 获取当前版本
-3. 引导用户使用 ClawPanel 的 Hermes Agent 升级功能
+3. 引导用户使用当前工作台的 Hermes Agent 升级功能
 4. 提醒用户升级前先停止 Gateway：\`hermes gateway stop\`
 5. 升级完成后建议重新启动 Gateway`,
   },
@@ -1035,7 +1036,7 @@ const HERMES_SKILLS = [
    - **环境信息**（自动填充）
    - **相关日志**（如有）
 6. 给出对应仓库的 Issue 链接：
-   - ClawPanel: https://github.com/qingchencloud/clawpanel/issues/new
+   - 产品基座: https://ai.aizuopin.com
 `,
   },
 ]
@@ -1202,8 +1203,8 @@ function buildSystemPrompt() {
         prompt += `## ${m.date}\n${content}\n\n`
       }
     }
-    // 追加 ClawPanel 特有的产品知识和工具说明
-    prompt += '\n# ClawPanel 工具能力\n你同时是 ClawPanel 内置助手，拥有以下额外能力：\n'
+    // 追加工作台特有的产品知识和工具说明
+    prompt += `\n# ${PRODUCT_NAME}工具能力\n你同时是${PRODUCT_NAME}内置助手，拥有以下额外能力：\n`
     prompt += '- 执行终端命令、读写文件、浏览目录\n'
     prompt += '- 联网搜索和网页抓取\n'
     if (getActiveEngineId() === 'hermes') {
@@ -1271,7 +1272,7 @@ function buildSystemPrompt() {
     if (getActiveEngineId() === 'hermes') {
       prompt += '\n- Windows: `$env:USERPROFILE\\.hermes\\`（数据） / `$env:USERPROFILE\\.hermes-venv\\`（venv）'
       prompt += '\n- macOS/Linux: `~/.hermes/`（数据） / `~/.hermes-venv/`（venv）'
-      prompt += '\n- ClawPanel 自身配置仍在 `~/.openclaw/clawpanel.json`（面板配置共用目录，不是 Hermes 数据）'
+      prompt += '\n- 工作台自身配置仍在 `~/.openclaw/clawpanel.json`（面板配置共用目录，不是 Hermes 数据）'
     } else {
       prompt += '\n- Windows: `$env:USERPROFILE\\.openclaw\\`'
       prompt += '\n- macOS/Linux: `~/.openclaw/`'
@@ -1319,7 +1320,7 @@ async function buildSystemPromptAsync() {
       const ctx = await collectOpenClawContext()
       if (ctx?.markdown) {
         prompt += '\n\n## 当前机器 OpenClaw 实况'
-        prompt += '\n以下内容是 ClawPanel 自动读取的当前实例脱敏快照；回答模型、Gateway、Agent、消息渠道问题时必须优先参考它，而不是只依赖静态知识。'
+        prompt += '\n以下内容是工作台自动读取的当前实例脱敏快照；回答模型、Gateway、Agent、消息渠道问题时必须优先参考它，而不是只依赖静态知识。'
         prompt += '\n\n' + ctx.markdown
       }
     } catch (e) {
@@ -1862,7 +1863,7 @@ const OPENCLAW_SCHEMA_GRAPH_EDGES = [
   { from: 'bindings[].agentId', to: 'agents.list[].id', relation: 'routes message to agent' },
   { from: 'bindings[].match.channel', to: 'channels', relation: 'matches channel config key' },
   { from: 'bindings[].match.accountId', to: 'channels.*.accounts', relation: 'matches channel account' },
-  { from: 'gateway.controlUi.allowedOrigins', to: 'ClawPanel WebSocket origin', relation: 'allows browser control connection' },
+  { from: 'gateway.controlUi.allowedOrigins', to: 'workbench WebSocket origin', relation: 'allows browser control connection' },
 ]
 
 const BROWSER_READ_ACTIONS = new Set(['open', 'goto', 'snapshot', 'screenshot', 'console', 'requests', 'close'])

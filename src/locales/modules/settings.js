@@ -2,7 +2,7 @@ import { _ } from '../helper.js'
 
 export default {
   title: _('面板设置', 'Settings', '面板設定', 'パネル設定', '패널 설정', 'Cài đặt panel', 'Configuración del panel', 'Configurações do painel', 'Настройки панели', 'Paramètres du panneau', 'Panel-Einstellungen'),
-  desc: _('管理 ClawPanel 的网络、代理和下载源配置', 'Manage ClawPanel network, proxy and download source settings', '管理 ClawPanel 的網路、代理和下載源設定', 'ClawPanel のネットワーク、プロキシ、ダウンロードソース設定を管理', 'ClawPanel 네트워크, 프록시 및 다운로드 소스 설정 관리', 'Quản lý cài đặt mạng, proxy và nguồn tải xuống', 'Gestionar configuración de red, proxy y fuentes de descarga', 'Gerenciar configurações de rede, proxy e fontes de download', 'Управление сетью, прокси и источниками загрузки', 'Gérer les paramètres réseau, proxy et sources de téléchargement', 'Netzwerk-, Proxy- und Download-Einstellungen verwalten'),
+  desc: _('管理产品的网络、代理和下载源配置', 'Manage network, proxy, and download source settings for the product', '管理產品的網路、代理和下載源設定', '製品のネットワーク、プロキシ、ダウンロードソース設定を管理', '제품의 네트워크, 프록시 및 다운로드 소스 설정 관리', 'Quản lý cài đặt mạng, proxy và nguồn tải xuống của sản phẩm', 'Gestionar la red, el proxy y las fuentes de descarga del producto', 'Gerenciar rede, proxy e fontes de download do produto', 'Управление сетью, прокси и источниками загрузки продукта', 'Gérer les paramètres réseau, proxy et sources de téléchargement du produit', 'Netzwerk-, Proxy- und Download-Einstellungen des Produkts verwalten'),
   networkProxy: _('网络代理', 'Network Proxy', '網路代理', 'ネットワークプロキシ', '네트워크 프록시', 'Proxy mạng', 'Proxy de red', 'Proxy de rede', 'Сетевой прокси', 'Proxy réseau', 'Netzwerk-Proxy'),
   modelProxy: _('模型请求代理', 'Model Request Proxy', '模型請求代理', 'モデルリクエストプロキシ', '모델 요청 프록시', 'Proxy yêu cầu mô hình', 'Proxy de solicitudes de modelo', 'Proxy de solicitações de modelo', 'Прокси для запросов моделей', 'Proxy des requêtes de modèle', 'Modell-Anfrage-Proxy'),
   npmRegistry: _('npm 源设置', 'npm Registry', 'npm 源設定', 'npm レジストリ', 'npm 레지스트리'),
@@ -11,8 +11,8 @@ export default {
   dockerDefaults: _('Docker 默认配置', 'Docker Defaults', 'Docker 預設配置', 'Docker デフォルト設定', 'Docker 기본 설정'),
   openclawCli: _('OpenClaw CLI 绑定', 'OpenClaw CLI Binding', 'OpenClaw CLI 綁定', 'OpenClaw CLI バインド', 'OpenClaw CLI 바인딩'),
   autostart: _('开机自启', 'Auto Start', '開機自啟', '自動起動', '자동 시작'),
-  autostartToggle: _('系统启动时自动运行 ClawPanel', 'Run ClawPanel automatically on system startup', '系統啟動時自動執行 ClawPanel', 'システム起動時に ClawPanel を自動実行', '시스템 시작 시 ClawPanel 자동 실행'),
-  autostartHint: _('开启后，电脑重启时 ClawPanel 会自动启动并检测 Gateway 状态', 'When enabled, ClawPanel will start automatically after reboot and check Gateway status', '開啟後，電腦重啟時 ClawPanel 會自動啟動並檢查 Gateway 狀態', '有効にすると、PC 再起動後に ClawPanel が自動起動し Gateway 状態を確認します', '활성화하면 PC 재시작 후 ClawPanel이 자동으로 시작되어 Gateway 상태를 확인합니다'),
+  autostartToggle: _('系统启动时自动运行智爪多智能体工作台', 'Run the app automatically on system startup', '系統啟動時自動執行智爪多智能體工作台', 'システム起動時にアプリを自動実行', '시스템 시작 시 앱 자동 실행'),
+  autostartHint: _('开启后，电脑重启时应用会自动启动并检测 Gateway 状态', 'When enabled, the app will start automatically after reboot and check Gateway status', '開啟後，電腦重啟時應用會自動啟動並檢查 Gateway 狀態', '有効にすると、PC 再起動後にアプリが自動起動し Gateway 状態を確認します', '활성화하면 PC 재시작 후 앱이 자동으로 시작되어 Gateway 상태를 확인합니다'),
   autostartEnabled: _('已开启开机自启', 'Auto start enabled', '已開啟開機自啟', '自動起動を有効化しました', '자동 시작이 활성화되었습니다'),
   autostartDisabled: _('已关闭开机自启', 'Auto start disabled', '已關閉開機自啟', '自動起動を無効化しました', '자동 시작이 비활성화되었습니다'),
   autostartFailed: _('设置失败', 'Failed to update auto start', '設定失敗', '自動起動設定に失敗しました', '자동 시작 설정에 실패했습니다'),

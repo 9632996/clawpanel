@@ -388,7 +388,7 @@ export default {
   rawData: _('消息原始数据', 'Raw Message Data', '訊息原始資料'),
   debugInfo: _('请求/响应调试', 'Request/Response Debug', '請求/回應除錯'),
   guideTag: _('内置 AI', 'Built-in AI', '內置 AI'),
-  guideTitle: _('这是 ClawPanel 内置的 AI 助手', 'This is ClawPanel\'s built-in AI assistant', '这是 ClawPanel 內置的 AI 助手'),
+  guideTitle: _('这是智爪多智能体工作台内置的 AI 助手', 'This is the built-in AI assistant in the workbench', '這是智爪多智能體工作台內置的 AI 助手'),
   guideDesc: _('，独立于 OpenClaw，使用你在右上角「设置」中配置的 API。', ', independent of OpenClaw, using the API configured in Settings.', '，獨立於 OpenClaw，使用你在右上角「設定」中設定的 API。'),
   guideHint: _('如需与 OpenClaw Agent 对话，请前往「实时聊天」页面。', 'To chat with OpenClaw Agents, go to the Live Chat page.', '如需與 OpenClaw Agent 對話，請前往「實時聊天」頁面。'),
   uploadImage: _('上传图片', 'Upload Image', '上傳圖片', '画像アップロード', '이미지 업로드'),

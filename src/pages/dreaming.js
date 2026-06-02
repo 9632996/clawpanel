@@ -347,7 +347,7 @@ async function toggleDreaming() {
         },
       }),
       sessionKey: wsClient.sessionKey || undefined,
-      note: 'Dreaming settings updated from ClawPanel.',
+      note: 'Dreaming settings updated from the workbench.',
     })
     toast(!enabled ? t('dreaming.enabled') : t('dreaming.disabled'), 'success')
     await loadAll(_page)

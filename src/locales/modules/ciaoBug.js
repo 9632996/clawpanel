@@ -28,11 +28,11 @@ export default {
     'Windows cmd 팝업 — 서드파티 라이브러리 버그',
   ),
   summary: _(
-    '这是 OpenClaw 依赖的 @homebridge/ciao 库的已知 bug，不是 ClawPanel 或 OpenClaw 本身的问题。每 15-30 秒 ciao 会调用 arp -a 刷新网络接口缓存，但未使用 windowsHide 参数，所以 Windows 上会弹出一个短暂的 cmd 窗口。功能本身完全正常，只是视觉干扰。',
-    'This is a known bug in @homebridge/ciao, which OpenClaw depends on. It is not a bug of ClawPanel or OpenClaw itself. Every 15–30 seconds ciao calls "arp -a" to refresh the network interface cache, but without the windowsHide option, so a cmd window flashes briefly on Windows. Functionality is unaffected — it is purely a visual annoyance.',
-    '這是 OpenClaw 相依的 @homebridge/ciao 函式庫的已知 bug，不是 ClawPanel 或 OpenClaw 本身的問題。每 15–30 秒 ciao 會呼叫 arp -a 重新整理網路介面快取，但沒有使用 windowsHide 參數，所以 Windows 上會彈出短暫的 cmd 視窗。功能本身完全正常，只是視覺干擾。',
-    'これは OpenClaw が依存している @homebridge/ciao ライブラリの既知の不具合であり、ClawPanel や OpenClaw 本体の問題ではありません。ciao は 15〜30 秒ごとに "arp -a" を呼び出してネットワークインターフェースのキャッシュを更新しますが、windowsHide オプションが指定されていないため、Windows では cmd ウィンドウが一瞬点滅します。動作自体は正常で、視覚的な煩わしさのみです。',
-    '이것은 OpenClaw가 의존하는 @homebridge/ciao 라이브러리의 알려진 버그이며 ClawPanel이나 OpenClaw 자체의 문제가 아닙니다. ciao는 15~30초마다 "arp -a"를 호출하여 네트워크 인터페이스 캐시를 갱신하는데 windowsHide 옵션을 지정하지 않아 Windows에서 cmd 창이 순간적으로 깜박입니다. 기능 자체는 정상이며 시각적 방해일 뿐입니다.',
+    '这是 OpenClaw 依赖的 @homebridge/ciao 库的已知 bug，不是本产品或 OpenClaw 本身的问题。每 15-30 秒 ciao 会调用 arp -a 刷新网络接口缓存，但未使用 windowsHide 参数，所以 Windows 上会弹出一个短暂的 cmd 窗口。功能本身完全正常，只是视觉干扰。',
+    'This is a known bug in @homebridge/ciao, which OpenClaw depends on. It is not a bug in this product or OpenClaw itself. Every 15–30 seconds ciao calls "arp -a" to refresh the network interface cache, but without the windowsHide option, so a cmd window flashes briefly on Windows. Functionality is unaffected — it is purely a visual annoyance.',
+    '這是 OpenClaw 相依的 @homebridge/ciao 函式庫的已知 bug，不是本產品或 OpenClaw 本身的問題。每 15–30 秒 ciao 會呼叫 arp -a 重新整理網路介面快取，但沒有使用 windowsHide 參數，所以 Windows 上會彈出短暫的 cmd 視窗。功能本身完全正常，只是視覺干擾。',
+    'これは OpenClaw が依存している @homebridge/ciao ライブラリの既知の不具合であり、本製品や OpenClaw 本体の問題ではありません。ciao は 15〜30 秒ごとに "arp -a" を呼び出してネットワークインターフェースのキャッシュを更新しますが、windowsHide オプションが指定されていないため、Windows では cmd ウィンドウが一瞬点滅します。動作自体は正常で、視覚的な煩わしさのみです。',
+    '이것은 OpenClaw가 의존하는 @homebridge/ciao 라이브러리의 알려진 버그이며 본 제품이나 OpenClaw 자체의 문제가 아닙니다. ciao는 15~30초마다 "arp -a"를 호출하여 네트워크 인터페이스 캐시를 갱신하는데 windowsHide 옵션을 지정하지 않아 Windows에서 cmd 창이 순간적으로 깜박입니다. 기능 자체는 정상이며 시각적 방해일 뿐입니다.',
   ),
   envTitle: _(
     '当前环境',
@@ -92,11 +92,11 @@ export default {
     '업스트림 수정 PR #65',
   ),
   disclaimer: _(
-    '说明：ClawPanel 选择「检测并告知」而不是「自动修改你的 node_modules」—— 我们尊重你对本机软件的控制权。',
-    'Note: ClawPanel chose "detect & inform" instead of "silently patch your node_modules" — we respect your control over local software.',
-    '說明：ClawPanel 選擇「偵測並告知」而不是「自動修改你的 node_modules」—— 我們尊重你對本機軟體的控制權。',
-    '注：ClawPanel は「検出して通知する」ことを選択しました。「node_modules を自動改変する」のではなく、ローカルソフトウェアに対するユーザーのコントロールを尊重しています。',
-    '참고: ClawPanel은 node_modules를 자동으로 수정하는 대신 "감지하고 알리는" 방식을 선택했습니다 — 로컬 소프트웨어에 대한 사용자의 통제권을 존중합니다.',
+    '说明：本产品选择「检测并告知」而不是「自动修改你的 node_modules」—— 我们尊重你对本机软件的控制权。',
+    'Note: this product chose "detect & inform" instead of "silently patch your node_modules" — we respect your control over local software.',
+    '說明：本產品選擇「偵測並告知」而不是「自動修改你的 node_modules」—— 我們尊重你對本機軟體的控制權。',
+    '注：本製品は「検出して通知する」ことを選択しました。「node_modules を自動改変する」のではなく、ローカルソフトウェアに対するユーザーのコントロールを尊重しています。',
+    '참고: 본 제품은 node_modules를 자동으로 수정하는 대신 "감지하고 알리는" 방식을 선택했습니다 — 로컬 소프트웨어에 대한 사용자의 통제권을 존중합니다.',
   ),
   dismissForVersion: _(
     '已了解，不再提醒本版本',

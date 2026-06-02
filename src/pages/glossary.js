@@ -101,21 +101,21 @@ const GLOSSARY = [
   // 接入与协议
   {
     id: 'webhook', term: 'Webhook', cat: 'integration', route: '/channels',
-    zhCN: { name: 'Webhook（回调地址）', desc: '一个外部应用「打你电话」的号码。比如 Discord 收到消息后就请求这个地址通知 ClawPanel，触发 AI 回复。' },
-    en: { name: 'Webhook', desc: 'A URL external apps "call back" to. e.g. when Discord receives a message it pings this URL so ClawPanel knows and triggers the AI to respond.' },
-    zhTW: { name: 'Webhook（回呼網址）', desc: '一個外部應用「打你電話」的號碼。例如 Discord 收到訊息後就請求這個位址通知 ClawPanel，觸發 AI 回覆。' },
+    zhCN: { name: 'Webhook（回调地址）', desc: '一个外部应用「打你电话」的号码。比如 Discord 收到消息后就请求这个地址通知工作台，触发 AI 回复。' },
+    en: { name: 'Webhook', desc: 'A URL external apps "call back" to. e.g. when Discord receives a message it pings this URL so the workbench knows and triggers the AI to respond.' },
+    zhTW: { name: 'Webhook（回呼網址）', desc: '一個外部應用「打你電話」的號碼。例如 Discord 收到訊息後就請求這個位址通知工作台，觸發 AI 回覆。' },
   },
   {
     id: 'oauth', term: 'OAuth', cat: 'integration', route: '/channels',
-    zhCN: { name: 'OAuth（第三方授权）', desc: '一种「不用给密码也能让别人代你登录」的协议。授权 ClawPanel 接入 Discord 时走的就是 OAuth，比直接给 token 更安全。' },
-    en: { name: 'OAuth', desc: 'A protocol that lets services log in on your behalf without you sharing your password. ClawPanel uses OAuth when connecting Discord — safer than handing over a raw token.' },
-    zhTW: { name: 'OAuth（第三方授權）', desc: '一種「不用給密碼也能讓別人代你登入」的協定。授權 ClawPanel 接入 Discord 時走的就是 OAuth，比直接給 token 更安全。' },
+    zhCN: { name: 'OAuth（第三方授权）', desc: '一种「不用给密码也能让别人代你登录」的协议。授权工作台接入 Discord 时走的就是 OAuth，比直接给 token 更安全。' },
+    en: { name: 'OAuth', desc: 'A protocol that lets services log in on your behalf without you sharing your password. The workbench uses OAuth when connecting Discord — safer than handing over a raw token.' },
+    zhTW: { name: 'OAuth（第三方授權）', desc: '一種「不用給密碼也能讓別人代你登入」的協定。授權工作台接入 Discord 時走的就是 OAuth，比直接給 token 更安全。' },
   },
   {
     id: 'bottoken', term: 'Bot Token', cat: 'integration', route: '/channels',
-    zhCN: { name: 'Bot Token（机器人令牌）', desc: 'Telegram/Discord 等平台给你的机器人发的「身份卡」。把它配到 ClawPanel，AI 就能以这个机器人的身份说话。' },
-    en: { name: 'Bot Token', desc: 'The "ID card" issued by Telegram/Discord/etc. to your bot. Once you put it in ClawPanel, the AI can speak as this bot identity.' },
-    zhTW: { name: 'Bot Token（機器人權杖）', desc: 'Telegram/Discord 等平台給你的機器人發的「身分卡」。把它配到 ClawPanel，AI 就能以這個機器人的身分說話。' },
+    zhCN: { name: 'Bot Token（机器人令牌）', desc: 'Telegram/Discord 等平台给你的机器人发的「身份卡」。把它配到工作台，AI 就能以这个机器人的身份说话。' },
+    en: { name: 'Bot Token', desc: 'The "ID card" issued by Telegram/Discord/etc. to your bot. Once you put it in the workbench, the AI can speak as this bot identity.' },
+    zhTW: { name: 'Bot Token（機器人權杖）', desc: 'Telegram/Discord 等平台給你的機器人發的「身分卡」。把它配到工作台，AI 就能以這個機器人的身分說話。' },
   },
   {
     id: 'binding', term: 'Binding', cat: 'integration', route: '/channels',

@@ -82,15 +82,15 @@ export async function render() {
     <div class="setup-shell">
       <div class="setup-hero">
         <div class="setup-hero-brand">
-          <img src="/images/logo-brand.png" alt="ClawPanel" class="setup-hero-logo">
+          <img src="/images/logo-brand.png" alt="智爪多智能体工作台" class="setup-hero-logo">
           <div class="setup-hero-copy">
             <h1 class="setup-hero-title">${t('setup.headerTitle')}</h1>
             <p class="setup-hero-desc">${t('setup.headerDesc')}</p>
             <div class="setup-hero-site-row">
-              <a class="setup-hero-site-link" href="https://claw.qt.cool" target="_blank" rel="noopener noreferrer" title="https://claw.qt.cool">
+              <a class="setup-hero-site-link" href="https://ai.aizuopin.com" target="_blank" rel="noopener noreferrer" title="https://ai.aizuopin.com">
                 ${icon('link', 14)}
                 <span class="setup-hero-site-label">${t('setup.officialWebsite')}</span>
-                <span class="setup-hero-site-value">claw.qt.cool</span>
+                <span class="setup-hero-site-value">ai.aizuopin.com</span>
               </a>
             </div>
           </div>
@@ -284,7 +284,7 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
           <strong>${t('setup.nodeInstalledButNotDetected')}</strong>
           ${isMacPlatform()
             ? `${t('setup.macNodeHint')}<br>
-               <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;user-select:all">open /Applications/ClawPanel.app</code>`
+               <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;user-select:all">open /Applications/智爪多智能体工作台.app</code>`
             : `${t('setup.winNodeHint')}`
           }
           <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -562,8 +562,8 @@ function renderEnvironmentHint() {
             <div class="setup-help-block">
               <div class="setup-help-label">${t('setup.wslWebHint')}</div>
               <div class="setup-help-copy">${t('setup.wslWebDesc')}</div>
-              <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/deploy.sh | bash</code>
-              <div class="setup-help-copy">${t('setup.domesticMirror')} <code>curl -fsSL https://gitee.com/QtCodeCreators/clawpanel/raw/main/deploy.sh | bash</code></div>
+              <code class="setup-help-code">curl -fsSL https://ai.aizuopin.com/raw/main/deploy.sh | bash</code>
+              <div class="setup-help-copy">${t('setup.domesticMirror')} <code>curl -fsSL https://ai.aizuopin.com/raw/main/deploy.sh | bash</code></div>
               <div class="setup-help-copy">${t('setup.wslWebPostDeploy')}</div>
             </div>
           ` : ''}
@@ -571,14 +571,14 @@ function renderEnvironmentHint() {
             <div class="setup-help-label">${t('setup.dockerHint')}</div>
             <div class="setup-help-copy">${t('setup.dockerDesc')}</div>
             <code class="setup-help-code">npm i -g @qingchencloud/openclaw-zh</code>
-            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/deploy.sh | bash</code>
-            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/clawpanel/raw/main/deploy.sh | bash</code></div>
+            <code class="setup-help-code">curl -fsSL https://ai.aizuopin.com/raw/main/deploy.sh | bash</code>
+            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://ai.aizuopin.com/raw/main/deploy.sh | bash</code></div>
           </div>
           <div class="setup-help-block">
             <div class="setup-help-label">${t('setup.remoteHint')}</div>
             <div class="setup-help-copy">${t('setup.remoteDesc')}</div>
-            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/deploy.sh | bash</code>
-            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/clawpanel/raw/main/deploy.sh | bash</code></div>
+            <code class="setup-help-code">curl -fsSL https://ai.aizuopin.com/raw/main/deploy.sh | bash</code>
+            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://ai.aizuopin.com/raw/main/deploy.sh | bash</code></div>
           </div>
         </div>
       </details>
@@ -1103,4 +1103,3 @@ function bindEvents(page, nodeOk, detectState) {
     }
   })
 }
-

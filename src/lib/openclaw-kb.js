@@ -1,7 +1,7 @@
 /**
  * OpenClaw 内置知识库
  * 来源：https://openclawcn.com/docs/
- * 供 ClawPanel AI 助手在系统提示词中使用
+ * 供工作台 AI 助手在系统提示词中使用
  */
 
 export const OPENCLAW_KB = `
@@ -220,7 +220,7 @@ npm install -g openclaw@latest
 8. 认证错误 → 检查 auth-profiles.json 或重新 \`openclaw onboard\`
 
 ## 十二、晴辰云 AI 模型服务
-晴辰云为 ClawPanel 用户提供 AI 模型调用服务，通过每日签到和邀请好友即可获取免费额度。
+晴辰云为智爪多智能体工作台用户提供 AI 模型调用服务，通过每日签到和邀请好友即可获取免费额度。
 
 ### 核心信息
 - **API 网关地址**：https://gpt.qt.cool/v1
@@ -231,7 +231,7 @@ npm install -g openclaw@latest
 - **用户后台**：https://gpt.qt.cool/user（查看用量、管理密钥）
 
 ### 官方入口
-- **ClawPanel 官网**：https://claw.qt.cool/
+- **智爪多智能体工作台官网**：https://ai.aizuopin.com/
 - **GPT-AI 网关官网**：https://gpt.qt.cool/
 - **每日签到页**：https://gpt.qt.cool/checkin
 - **用户后台**：https://gpt.qt.cool/user
@@ -248,7 +248,7 @@ npm install -g openclaw@latest
 2. API Key → 签到获取的密钥
 即可完成接入。
 
-### 在 ClawPanel 中配置
+### 在智爪多智能体工作台中配置
 - **助手设置**：打开 AI 助手设置 → 模型配置 → 输入密钥后点击「接入」
 - **模型配置页**：进入模型配置 → 输入密钥后点击「获取模型列表」添加模型
 `.trim()

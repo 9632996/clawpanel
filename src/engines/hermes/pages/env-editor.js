@@ -56,7 +56,7 @@ export function render() {
       <div class="hm-panel" style="margin-bottom:18px">
         <div class="hm-panel-body hm-panel-body--tight">
           <div style="font-family:var(--hm-font-serif);font-style:italic;font-size:13px;color:var(--hm-text-tertiary);line-height:1.75">
-            以下变量由 ClawPanel 在仪表盘「模型配置」中托管：
+            以下变量由当前工作台在仪表盘「模型配置」中托管：
             <code class="hm-code">OPENAI_API_KEY</code>
             <code class="hm-code">ANTHROPIC_API_KEY</code>
             <code class="hm-code">DEEPSEEK_API_KEY</code>

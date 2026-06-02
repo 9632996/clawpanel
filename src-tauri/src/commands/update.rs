@@ -4,19 +4,22 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 
-/// 前端热更新目录 (~/.openclaw/clawpanel/web-update/)
+/// 前端热更新目录 (~/.openclaw/zhizhua-workbench/web-update/)
 pub fn update_dir() -> PathBuf {
-    super::openclaw_dir().join("clawpanel").join("web-update")
+    super::openclaw_dir()
+        .join("zhizhua-workbench")
+        .join("web-update")
 }
 
-/// 更新清单 URL（GitHub Pages 托管）
-const LATEST_JSON_URL: &str = "https://claw.qt.cool/update/latest.json";
+/// 更新清单 URL（产品官网托管）
+const LATEST_JSON_URL: &str = "https://ai.aizuopin.com/update/latest.json";
 
 /// 检查前端是否有新版本可用
 #[tauri::command]
 pub async fn check_frontend_update() -> Result<Value, String> {
-    let client = super::build_http_client(std::time::Duration::from_secs(10), Some("ClawPanel"))
-        .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
+    let client =
+        super::build_http_client(std::time::Duration::from_secs(10), Some("ZhizhuaWorkbench"))
+            .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
 
     let resp = client
         .get(LATEST_JSON_URL)
@@ -74,8 +77,11 @@ pub async fn download_frontend_update(
     expected_hash: String,
     version: String,
 ) -> Result<Value, String> {
-    let client = super::build_http_client(std::time::Duration::from_secs(120), Some("ClawPanel"))
-        .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
+    let client = super::build_http_client(
+        std::time::Duration::from_secs(120),
+        Some("ZhizhuaWorkbench"),
+    )
+    .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
 
     let resp = client
         .get(&url)

@@ -1,35 +1,7 @@
 {
-  "name": "clawpanel",
-  "version": "0.17.0",
-  "private": true,
-  "description": "ClawPanel - OpenClaw 可视化管理面板，基于 Tauri v2 的跨平台桌面应用",
-  "type": "module",
   "author": "qingchencloud",
-  "license": "AGPL-3.0",
-  "homepage": "https://github.com/qingchencloud/clawpanel",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/qingchencloud/clawpanel.git"
-  },
   "bugs": {
-    "url": "https://github.com/qingchencloud/clawpanel/issues"
-  },
-  "keywords": [
-    "openclaw",
-    "ai-agent",
-    "tauri",
-    "desktop-app",
-    "management-panel"
-  ],
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tauri": "tauri",
-    "icon:regen": "tauri icon docs/logo.png -o src-tauri/icons",
-    "serve": "node scripts/serve.js",
-    "version:sync": "node scripts/sync-version.js",
-    "version:set": "node scripts/sync-version.js"
+    "url": "https://ai.aizuopin.com"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
@@ -37,8 +9,36 @@
     "@tauri-apps/plugin-shell": "^2.2.1",
     "yaml": "^2.9.0"
   },
+  "description": "智爪多智能体工作台 - OpenClaw 多智能体工作台",
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",
     "vite": "^6.4.2"
-  }
+  },
+  "homepage": "https://ai.aizuopin.com",
+  "keywords": [
+    "openclaw",
+    "ai-agent",
+    "tauri",
+    "desktop-app",
+    "management-panel"
+  ],
+  "license": "AGPL-3.0",
+  "name": "zhizhua-workbench",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://ai.aizuopin.com"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "icon:regen": "tauri icon docs/logo.png -o src-tauri/icons",
+    "preview": "vite preview",
+    "serve": "node scripts/serve.js",
+    "tauri": "tauri",
+    "version:set": "node scripts/sync-version.js",
+    "version:sync": "node scripts/sync-version.js"
+  },
+  "type": "module",
+  "version": "0.17.0"
 }

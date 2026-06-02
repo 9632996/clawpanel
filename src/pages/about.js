@@ -10,16 +10,18 @@ import { icon, statusIcon } from '../lib/icons.js'
 import { t, getLang } from '../lib/i18n.js'
 import { getActiveEngineId } from '../lib/engine-manager.js'
 
+const PRODUCT_NAME = '智爪多智能体工作台'
+
 export async function render() {
   const page = document.createElement('div')
   page.className = 'page'
 
   page.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;gap:16px">
-      <img src="/images/logo-brand.png" alt="ClawPanel" style="height:48px;width:auto">
+      <img src="/images/logo-brand.png" alt="${PRODUCT_NAME}" style="height:48px;width:auto">
       <div>
-        <h1 class="page-title" style="margin:0">ClawPanel</h1>
-        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a href="https://claw.qt.cool" target="_blank" rel="noopener" style="color:var(--primary)">claw.qt.cool</a></p>
+        <h1 class="page-title" style="margin:0">${PRODUCT_NAME}</h1>
+        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a href="https://ai.aizuopin.com" target="_blank" rel="noopener" style="color:var(--primary)">ai.aizuopin.com</a></p>
       </div>
     </div>
     <div class="stat-cards" id="version-cards">
@@ -79,7 +81,7 @@ export async function render() {
 }
 
 /**
- * 心甜Claw 模式下的 about 页面：只展示 ClawPanel 自身版本 + 产品卡片，
+ * 心甜Claw 模式下的 about 页面：只展示产品自身版本 + 产品卡片，
  * 不涉及 OpenClaw 的版本切换与安装路径。
  */
 async function loadXintianData(page) {
@@ -90,7 +92,7 @@ async function loadXintianData(page) {
 
   cards.innerHTML = `
     <div class="stat-card">
-      <div class="stat-card-header"><span class="stat-card-label">ClawPanel</span></div>
+      <div class="stat-card-header"><span class="stat-card-label">${PRODUCT_NAME}</span></div>
       <div class="stat-card-value">${panelVersion}</div>
       <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
     </div>
@@ -139,7 +141,7 @@ async function loadHermesData(page) {
 
     cards.innerHTML = `
       <div class="stat-card">
-        <div class="stat-card-header"><span class="stat-card-label">ClawPanel</span></div>
+        <div class="stat-card-header"><span class="stat-card-label">${PRODUCT_NAME}</span></div>
         <div class="stat-card-value">${panelVersion}</div>
         <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
       </div>
@@ -280,7 +282,7 @@ async function loadData(page) {
       api.checkInstallation(),
     ])
 
-    // 尝试从 Tauri API 获取 ClawPanel 自身版本号，失败则 fallback
+    // 尝试从 Tauri API 获取桌面应用自身版本号，失败则 fallback
     const panelVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0'
 
     let panelUpdateHtml = `<span style="color:var(--text-tertiary)">${t('about.checkingUpdate')}</span>`
@@ -298,7 +300,7 @@ async function loadData(page) {
 
     cards.innerHTML = `
       <div class="stat-card">
-        <div class="stat-card-header"><span class="stat-card-label">ClawPanel</span></div>
+        <div class="stat-card-header"><span class="stat-card-label">${PRODUCT_NAME}</span></div>
         <div class="stat-card-value">${panelVersion}</div>
         <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
       </div>
@@ -657,14 +659,12 @@ async function checkNewVersion(cards, panelVersion) {
       meta.innerHTML = `
         <span style="color:var(--warning)">⚠️ ${t('about.versionMismatch', { frontend: panelVersion, binary: binaryVersion })}</span>
         <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('about.hotUpdateDeprecated')}</span>
-        <a class="btn btn-primary btn-sm" href="https://claw.qt.cool" target="_blank" rel="noopener" style="${btnSm}">${t('about.downloadFullInstaller')}</a>
-        <a class="btn btn-secondary btn-sm" href="${info.url || 'https://github.com/qingchencloud/clawpanel/releases'}" target="_blank" rel="noopener" style="${btnSm}">${t('about.downloadFromGitHub')}</a>
+        <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener" style="${btnSm}">${t('about.downloadFullInstaller')}</a>
       `
     } else if (latest && latest !== effectiveVersion && compareVersions(latest, effectiveVersion) > 0) {
       meta.innerHTML = `
         <span style="color:var(--accent)">${t('about.newVersionAvailable', { version: latest })}</span>
-        <a class="btn btn-primary btn-sm" href="https://claw.qt.cool" target="_blank" rel="noopener" style="${btnSm}">${t('about.downloadFromWebsite')}</a>
-        <a class="btn btn-secondary btn-sm" href="${info.url || 'https://github.com/qingchencloud/clawpanel/releases'}" target="_blank" rel="noopener" style="${btnSm}">${t('about.downloadFromGitHub')}</a>
+        <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener" style="${btnSm}">${t('about.downloadFromWebsite')}</a>
       `
     } else {
       meta.innerHTML = `<span style="color:var(--success)">${t('about.upToDate')}</span>`
@@ -673,9 +673,9 @@ async function checkNewVersion(cards, panelVersion) {
     const meta = el()
     if (!meta) return
     if (isFakeUpdate) {
-      meta.innerHTML = `<span style="color:var(--warning)">⚠️ ${t('about.versionMismatch', { frontend: panelVersion, binary: binaryVersion })}</span> <a class="btn btn-primary btn-sm" href="https://claw.qt.cool" target="_blank" rel="noopener" style="${btnSm}">${t('about.downloadFullInstaller')}</a>`
+      meta.innerHTML = `<span style="color:var(--warning)">⚠️ ${t('about.versionMismatch', { frontend: panelVersion, binary: binaryVersion })}</span> <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener" style="${btnSm}">${t('about.downloadFullInstaller')}</a>`
     } else {
-      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkUpdateFailed')}</span> <a class="btn btn-secondary btn-sm" href="https://claw.qt.cool" target="_blank" rel="noopener" style="${btnSm}">${t('about.goToWebsite')}</a>`
+      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkUpdateFailed')}</span> <a class="btn btn-secondary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener" style="${btnSm}">${t('about.goToWebsite')}</a>`
     }
   }
 }
@@ -744,10 +744,9 @@ const PROJECTS = [
     url: 'https://github.com/1186258278/OpenClawChineseTranslation',
   },
   {
-    name: 'ClawPanel',
+    name: PRODUCT_NAME,
     desc: t('about.projectClawPanel'),
-    url: 'https://github.com/qingchencloud/clawpanel',
-    gitee: 'https://gitee.com/QtCodeCreators/clawpanel',
+    url: 'https://ai.aizuopin.com',
   },
   {
     name: 'ClawApp',
@@ -780,7 +779,7 @@ function renderProjects(page) {
 }
 
 const LINKS = [
-  { label: t('about.linkWebsite'), url: 'https://claw.qt.cool', primary: true },
+  { label: t('about.linkWebsite'), url: 'https://ai.aizuopin.com', primary: true },
   { label: t('about.linkOpenClawZh'), url: 'https://github.com/1186258278/OpenClawChineseTranslation' },
   { label: t('about.linkClawApp'), url: 'https://clawapp.qt.cool' },
   { label: t('about.linkCftunnel'), url: 'https://cftunnel.qt.cool' },
@@ -793,10 +792,7 @@ function renderContribute(page) {
       ${t('about.contributeDesc')}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px">
-      <a class="btn btn-primary btn-sm" href="https://github.com/qingchencloud/clawpanel/issues/new" target="_blank" rel="noopener">${t('about.submitIssue')}</a>
-      <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/clawpanel/pulls" target="_blank" rel="noopener">${t('about.submitPR')}</a>
-      <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/clawpanel/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">${t('about.contributeGuide')}</a>
-      <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/clawpanel/issues" target="_blank" rel="noopener">${t('about.viewIssues')}</a>
+      <a class="btn btn-primary btn-sm" href="https://ai.aizuopin.com" target="_blank" rel="noopener">${t('about.linkWebsite')}</a>
     </div>
     <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary)">
       ${t('about.domesticMirrorHint')}
@@ -829,7 +825,7 @@ function renderCompany(page) {
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.productWebsite')}</div>
-          <a href="https://claw.qt.cool" target="_blank" rel="noopener" style="color:var(--accent)">claw.qt.cool</a>
+          <a href="https://ai.aizuopin.com" target="_blank" rel="noopener" style="color:var(--accent)">ai.aizuopin.com</a>
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.openSourceRepo')}</div>

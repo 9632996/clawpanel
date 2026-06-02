@@ -31,10 +31,36 @@ pub mod skillhub;
 pub mod skills;
 pub mod update;
 
+fn portable_product_root() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+    let mut candidates = vec![exe_dir.to_path_buf()];
+    if let Some(root) = exe_dir.parent().and_then(|app| app.parent()) {
+        candidates.push(root.to_path_buf());
+    }
+    for root in candidates {
+        if root.join("data").join("config").is_dir() && root.join("app").is_dir() {
+            return Some(root);
+        }
+    }
+    None
+}
+
+fn portable_config_dir() -> Option<PathBuf> {
+    portable_product_root().map(|root| root.join("data").join("config"))
+}
+
+fn portable_panel_config_path() -> Option<PathBuf> {
+    portable_config_dir().map(|dir| dir.join("zhizhua-workbench.json"))
+}
+
 /// 默认 OpenClaw 配置目录
 /// Windows 上优先使用 USERPROFILE（与 Node.js os.homedir() 一致），
 /// 并自动检测已有 openclaw.json 的目录，避免创建第二个 .openclaw
 fn default_openclaw_dir() -> PathBuf {
+    if let Some(portable) = portable_config_dir() {
+        return portable;
+    }
     #[cfg(target_os = "windows")]
     {
         let mut candidates: Vec<PathBuf> = Vec::new();
@@ -107,6 +133,12 @@ fn push_unique_panel_config_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
 
 fn panel_config_candidate_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
+    if let Some(path) = portable_panel_config_path() {
+        push_unique_panel_config_path(&mut paths, path);
+    }
+    if let Some(path) = portable_config_dir().map(|dir| dir.join("clawpanel.json")) {
+        push_unique_panel_config_path(&mut paths, path);
+    }
     push_unique_panel_config_path(&mut paths, default_openclaw_dir().join("clawpanel.json"));
 
     #[cfg(target_os = "windows")]

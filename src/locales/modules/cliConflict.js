@@ -11,9 +11,9 @@ export default {
     '偵測到 {count} 處可能衝突的 OpenClaw 安裝',
   ),
   desc: _(
-    '系统 PATH 中存在非 ClawPanel 管理的 OpenClaw（如 Cherry Studio 内嵌、旧 npm 全局），可能导致终端命令拿到老版本，引发 schema 不兼容、doctor --fix 卡死等问题。',
-    'Your PATH has OpenClaw installations not managed by ClawPanel (e.g. Cherry Studio bundled, legacy npm global). They can cause terminal commands to pick up old versions, triggering schema mismatches and doctor --fix hangs.',
-    '系統 PATH 中存在非 ClawPanel 管理的 OpenClaw（如 Cherry Studio 內嵌、舊 npm 全域），可能導致終端指令取得舊版本，引發 schema 不相容、doctor --fix 卡住等問題。',
+    '系统 PATH 中存在非当前产品管理的 OpenClaw（如 Cherry Studio 内嵌、旧 npm 全局），可能导致终端命令拿到老版本，引发 schema 不兼容、doctor --fix 卡死等问题。',
+    'Your PATH has OpenClaw installations not managed by this product (e.g. Cherry Studio bundled, legacy npm global). They can cause terminal commands to pick up old versions, triggering schema mismatches and doctor --fix hangs.',
+    '系統 PATH 中存在非目前產品管理的 OpenClaw（如 Cherry Studio 內嵌、舊 npm 全域），可能導致終端指令取得舊版本，引發 schema 不相容、doctor --fix 卡住等問題。',
   ),
   viewDetails: _('查看详情', 'View details', '查看詳情'),
   hideDetails: _('收起详情', 'Hide details', '收起詳情'),
@@ -43,8 +43,8 @@ export default {
   ),
   quarantineOneOk: _('已隔离', 'Quarantined', '已隔離'),
   footnote: _(
-    '隔离 = 重命名为 .disabled-by-clawpanel-<时间>.bak（不会删除）。如需恢复，到原目录把 .bak 文件改回原名即可。',
-    'Quarantine = rename to .disabled-by-clawpanel-<timestamp>.bak (not deleted). To restore, rename the .bak back to its original name in the same directory.',
-    '隔離 = 重新命名為 .disabled-by-clawpanel-<時間>.bak（不會刪除）。如需恢復，到原目錄把 .bak 檔案改回原名即可。',
+    '隔离 = 重命名为 .disabled-by-zhizhua-workbench-<时间>.bak（不会删除）。如需恢复，到原目录把 .bak 文件改回原名即可。',
+    'Quarantine = rename to .disabled-by-zhizhua-workbench-<timestamp>.bak (not deleted). To restore, rename the .bak back to its original name in the same directory.',
+    '隔離 = 重新命名為 .disabled-by-zhizhua-workbench-<時間>.bak（不會刪除）。如需恢復，到原目錄把 .bak 檔案改回原名即可。',
   ),
 }

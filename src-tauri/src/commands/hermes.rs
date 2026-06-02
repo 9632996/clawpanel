@@ -120,7 +120,7 @@ async fn ensure_managed_gateway_ready(app: &tauri::AppHandle, gw_url: &str) -> R
 fn hermes_gateway_http_client(timeout: std::time::Duration) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(timeout)
-        .user_agent("ClawPanel")
+        .user_agent("ZhizhuaWorkbench")
         .gzip(true)
         .brotli(true)
         .deflate(true)
@@ -1459,8 +1459,11 @@ async fn ensure_uv(app: &tauri::AppHandle) -> Result<String, String> {
     let url = uv_download_url(version);
     let _ = app.emit("hermes-install-log", format!("下载: {url}"));
 
-    let client = super::build_http_client(std::time::Duration::from_secs(300), Some("ClawPanel"))
-        .map_err(|e| format!("HTTP 客户端创建失败: {e}"))?;
+    let client = super::build_http_client(
+        std::time::Duration::from_secs(300),
+        Some("ZhizhuaWorkbench"),
+    )
+    .map_err(|e| format!("HTTP 客户端创建失败: {e}"))?;
 
     let resp = client
         .get(&url)
@@ -1623,12 +1626,12 @@ fn hermes_runtime_extras_log_segment() -> String {
 // the corresponding stub write is skipped so the real implementation wins.
 // ---------------------------------------------------------------------------
 
-const HERMES_DASHBOARD_AUTH_INIT_PY: &str = r#""""ClawPanel-injected stub for hermes_cli.dashboard_auth.
+const HERMES_DASHBOARD_AUTH_INIT_PY: &str = r#""""Workbench-injected stub for hermes_cli.dashboard_auth.
 
 Upstream hermes-agent ships web_server.py with imports referencing this
 subpackage, but the actual source files are NOT included in the wheel or
 the public git repo. To keep Hermes Dashboard usable in loopback
-(127.0.0.1) mode, ClawPanel injects this minimal pass-through stub at
+(127.0.0.1) mode, the workbench injects this minimal pass-through stub at
 install/upgrade time.
 
 When upstream eventually ships the real module, delete this directory
@@ -1649,7 +1652,7 @@ _REGISTERED: List["DashboardAuthProvider"] = []
 
 
 def register_provider(provider: "DashboardAuthProvider") -> None:
-    """No-op stub. ClawPanel binds to 127.0.0.1 so the gate is disabled."""
+    """No-op stub. The workbench binds to 127.0.0.1 so the gate is disabled."""
     if isinstance(provider, DashboardAuthProvider):
         _REGISTERED.append(provider)
 
@@ -1662,7 +1665,7 @@ def list_providers() -> Iterable["DashboardAuthProvider"]:
 __all__ = ["DashboardAuthProvider", "register_provider", "list_providers"]
 "#;
 
-const HERMES_DASHBOARD_AUTH_AUDIT_PY: &str = r#""""ClawPanel stub: hermes_cli.dashboard_auth.audit"""
+const HERMES_DASHBOARD_AUTH_AUDIT_PY: &str = r#""""Workbench stub: hermes_cli.dashboard_auth.audit"""
 from __future__ import annotations
 
 from enum import Enum
@@ -1686,7 +1689,7 @@ def audit_log(event: Any, **fields: Any) -> None:
 __all__ = ["AuditEvent", "audit_log"]
 "#;
 
-const HERMES_DASHBOARD_AUTH_MIDDLEWARE_PY: &str = r#""""ClawPanel stub: hermes_cli.dashboard_auth.middleware"""
+const HERMES_DASHBOARD_AUTH_MIDDLEWARE_PY: &str = r#""""Workbench stub: hermes_cli.dashboard_auth.middleware"""
 from __future__ import annotations
 
 
@@ -1698,7 +1701,7 @@ async def gated_auth_middleware(request, call_next):
 __all__ = ["gated_auth_middleware"]
 "#;
 
-const HERMES_DASHBOARD_AUTH_PREFIX_PY: &str = r#""""ClawPanel stub: hermes_cli.dashboard_auth.prefix"""
+const HERMES_DASHBOARD_AUTH_PREFIX_PY: &str = r#""""Workbench stub: hermes_cli.dashboard_auth.prefix"""
 from __future__ import annotations
 
 
@@ -1712,7 +1715,7 @@ def normalise_prefix(prefix: str) -> str:
 __all__ = ["normalise_prefix"]
 "#;
 
-const HERMES_DASHBOARD_AUTH_ROUTES_PY: &str = r#""""ClawPanel stub: hermes_cli.dashboard_auth.routes"""
+const HERMES_DASHBOARD_AUTH_ROUTES_PY: &str = r#""""Workbench stub: hermes_cli.dashboard_auth.routes"""
 from __future__ import annotations
 
 from fastapi import APIRouter
@@ -1723,7 +1726,7 @@ router = APIRouter()
 __all__ = ["router"]
 "#;
 
-const HERMES_DASHBOARD_AUTH_WS_TICKETS_PY: &str = r#""""ClawPanel stub: hermes_cli.dashboard_auth.ws_tickets"""
+const HERMES_DASHBOARD_AUTH_WS_TICKETS_PY: &str = r#""""Workbench stub: hermes_cli.dashboard_auth.ws_tickets"""
 from __future__ import annotations
 
 
@@ -1748,14 +1751,14 @@ const HERMES_DASHBOARD_WEB_DIST_INDEX_HTML: &str = r#"<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>Hermes Dashboard (ClawPanel stub)</title>
-    <meta name="generator" content="clawpanel-dashboard-spa-stub">
+    <title>Hermes Dashboard (Workbench stub)</title>
+    <meta name="generator" content="zhizhua-workbench-dashboard-spa-stub">
   </head>
   <body>
     <main style="font-family:system-ui,-apple-system,sans-serif;padding:32px;color:#333">
       <h1 style="margin:0 0 16px">Hermes Dashboard</h1>
-      <p>This SPA placeholder is injected by ClawPanel so the dashboard backend
-         emits a session token. ClawPanel provides its own UI; the upstream
+      <p>This SPA placeholder is injected by the workbench so the dashboard backend
+         emits a session token. The workbench provides its own UI; the upstream
          SPA is not shipped with the wheel.</p>
     </main>
   </body>
@@ -2291,7 +2294,7 @@ pub async fn configure_hermes(
     } else {
         // 首次创建：生成完整的基线配置
         format!(
-            r#"# Hermes Agent configuration (managed by ClawPanel)
+            r#"# Hermes Agent configuration (managed by Zhizhua Workbench)
 model:
   default: {model_str}
 {provider_line}{base_url_line}platform_toolsets:
@@ -16127,7 +16130,7 @@ fn safe_download_filename(name: &str) -> String {
         .collect()
 }
 
-/// Read an entire log file and save it to the user's Downloads/ClawPanel
+/// Read an entire log file and save it to the user's Downloads/ZhizhuaWorkbench
 /// directory. We refuse path traversal and only allow files whose canonical
 /// path lives inside `~/.hermes/logs/`.
 #[tauri::command]
@@ -16151,7 +16154,7 @@ pub async fn hermes_logs_download(name: String) -> Result<Value, String> {
     }
     let content =
         std::fs::read_to_string(&canon_file).map_err(|e| format!("Failed to read log: {e}"))?;
-    let out_dir = downloads_dir_fallback().join("ClawPanel");
+    let out_dir = downloads_dir_fallback().join("ZhizhuaWorkbench");
     std::fs::create_dir_all(&out_dir).map_err(|e| format!("Failed to create download dir: {e}"))?;
     let out_path = out_dir.join(safe_download_filename(&name));
     std::fs::write(&out_path, content).map_err(|e| format!("Failed to save log: {e}"))?;
@@ -16345,7 +16348,7 @@ fn ensure_api_server_enabled(app: &tauri::AppHandle) -> Result<(), String> {
 //
 // The three commands below:
 //   * `hermes_env_read_unmanaged` — returns every key in .env that is NOT
-//      managed by ClawPanel (i.e. not in `hermes_providers::all_managed_env_keys`)
+//      managed by Zhizhua Workbench (i.e. not in `hermes_providers::all_managed_env_keys`)
 //   * `hermes_env_set`            — writes or updates an unmanaged key
 //   * `hermes_env_delete`         — removes an unmanaged key
 //
@@ -16427,7 +16430,7 @@ pub fn hermes_env_set(key: String, value: String) -> Result<(), String> {
     let managed = hermes_providers::all_managed_env_keys();
     if managed.contains(&key.as_str()) {
         return Err(format!(
-            "'{key}' is managed by ClawPanel; please configure it via the provider setup page"
+            "'{key}' is managed by the workbench; please configure it via the provider setup page"
         ));
     }
 
@@ -16490,7 +16493,7 @@ pub fn hermes_env_delete(key: String) -> Result<(), String> {
     let managed = hermes_providers::all_managed_env_keys();
     if managed.contains(&key.as_str()) {
         return Err(format!(
-            "'{key}' is managed by ClawPanel; please configure it via the provider setup page"
+            "'{key}' is managed by the workbench; please configure it via the provider setup page"
         ));
     }
 
@@ -17050,7 +17053,7 @@ pub async fn hermes_multi_gateway_start(
         if std::net::TcpStream::connect_timeout(&sa, std::time::Duration::from_millis(300)).is_ok()
         {
             return Err(format!(
-                "端口 {port} 已被占用（非 ClawPanel spawn 的进程，无法接管。请用 services 页停掉默认 Gateway 后重试）"
+                "端口 {port} 已被占用（非当前工作台拉起的进程，无法接管。请用 services 页停掉默认 Gateway 后重试）"
             ));
         }
     }

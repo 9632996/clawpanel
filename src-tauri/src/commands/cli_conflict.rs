@@ -12,7 +12,7 @@
 //! ## 本模块功能
 //!
 //! - **扫描**：列出 PATH 中所有非 standalone 的 openclaw 可执行文件
-//! - **隔离**：把指定路径重命名为 `<原名>.disabled-by-clawpanel-<ts>.bak`，**不真删**
+//! - **隔离**：把指定路径重命名为 `<原名>.disabled-by-zhizhua-workbench-<ts>.bak`，**不真删**
 //! - **列出已隔离**：扫描 PATH 中现有的 `.bak` 文件
 //! - **恢复**：把 `.bak` 改回原名
 //!
@@ -79,6 +79,64 @@ fn canonical_lower(path: &Path) -> String {
         s.pop();
     }
     s
+}
+
+#[derive(Debug, Default)]
+struct PortableCliAllowlist {
+    files: std::collections::HashSet<String>,
+    dirs: Vec<String>,
+}
+
+impl PortableCliAllowlist {
+    fn is_allowed(&self, canon: &str) -> bool {
+        self.files.contains(canon)
+            || self.dirs.iter().any(|dir| {
+                !dir.is_empty() && (canon == dir || canon.starts_with(&format!("{dir}/")))
+            })
+    }
+}
+
+fn push_unique_allowed_dir(dirs: &mut Vec<String>, path: &Path) {
+    let dir = canonical_lower(path);
+    if !dir.is_empty() && !dirs.iter().any(|existing| existing == &dir) {
+        dirs.push(dir);
+    }
+}
+
+fn portable_cli_allowlist() -> PortableCliAllowlist {
+    let mut allowlist = PortableCliAllowlist::default();
+    let Some(config) = crate::commands::read_panel_config_value() else {
+        return allowlist;
+    };
+
+    if let Some(raw) = config
+        .get("openclawCliPath")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let cli = PathBuf::from(raw);
+        allowlist.files.insert(canonical_lower(&cli));
+        if let Some(parent) = cli.parent() {
+            push_unique_allowed_dir(&mut allowlist.dirs, parent);
+        }
+    }
+
+    if let Some(entries) = config
+        .get("openclawSearchPaths")
+        .and_then(|value| value.as_array())
+    {
+        for raw in entries
+            .iter()
+            .filter_map(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            push_unique_allowed_dir(&mut allowlist.dirs, Path::new(raw));
+        }
+    }
+
+    allowlist
 }
 
 /// 候选可执行文件名（带扩展名）
@@ -170,6 +228,7 @@ pub async fn scan_openclaw_path_conflicts() -> Result<Vec<CliConflict>, String> 
         .map(|p| canonical_lower(p))
         .filter(|s| !s.is_empty())
         .collect();
+    let portable_allowlist = portable_cli_allowlist();
 
     let path_var = crate::commands::enhanced_path();
     #[cfg(target_os = "windows")]
@@ -200,6 +259,9 @@ pub async fn scan_openclaw_path_conflicts() -> Result<Vec<CliConflict>, String> 
             if is_standalone {
                 continue;
             }
+            if portable_allowlist.is_allowed(&canon) {
+                continue;
+            }
 
             let (source, source_label) = detect_source(&candidate);
             let size_bytes = std::fs::metadata(&candidate).ok().map(|m| m.len());
@@ -218,7 +280,9 @@ pub async fn scan_openclaw_path_conflicts() -> Result<Vec<CliConflict>, String> 
     Ok(conflicts)
 }
 
-/// 把指定路径的 openclaw 可执行文件重命名为 `.disabled-by-clawpanel-<ts>.bak`
+const QUARANTINE_MARKER: &str = ".disabled-by-zhizhua-workbench-";
+
+/// 把指定路径的 openclaw 可执行文件重命名为 `.disabled-by-zhizhua-workbench-<ts>.bak`
 #[tauri::command]
 pub async fn quarantine_openclaw_path(path: String) -> Result<QuarantineRecord, String> {
     let original = PathBuf::from(&path);
@@ -249,7 +313,7 @@ pub async fn quarantine_openclaw_path(path: String) -> Result<QuarantineRecord, 
     }
 
     let ts = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
-    let new_name = format!("{}.disabled-by-clawpanel-{}.bak", file_name, ts);
+    let new_name = format!("{file_name}{QUARANTINE_MARKER}{ts}.bak");
     let parent = original
         .parent()
         .ok_or_else(|| "无法解析父目录".to_string())?;
@@ -292,15 +356,14 @@ pub async fn quarantine_openclaw_paths_bulk(
     Ok(BulkQuarantineResult { records, failed })
 }
 
-/// 解析 `<original>.disabled-by-clawpanel-<digits>.bak` 中的 `<original>`
+/// 解析 `<original>.disabled-by-zhizhua-workbench-<digits>.bak` 中的 `<original>`
 fn parse_quarantined_name(name: &str) -> Option<&str> {
     if !name.ends_with(".bak") {
         return None;
     }
-    let marker = ".disabled-by-clawpanel-";
-    let pos = name.rfind(marker)?;
+    let pos = name.rfind(QUARANTINE_MARKER)?;
     // marker 之后必须是 数字-数字 / 数字 这种 timestamp，简单做法只校验 marker 之后到 .bak 之间不为空
-    let between = &name[pos + marker.len()..name.len() - 4];
+    let between = &name[pos + QUARANTINE_MARKER.len()..name.len() - 4];
     if between.is_empty() {
         return None;
     }
@@ -387,7 +450,7 @@ pub async fn restore_quarantined_openclaw(quarantined_path: String) -> Result<St
         .and_then(|n| n.to_str())
         .ok_or_else(|| "无效的文件名".to_string())?;
     let original_name = parse_quarantined_name(file_name)
-        .ok_or_else(|| format!("不是 ClawPanel 隔离文件，无法恢复: {}", file_name))?;
+        .ok_or_else(|| format!("不是智爪工作台隔离文件，无法恢复: {}", file_name))?;
 
     let parent = qpath.parent().ok_or_else(|| "无法解析父目录".to_string())?;
     let original_path = parent.join(original_name);
@@ -412,11 +475,13 @@ mod tests {
     #[test]
     fn parse_quarantined_name_basic() {
         assert_eq!(
-            parse_quarantined_name("openclaw.exe.disabled-by-clawpanel-20260507-153012.bak"),
+            parse_quarantined_name(
+                "openclaw.exe.disabled-by-zhizhua-workbench-20260507-153012.bak"
+            ),
             Some("openclaw.exe")
         );
         assert_eq!(
-            parse_quarantined_name("openclaw.cmd.disabled-by-clawpanel-12345.bak"),
+            parse_quarantined_name("openclaw.cmd.disabled-by-zhizhua-workbench-12345.bak"),
             Some("openclaw.cmd")
         );
     }
@@ -426,7 +491,7 @@ mod tests {
         assert_eq!(parse_quarantined_name("openclaw.exe"), None);
         assert_eq!(parse_quarantined_name("openclaw.exe.bak"), None);
         assert_eq!(
-            parse_quarantined_name("openclaw.exe.disabled-by-clawpanel-.bak"),
+            parse_quarantined_name("openclaw.exe.disabled-by-zhizhua-workbench-.bak"),
             None
         );
         assert_eq!(parse_quarantined_name("not-related.bak"), None);

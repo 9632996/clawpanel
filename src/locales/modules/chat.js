@@ -95,7 +95,7 @@ export default {
   firstUseHint: _('首次使用？请确保 Gateway 已启动，或点击「修复并重连」自动修复配置', 'First time? Make sure Gateway is running, or click "Fix & Reconnect" to auto-fix', '首次使用？請確保 Gateway 已啟動，或点擊「修复並重連」自動修复設定'),
   guideTitle: _('你正在使用「实时聊天」', 'You are using Live Chat', '你正在使用「實時聊天」'),
   guideDesc: _('此页面通过 <b>Gateway</b> 连接 OpenClaw 的 AI Agent，对话由你部署的 OpenClaw 服务处理。', 'This page connects to your OpenClaw AI Agent via <b>Gateway</b>. Conversations are processed by your deployed OpenClaw service.', '此頁面通過 <b>Gateway</b> 連線 OpenClaw 的 AI Agent，對話由你部署的 OpenClaw 服務處理。'),
-  guideHint: _('如需使用 ClawPanel 内置 AI 助手（独立于 OpenClaw），请前往左侧菜单「AI 助手」页面。', 'To use ClawPanel\'s built-in AI Assistant (independent of OpenClaw), go to "AI Assistant" in the left menu.', '如需使用 ClawPanel 內置 AI 助手（獨立於 OpenClaw），請前往左側菜單「AI 助手」頁面。'),
+  guideHint: _('如需使用工作台内置 AI 助手（独立于 OpenClaw），请前往左侧菜单「AI 助手」页面。', 'To use the workbench built-in AI Assistant (independent of OpenClaw), go to "AI Assistant" in the left menu.', '如需使用工作台內置 AI 助手（獨立於 OpenClaw），請前往左側菜單「AI 助手」頁面。'),
   guideClose: _('知道了', 'Got it'),
   defaultSuffix: _('(默认)', '(default)', '(預設)'),
   cmdSession: _('会话', 'Session', '對話'),

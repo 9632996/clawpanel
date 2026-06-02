@@ -7,6 +7,8 @@ use tauri::{
     AppHandle, Manager,
 };
 
+const PRODUCT_NAME: &str = "智爪多智能体工作台";
+
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     // 菜单项
     let show = MenuItemBuilder::with_id("show", "显示主窗口").build(app)?;
@@ -15,7 +17,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let gateway_stop = MenuItemBuilder::with_id("gateway_stop", "停止 Gateway").build(app)?;
     let gateway_restart = MenuItemBuilder::with_id("gateway_restart", "重启 Gateway").build(app)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "退出 ClawPanel").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", format!("退出{PRODUCT_NAME}")).build(app)?;
 
     let menu = MenuBuilder::new(app)
         .item(&show)
@@ -32,7 +34,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray = TrayIconBuilder::new()
         .icon(icon)
-        .tooltip("ClawPanel")
+        .tooltip(PRODUCT_NAME)
         .menu(&menu)
         .on_menu_event(move |app, event| {
             handle_menu_event(app, event.id().as_ref());

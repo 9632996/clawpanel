@@ -196,9 +196,9 @@ export function renderSidebar(el) {
   let html = `
     <div class="sidebar-header">
       <div class="sidebar-logo">
-        <img src="/images/logo.png" alt="ClawPanel">
+        <img src="/images/logo.png" alt="智爪多智能体工作台">
       </div>
-      <span class="sidebar-title">ClawPanel</span>
+      <span class="sidebar-title">智爪多智能体工作台</span>
       <button class="sidebar-collapse-btn" id="btn-sidebar-collapse" title="${t('sidebar.collapse')}">${collapsed ? '»' : '«'}</button>
       <button class="sidebar-close-btn" id="btn-sidebar-close" title="${t('sidebar.closeMenu')}">&times;</button>
     </div>
@@ -270,7 +270,7 @@ export function renderSidebar(el) {
         </div>
       </div>
       <div class="sidebar-meta">
-        <a href="https://claw.qt.cool" target="_blank" rel="noopener" class="sidebar-link">claw.qt.cool</a>
+        <a href="https://ai.aizuopin.com" target="_blank" rel="noopener" class="sidebar-link">ai.aizuopin.com</a>
         <span class="sidebar-version">v${APP_VERSION}</span>
       </div>
     </div>
@@ -513,4 +513,3 @@ function _filterLangOptions(query) {
     opt.style.display = (label.includes(q) || code.includes(q)) ? '' : 'none'
   })
 }
-

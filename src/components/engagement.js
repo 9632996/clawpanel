@@ -88,7 +88,7 @@ export function tryShowEngagement() {
       </div>
 
       <div class="engage-actions-grid">
-        <a class="engage-action-card" href="https://github.com/qingchencloud/clawpanel" target="_blank" rel="noopener">
+        <a class="engage-action-card" href="https://ai.aizuopin.com" target="_blank" rel="noopener">
           <div class="engage-action-icon engage-action-star">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="#f59e0b" stroke="#f59e0b" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           </div>

@@ -31,7 +31,7 @@ export function enhanceModelCallError(err) {
     return (
       msg +
       '\n\n' +
-      '💡 这是 vLLM 服务端配置限制（不是 ClawPanel / OpenClaw 的 bug）：\n' +
+      '💡 这是 vLLM 服务端配置限制（不是本产品 / OpenClaw 的 bug）：\n' +
       'vLLM 默认禁用工具调用，必须在启动时显式开启。请以如下方式重启 vLLM：\n\n' +
       '  vllm serve <your-model> \\\n' +
       '    --enable-auto-tool-choice \\\n' +

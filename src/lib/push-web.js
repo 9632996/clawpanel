@@ -8,6 +8,7 @@ import { wsClient } from './ws-client.js'
 const SW_URL = '/push-sw.js'
 const SW_SCOPE = '/'
 const STATE_KEY = 'clawpanel.push.subscribed'
+const PRODUCT_NAME = '智爪多智能体工作台'
 
 export function isPushSupported() {
   return (
@@ -158,7 +159,7 @@ export async function unsubscribePush() {
  */
 export async function sendTestPush(title, body) {
   return await wsClient.request('push.web.test', {
-    title: title || 'ClawPanel',
+    title: title || PRODUCT_NAME,
     body: body || '这是一条测试通知，证明推送链路通了 ✓',
   })
 }

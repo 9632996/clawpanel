@@ -7,6 +7,8 @@
  * 点通知 → 尝试聚焦已打开的 ClawPanel 标签；都没开就打开一个新窗口。
  */
 
+const PRODUCT_NAME = '智爪多智能体工作台'
+
 self.addEventListener('install', (event) => {
   // 立刻激活，不等老 SW 退出
   self.skipWaiting()
@@ -32,7 +34,7 @@ self.addEventListener('push', (event) => {
     payload = {}
   }
 
-  const title = payload.title || 'ClawPanel'
+  const title = payload.title || PRODUCT_NAME
   const body = payload.body || ''
   const url = payload.url || payload.click_action || '/'
 
@@ -40,7 +42,7 @@ self.addEventListener('push', (event) => {
     body,
     icon: payload.icon || '/icon.png',
     badge: payload.badge || '/icon.png',
-    tag: payload.tag || 'clawpanel',
+    tag: payload.tag || 'zhizhua-workbench',
     data: { url },
     requireInteraction: !!payload.requireInteraction,
   }

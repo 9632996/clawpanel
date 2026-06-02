@@ -396,7 +396,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("启动 ClawPanel 失败")
+        .expect("启动智爪多智能体工作台失败")
         .run(|_app, _event| {});
 }
 
@@ -405,7 +405,7 @@ pub fn run() {
 /// 规则：
 /// - 目录不存在：noop
 /// - 目录存在，`.version` 文件不存在：视为"版本未知"，保守清理
-///   （老版 ClawPanel 没写 .version，不清理就会永远卡在旧前端）
+///   （老版基座没写 .version，不清理就会永远卡在旧前端）
 /// - 目录存在，`.version >= app 版本`：保留（正常热更新场景）
 /// - 目录存在，`.version < app 版本`：清理（用户装了新 app，旧热更新残留）
 fn cleanup_stale_hot_update(dir: &std::path::Path) {

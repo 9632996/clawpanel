@@ -1534,7 +1534,7 @@ pub fn validate_openclaw_config() -> Result<Value, String> {
                     // 检查 agents 子字段（上游 schema 只定义 agents.list）
                     if agents_obj.contains_key("profiles") {
                         warnings.push(
-                            "发现 agents.profiles 字段，上游 schema 未定义此字段，ClawPanel 会自动清理"
+                            "发现 agents.profiles 字段，上游 schema 未定义此字段，当前工作台会自动清理"
                                 .to_string(),
                         );
                     }
@@ -1601,7 +1601,7 @@ pub fn validate_openclaw_config() -> Result<Value, String> {
         "warnings": warnings,
         "suggestions": if !ui_fields_found.is_empty() || !unknown_fields.is_empty() {
             vec![
-                "UI 专属字段会被 ClawPanel 自动清理，不影响 OpenClaw 运行".to_string(),
+                "UI 专属字段会被当前工作台自动清理，不影响 OpenClaw 运行".to_string(),
                 "未知字段如果是用户手动添加的，请确保符合 OpenClaw schema".to_string(),
                 "如果遇到 'Unrecognized key' 错误，请检查配置文件是否包含 OpenClaw 不支持的字段".to_string(),
             ]
@@ -2135,6 +2135,13 @@ fn detect_source_from_cmd_shim(cmd_path: &std::path::Path) -> Option<String> {
     }
     // 确认是 npm shim（含 node_modules 引用）→ 官方版
     if lower.contains("node_modules") {
+        return Some("official".into());
+    }
+    // 便携版 shim：payload 根目录下存在 openclaw/package.json
+    if cmd_path
+        .parent()
+        .is_some_and(|dir| dir.join("openclaw").join("package.json").exists())
+    {
         return Some("official".into());
     }
     // standalone 的 .cmd 可能不含 node_modules（自定义脚本），由 classify 处理
@@ -2784,6 +2791,16 @@ fn read_version_from_installation(cli_path: &std::path::Path) -> Option<String> 
                         return Some(ver.to_string());
                     }
                 }
+            }
+        }
+        // 便携版布局：payload 根目录放 openclaw.cmd，真实包位于同级 openclaw/package.json
+        let portable_pkg = dir.join("openclaw").join("package.json");
+        if let Ok(content) = std::fs::read_to_string(&portable_pkg) {
+            if let Some(ver) = serde_json::from_str::<serde_json::Value>(&content)
+                .ok()
+                .and_then(|v| v.get("version")?.as_str().map(String::from))
+            {
+                return Some(ver);
             }
         }
         // CLI 本体位于包目录中时（如 npm 全局安装：nvm、Homebrew 等），
@@ -3758,7 +3775,7 @@ async fn upgrade_openclaw_inner(
             let _ = app.emit(
                 "upgrade-log",
                 format!(
-                    "ClawPanel {} 默认绑定 OpenClaw 稳定版: {}",
+                    "当前工作台 {} 默认绑定 OpenClaw 稳定版: {}",
                     panel_version(),
                     recommended
                 ),
@@ -5023,7 +5040,7 @@ async fn reload_gateway_via_http() -> Result<String, String> {
         let url = format!("http://127.0.0.1:{}/__api/reload", ctrl_port);
         let client = crate::commands::build_http_client(
             std::time::Duration::from_secs(5),
-            Some("ClawPanel"),
+            Some("Workbench"),
         )?;
 
         let mut req = client.post(&url);
@@ -6447,26 +6464,18 @@ pub fn patch_model_vision() -> Result<bool, String> {
     Ok(changed)
 }
 
-/// 检查 ClawPanel 自身是否有新版本（GitHub → Gitee 自动降级）
+/// 检查产品基座自身是否有新版本。
 #[tauri::command]
 pub async fn check_panel_update() -> Result<Value, String> {
     let client =
-        crate::commands::build_http_client(std::time::Duration::from_secs(8), Some("ClawPanel"))
+        crate::commands::build_http_client(std::time::Duration::from_secs(8), Some("Workbench"))
             .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
 
-    // 先尝试 GitHub，失败后降级 Gitee
-    let sources = [
-        (
-            "https://api.github.com/repos/qingchencloud/clawpanel/releases/latest",
-            "https://github.com/qingchencloud/clawpanel/releases",
-            "github",
-        ),
-        (
-            "https://gitee.com/api/v5/repos/QtCodeCreators/clawpanel/releases/latest",
-            "https://gitee.com/QtCodeCreators/clawpanel/releases",
-            "gitee",
-        ),
-    ];
+    let sources = [(
+        "https://ai.aizuopin.com/api/zhizhua-workbench/releases/latest",
+        "https://ai.aizuopin.com",
+        "product",
+    )];
 
     let mut last_err = String::new();
     for (api_url, releases_url, source) in &sources {
@@ -6500,7 +6509,7 @@ pub async fn check_panel_update() -> Result<Value, String> {
                 result.insert("source".into(), Value::String(source.to_string()));
                 result.insert(
                     "downloadUrl".into(),
-                    Value::String("https://claw.qt.cool".into()),
+                    Value::String("https://ai.aizuopin.com".into()),
                 );
                 return Ok(Value::Object(result));
             }
@@ -6578,7 +6587,7 @@ pub async fn test_proxy(url: Option<String>) -> Result<Value, String> {
     let target = url.unwrap_or_else(|| "https://registry.npmjs.org/-/ping".to_string());
 
     let client =
-        crate::commands::build_http_client(std::time::Duration::from_secs(10), Some("ClawPanel"))
+        crate::commands::build_http_client(std::time::Duration::from_secs(10), Some("Workbench"))
             .map_err(|e| format!("创建代理客户端失败: {e}"))?;
 
     let start = std::time::Instant::now();

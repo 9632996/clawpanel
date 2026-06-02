@@ -970,7 +970,7 @@ mod platform {
             .stderr(stderr_log);
         cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                "OpenClaw CLI 未找到，请确认已安装并重启 ClawPanel。".to_string()
+                "OpenClaw CLI 未找到，请确认便携运行时完整并重启智爪多智能体工作台。".to_string()
             } else {
                 format!("启动 Gateway 失败: {e}")
             }
@@ -1542,16 +1542,13 @@ mod platform {
         };
         // localhost 状态探测需要快速失败，否则仪表盘会把"已停止"误判成"状态加载失败"。
         // 这里仅做 TCP connect，不依赖应用层响应；Gateway 真在监听时本地握手会非常快。
-        let connected = std::net::TcpStream::connect_timeout(
-            &socket_addr,
-            Duration::from_millis(250),
-        )
-        .is_ok()
-            || {
-                std::thread::sleep(Duration::from_millis(120));
-                std::net::TcpStream::connect_timeout(&socket_addr, Duration::from_millis(450))
-                    .is_ok()
-            };
+        let connected =
+            std::net::TcpStream::connect_timeout(&socket_addr, Duration::from_millis(250)).is_ok()
+                || {
+                    std::thread::sleep(Duration::from_millis(120));
+                    std::net::TcpStream::connect_timeout(&socket_addr, Duration::from_millis(450))
+                        .is_ok()
+                };
         if !connected {
             // 端口不通，先清空已知的僵死 PID
             let mut known = LAST_KNOWN_GATEWAY_PID.lock().unwrap();
@@ -1601,7 +1598,7 @@ mod platform {
 
         let _ = writeln!(
             stdout_log,
-            "\n[{}] [ClawPanel] Hidden-start Gateway on Windows",
+            "\n[{}] [Workbench] Hidden-start Gateway on Windows",
             chrono::Local::now().to_rfc3339()
         );
 
@@ -1730,7 +1727,9 @@ mod platform {
         if excerpt.trim().is_empty() {
             Err("Gateway 启动超时，请查看 gateway.err.log".into())
         } else {
-            Err(format!("Gateway 启动超时，请查看 gateway.err.log\n{excerpt}"))
+            Err(format!(
+                "Gateway 启动超时，请查看 gateway.err.log\n{excerpt}"
+            ))
         }
     }
 
