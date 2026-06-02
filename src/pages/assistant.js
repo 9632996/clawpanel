@@ -1516,8 +1516,12 @@ function providerModels(provider) {
 }
 
 function envRefName(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const candidate = value.$env || (value.source === 'env' ? value.id || value.env : '')
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate || '') ? candidate : ''
+  }
   const text = String(value || '').trim()
-  return text.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/)?.[1] || text.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/)?.[1] || ''
+  return text.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/)?.[1] || text.match(/^\$env:([A-Za-z_][A-Za-z0-9_]*)$/)?.[1] || text.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/)?.[1] || ''
 }
 
 function secretStatus(value, envMap) {

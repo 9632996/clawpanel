@@ -5307,12 +5307,58 @@ fn model_api_key_env_ref(raw: &str) -> Result<Option<String>, String> {
         }
         return Err(format!("无效的环境变量引用: {value}"));
     }
+    if let Some(key) = value.strip_prefix("$env:") {
+        if is_valid_env_key(key) {
+            return Ok(Some(key.to_string()));
+        }
+        return Err(format!("无效的环境变量引用: {value}"));
+    }
     if let Some(key) = value.strip_prefix('$') {
         if !key.is_empty() && is_valid_env_key(key) {
             return Ok(Some(key.to_string()));
         }
     }
     Ok(None)
+}
+
+fn model_api_key_env_ref_from_value(value: &Value) -> Result<Option<String>, String> {
+    if let Some(raw) = value.as_str() {
+        return model_api_key_env_ref(raw);
+    }
+
+    let Some(map) = value.as_object() else {
+        return Ok(None);
+    };
+    let raw = map.get("$env").and_then(|v| v.as_str()).or_else(|| {
+        if map.get("source").and_then(|v| v.as_str()) == Some("env") {
+            map.get("id")
+                .or_else(|| map.get("env"))
+                .and_then(|v| v.as_str())
+        } else {
+            None
+        }
+    });
+    let raw = raw.map(str::trim).filter(|v| !v.is_empty());
+    let Some(key) = raw else {
+        return Ok(None);
+    };
+    if is_valid_env_key(key) {
+        Ok(Some(key.to_string()))
+    } else {
+        Err(format!("无效的环境变量引用: {key}"))
+    }
+}
+
+fn insert_env_value(values: &mut HashMap<String, String>, key: String, value: String) {
+    if value.is_empty() {
+        return;
+    }
+    match values.get(&key) {
+        Some(existing) if !existing.is_empty() => {}
+        _ => {
+            values.insert(key, value);
+        }
+    }
 }
 
 fn parse_dotenv_line(line: &str) -> Option<(String, String)> {
@@ -5347,10 +5393,18 @@ fn model_env_values() -> HashMap<String, String> {
                     continue;
                 }
                 if let Some(s) = value.as_str() {
-                    values.insert(key.clone(), s.to_string());
+                    insert_env_value(&mut values, key.clone(), s.to_string());
                 } else if value.is_number() || value.is_boolean() {
-                    values.insert(key.clone(), value.to_string());
+                    insert_env_value(&mut values, key.clone(), value.to_string());
                 }
+            }
+        }
+    }
+    let credentials_path = super::openclaw_dir().join("model-credentials.env");
+    if let Ok(content) = fs::read_to_string(credentials_path) {
+        for line in content.lines() {
+            if let Some((key, value)) = parse_dotenv_line(line) {
+                insert_env_value(&mut values, key, value);
             }
         }
     }
@@ -5358,11 +5412,35 @@ fn model_env_values() -> HashMap<String, String> {
     if let Ok(content) = fs::read_to_string(env_path) {
         for line in content.lines() {
             if let Some((key, value)) = parse_dotenv_line(line) {
-                values.entry(key).or_insert(value);
+                insert_env_value(&mut values, key, value);
             }
         }
     }
     values
+}
+
+fn resolve_model_api_key_value(api_key: &Value) -> Result<String, String> {
+    if api_key.is_null() {
+        return Ok(String::new());
+    }
+    if let Some(raw) = api_key.as_str() {
+        return resolve_model_api_key(raw);
+    }
+    if let Some(key) = model_api_key_env_ref_from_value(api_key)? {
+        let values = model_env_values();
+        if let Some(value) = values.get(&key).filter(|v| !v.is_empty()) {
+            return Ok(value.clone());
+        }
+        if let Ok(value) = std::env::var(&key) {
+            if !value.is_empty() {
+                return Ok(value);
+            }
+        }
+        return Err(format!(
+            "API Key 引用了环境变量 {key}，但未在 openclaw.json env、model-credentials.env、~/.openclaw/.env 或当前进程环境中找到"
+        ));
+    }
+    Err("API Key 必须是字符串或环境变量引用对象".to_string())
 }
 
 fn home_path(parts: &[&str]) -> Option<PathBuf> {
@@ -5766,13 +5844,13 @@ fn extract_error_message(text: &str, status: reqwest::StatusCode) -> String {
 #[tauri::command]
 pub async fn test_model(
     base_url: String,
-    api_key: String,
+    api_key: Value,
     model_id: String,
     api_type: Option<String>,
 ) -> Result<String, String> {
     let api_type = normalize_model_api_type(api_type.as_deref().unwrap_or("openai-completions"));
     let base = normalize_base_url_for_api(&base_url, api_type);
-    let api_key = resolve_model_api_key(&api_key)?;
+    let api_key = resolve_model_api_key_value(&api_key)?;
 
     let client =
         crate::commands::build_http_client_no_proxy(std::time::Duration::from_secs(30), None)
@@ -6038,7 +6116,7 @@ fn extract_single_json_reply(text: &str) -> String {
 #[tauri::command]
 pub async fn test_model_verbose(
     base_url: String,
-    api_key: String,
+    api_key: Value,
     model_id: String,
     api_type: Option<String>,
 ) -> Result<serde_json::Value, String> {
@@ -6046,7 +6124,7 @@ pub async fn test_model_verbose(
     let api_type_norm =
         normalize_model_api_type(api_type.as_deref().unwrap_or("openai-completions"));
     let base = normalize_base_url_for_api(&base_url, api_type_norm);
-    let api_key = resolve_model_api_key(&api_key)?;
+    let api_key = resolve_model_api_key_value(&api_key)?;
     let start = Instant::now();
 
     let client =
@@ -6271,12 +6349,12 @@ pub async fn test_model_verbose(
 #[tauri::command]
 pub async fn list_remote_models(
     base_url: String,
-    api_key: String,
+    api_key: Value,
     api_type: Option<String>,
 ) -> Result<Vec<String>, String> {
     let api_type = normalize_model_api_type(api_type.as_deref().unwrap_or("openai-completions"));
     let base = normalize_base_url_for_api(&base_url, api_type);
-    let api_key = resolve_model_api_key(&api_key)?;
+    let api_key = resolve_model_api_key_value(&api_key)?;
 
     let client =
         crate::commands::build_http_client_no_proxy(std::time::Duration::from_secs(15), None)

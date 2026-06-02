@@ -18,6 +18,22 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+function apiKeyDisplayValue(value) {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'object') {
+    const envName = value.$env || (value.source === 'env' ? value.id || value.env : '')
+    if (envName) return `$env:${envName}`
+    if (value.$ref) return `$ref:${value.$ref}`
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
+function isApiKeyRef(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+}
+
 export async function render() {
   const page = document.createElement('div')
   page.className = 'page'
@@ -1507,13 +1523,15 @@ function addProvider(page, state) {
 // 编辑服务商
 function editProvider(page, state, providerKey) {
   const p = state.config.models.providers[providerKey]
+  const originalApiKey = p.apiKey
+  const originalApiKeyDisplay = apiKeyDisplayValue(originalApiKey)
   // showModal 不返回 overlay，需要异步扫 document.body 给 ⓘ 按钮绑定 click（attachTermTooltips 内部已去重）
   setTimeout(() => attachTermTooltips(document.body), 0)
   showModal({
     title: t('models.editProviderTitle', { name: providerKey }),
     fields: [
       { name: 'baseUrl', label: t('models.baseUrl'), value: p.baseUrl || '', hint: t('models.baseUrlHint') },
-      { name: 'apiKey', label: t('models.apiKey') + termHelpHtml('apikey'), value: p.apiKey || '', hint: t('models.apiKeyEditHint') },
+      { name: 'apiKey', label: t('models.apiKey') + termHelpHtml('apikey'), value: originalApiKeyDisplay, hint: t('models.apiKeyEditHint') },
       {
         name: 'api', label: t('models.apiType'), type: 'select', value: p.api || 'openai-completions',
         options: API_TYPES,
@@ -1523,7 +1541,7 @@ function editProvider(page, state, providerKey) {
     onConfirm: ({ baseUrl, apiKey, api: apiType }) => {
       pushUndo(state)
       p.baseUrl = baseUrl
-      p.apiKey = apiKey
+      p.apiKey = isApiKeyRef(originalApiKey) && apiKey === originalApiKeyDisplay ? originalApiKey : apiKey
       p.api = apiType
       renderProviders(page, state)
       updateUndoBtn(page, state)
