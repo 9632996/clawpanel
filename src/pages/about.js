@@ -739,7 +739,7 @@ const PROJECTS = [
     url: 'https://github.com/openclaw/openclaw',
   },
   {
-    name: 'OpenClaw-zh',
+    name: t('about.projectOpenClawZhName'),
     desc: t('about.projectOpenClawZh'),
     url: 'https://github.com/1186258278/OpenClawChineseTranslation',
   },
