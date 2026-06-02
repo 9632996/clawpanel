@@ -1197,7 +1197,15 @@ function bindTopActions(page, state) {
     btn.textContent = t('models.qtcoolFetching')
     btn.disabled = true
 
-    const models = await fetchQtcoolModels(bannerKey || undefined)
+    let models = []
+    try {
+      models = await fetchQtcoolModels(bannerKey || undefined)
+    } catch (e) {
+      btn.innerHTML = `${icon('plus', 14)} ${t('models.qtcoolFetchModels')}`
+      btn.disabled = false
+      toast(t('models.fetchFailed', { error: String(e?.message || e) }), 'error')
+      return
+    }
 
     btn.innerHTML = `${icon('plus', 14)} ${t('models.qtcoolFetchModels')}`
     btn.disabled = false
@@ -1208,7 +1216,9 @@ function bindTopActions(page, state) {
     }
 
     // 已有的模型 ID
-    const existingProvider = (state.config.models?.providers || {})[QTCOOL.providerKey]
+    const providers = state.config.models?.providers || {}
+    const existingProvider = providers[QTCOOL.providerKey] || providers.aizuopin || providers.qtcool
+    const providerKey = providers[QTCOOL.providerKey] ? QTCOOL.providerKey : (providers.aizuopin ? 'aizuopin' : (providers.qtcool ? 'qtcool' : QTCOOL.providerKey))
     const existingIds = new Set((existingProvider?.models || []).map(m => typeof m === 'string' ? m : m.id))
 
     // 弹窗让用户勾选要添加的模型
@@ -1273,13 +1283,14 @@ function bindTopActions(page, state) {
 
       const selectedModels = models.filter(m => selected.includes(m.id))
       if (existingProvider) {
+        if (!Array.isArray(existingProvider.models)) existingProvider.models = []
         let added = 0
         for (const m of selectedModels) {
           if (!existingIds.has(m.id)) { existingProvider.models.push({ ...m }); added++ }
         }
         toast(added ? t('models.qtcoolAdded', { count: added }) : t('models.qtcoolAllExist'), added ? 'success' : 'info')
       } else {
-        state.config.models.providers[QTCOOL.providerKey] = {
+        state.config.models.providers[providerKey] = {
           baseUrl: QTCOOL.baseUrl,
           apiKey: apiKey,
           api: QTCOOL.api,
@@ -1289,7 +1300,7 @@ function bindTopActions(page, state) {
           if (!state.config.agents) state.config.agents = {}
           if (!state.config.agents.defaults) state.config.agents.defaults = {}
           if (!state.config.agents.defaults.model) state.config.agents.defaults.model = {}
-          state.config.agents.defaults.model.primary = QTCOOL.providerKey + '/' + selectedModels[0].id
+          state.config.agents.defaults.model.primary = providerKey + '/' + selectedModels[0].id
         }
         toast(t('models.qtcoolProviderAdded', { count: selectedModels.length }), 'success')
       }

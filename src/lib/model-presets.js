@@ -17,7 +17,7 @@ export const API_TYPES = [
 
 // 服务商快捷预设
 export const PROVIDER_PRESETS = [
-  { key: 'qtcool', label: 'AI作品模型服务', badge: '推荐', baseUrl: 'https://ai.aizuopin.com/v1', api: 'openai-completions', site: 'https://ai.aizuopin.com', desc: '智爪工具入口内置的模型服务，支持构建器注入客户授权额度' },
+  { key: 'aizuopin', label: 'AI作品模型服务', badge: '推荐', baseUrl: 'https://ai.aizuopin.com/v1', api: 'openai-completions', site: 'https://ai.aizuopin.com', desc: '智爪工具入口内置的模型服务，支持构建器注入客户授权额度' },
   { key: 'shengsuanyun', label: '胜算云', baseUrl: 'https://router.shengsuanyun.com/api/v1', api: 'openai-completions', site: 'https://www.shengsuanyun.com/?from=CH_4BVI0BM2', desc: '国内知名 AI 模型聚合平台，支持多种主流模型' },
   { key: 'siliconflow', label: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', api: 'openai-completions', site: 'https://cloud.siliconflow.cn/i/PFrw2an5', desc: '高性价比推理平台，支持 DeepSeek、Qwen 等开源模型' },
   { key: 'volcengine', label: '火山引擎', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', api: 'openai-completions', site: 'https://volcengine.com/L/Ph1OP5I3_GY', desc: '字节跳动旗下云平台，支持豆包等模型' },
@@ -43,7 +43,7 @@ export const QTCOOL = {
   site: 'https://ai.aizuopin.com',
   checkinUrl: 'https://ai.aizuopin.com',
   usageUrl: 'https://ai.aizuopin.com',
-  providerKey: 'qtcool',
+  providerKey: 'aizuopin',
   brandName: 'AI作品模型服务',
   api: 'openai-completions',
   models: []  // 始终从 API 动态获取最新模型列表
@@ -109,16 +109,35 @@ export const MODEL_PRESETS = {
  * @returns {Promise<Array<{id:string, name:string, contextWindow:number, reasoning?:boolean}>>}
  */
 export async function fetchQtcoolModels(apiKey) {
-  let key = apiKey || QTCOOL.defaultKey
-  // 没有 key 时尝试从已有的 qtcool provider 配置读取
-  if (!key) {
-    try {
-      const { api } = await import('../lib/tauri-api.js')
-      const cfg = await api.readOpenclawConfig()
-      key = cfg?.models?.providers?.qtcool?.apiKey || ''
-    } catch { /* ignore */ }
+  const typedKey = typeof apiKey === 'string' ? apiKey.trim() : ''
+  const toModel = (id) => ({
+    id, name: id, contextWindow: 128000,
+    reasoning: id.includes('codex')
+  })
+  let lastError = null
+
+  try {
+    const { api } = await import('../lib/tauri-api.js')
+    const cfg = await api.readOpenclawConfig()
+    const providers = cfg?.models?.providers || {}
+    const provider = providers[QTCOOL.providerKey] || providers.aizuopin || providers.qtcool || null
+    const baseUrl = provider?.baseUrl || QTCOOL.baseUrl
+    const apiType = provider?.api || QTCOOL.api
+    const key = typedKey || provider?.apiKey || QTCOOL.defaultKey || ''
+    const ids = await api.listRemoteModels(baseUrl, key, apiType)
+    if (Array.isArray(ids) && ids.length) {
+      return ids.map(toModel).sort((a, b) => a.id.localeCompare(b.id))
+    }
+  } catch (err) {
+    lastError = err
+  }
+
+  const fallbackKey = typedKey || QTCOOL.defaultKey
+  if (!fallbackKey && lastError) {
+    throw lastError
   }
   try {
+    const key = fallbackKey
     const headers = key ? { 'Authorization': 'Bearer ' + key } : {}
     const resp = await fetch(QTCOOL.baseUrl + '/models', {
       headers,
@@ -127,12 +146,17 @@ export async function fetchQtcoolModels(apiKey) {
     if (resp.ok) {
       const data = await resp.json()
       if (data.data && data.data.length) {
-        return data.data.map(m => ({
-          id: m.id, name: m.id, contextWindow: 128000,
-          reasoning: m.id.includes('codex')
-        })).sort((a, b) => b.id.localeCompare(a.id))
+        return data.data.map(m => toModel(m.id)).sort((a, b) => a.id.localeCompare(b.id))
       }
     }
-  } catch { /* use fallback */ }
+    if (!resp.ok) {
+      lastError = lastError || new Error(`HTTP ${resp.status}`)
+    }
+  } catch (err) {
+    lastError = lastError || err
+  }
+  if (lastError && !QTCOOL.models.length) {
+    throw lastError
+  }
   return QTCOOL.models
 }
