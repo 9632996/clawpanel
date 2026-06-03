@@ -6328,6 +6328,169 @@ fn extract_single_json_reply(text: &str) -> String {
         .unwrap_or_default()
 }
 
+fn default_openai_tool_call() -> Value {
+    json!({
+        "id": "",
+        "type": "function",
+        "function": {
+            "name": "",
+            "arguments": ""
+        }
+    })
+}
+
+fn push_openai_tool_delta(tool_calls: &mut Vec<Value>, delta: &Value) {
+    let index = delta
+        .get("index")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+        .unwrap_or(tool_calls.len());
+    while tool_calls.len() <= index {
+        tool_calls.push(default_openai_tool_call());
+    }
+
+    let slot = &mut tool_calls[index];
+    if let Some(id) = delta
+        .get("id")
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.is_empty())
+    {
+        slot["id"] = json!(id);
+    }
+    if let Some(kind) = delta
+        .get("type")
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.is_empty())
+    {
+        slot["type"] = json!(kind);
+    }
+    if let Some(function) = delta.get("function") {
+        if let Some(name) = function
+            .get("name")
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.is_empty())
+        {
+            let current = slot
+                .pointer("/function/name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            slot["function"]["name"] = json!(format!("{current}{name}"));
+        }
+        if let Some(arguments) = function
+            .get("arguments")
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.is_empty())
+        {
+            let current = slot
+                .pointer("/function/arguments")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            slot["function"]["arguments"] = json!(format!("{current}{arguments}"));
+        }
+    }
+}
+
+fn extract_openai_assistant_response(text: &str) -> (String, Vec<Value>, String, String) {
+    let mut content = String::new();
+    let mut reasoning = String::new();
+    let mut tool_calls: Vec<Value> = Vec::new();
+    let mut finish_reason = String::new();
+    let mut stream_error = String::new();
+    let mut saw_sse = false;
+
+    for line in text.lines() {
+        let Some(data) = line
+            .strip_prefix("data: ")
+            .or_else(|| line.strip_prefix("data:"))
+        else {
+            continue;
+        };
+        saw_sse = true;
+        let data = data.trim();
+        if data.is_empty() || data == "[DONE]" {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(data) else {
+            continue;
+        };
+        if let Some(err) = value.get("error") {
+            stream_error = err
+                .get("message")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| err.to_string());
+        }
+        let Some(choice) = value.get("choices").and_then(|v| v.get(0)) else {
+            continue;
+        };
+        if let Some(reason) = choice.get("finish_reason").and_then(|v| v.as_str()) {
+            finish_reason = reason.to_string();
+        }
+        let Some(delta) = choice.get("delta") else {
+            continue;
+        };
+        if let Some(value) = delta.get("content").and_then(|v| v.as_str()) {
+            content.push_str(value);
+        }
+        if let Some(value) = delta.get("reasoning_content").and_then(|v| v.as_str()) {
+            reasoning.push_str(value);
+        }
+        if let Some(calls) = delta.get("tool_calls").and_then(|v| v.as_array()) {
+            for call in calls {
+                push_openai_tool_delta(&mut tool_calls, call);
+            }
+        }
+    }
+
+    if !saw_sse {
+        if let Ok(value) = serde_json::from_str::<Value>(text) {
+            if let Some(err) = value.get("error") {
+                stream_error = err
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| err.to_string());
+            }
+            if let Some(choice) = value.get("choices").and_then(|v| v.get(0)) {
+                finish_reason = choice
+                    .get("finish_reason")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if let Some(message) = choice.get("message") {
+                    content = message
+                        .get("content")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if content.is_empty() {
+                        reasoning = message
+                            .get("reasoning_content")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                    }
+                    if let Some(calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
+                        tool_calls = calls.clone();
+                    }
+                }
+            }
+        }
+    }
+
+    if content.is_empty() && !reasoning.is_empty() {
+        content = reasoning;
+    }
+    tool_calls.retain(|call| {
+        call.pointer("/function/name")
+            .and_then(|v| v.as_str())
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+    });
+
+    (content, tool_calls, finish_reason, stream_error)
+}
+
 /// 测试模型（详细版 #Compat-1）：返回完整 req/resp 信息，供前端 debug 面板展示
 ///
 /// 相比 test_model：
@@ -6576,6 +6739,7 @@ pub async fn assistant_call_model(
     api_type: Option<String>,
     messages: Vec<Value>,
     temperature: Option<f64>,
+    tools: Option<Vec<Value>>,
 ) -> Result<Value, String> {
     let api_type_norm =
         normalize_model_api_type(api_type.as_deref().unwrap_or("openai-completions"));
@@ -6675,12 +6839,15 @@ pub async fn assistant_call_model(
         }
         _ => {
             let url = format!("{}/chat/completions", base);
-            let body = json!({
+            let mut body = json!({
                 "model": model_id,
                 "messages": messages,
                 "stream": true,
                 "temperature": temperature,
             });
+            if let Some(tools) = tools.filter(|items| !items.is_empty()) {
+                body["tools"] = json!(tools);
+            }
             let mut req = client
                 .post(&url)
                 .header("Accept-Encoding", "identity")
@@ -6706,13 +6873,17 @@ pub async fn assistant_call_model(
     let status_code = status.as_u16();
     let text = resp.text().await.unwrap_or_default();
 
-    let reply = {
+    let (reply, tool_calls, finish_reason, stream_error) = if api_type_norm == "openai-completions"
+    {
+        extract_openai_assistant_response(&text)
+    } else {
         let sse_reply = extract_sse_reply(&text);
-        if !sse_reply.is_empty() {
+        let reply = if !sse_reply.is_empty() {
             sse_reply
         } else {
             extract_single_json_reply(&text)
-        }
+        };
+        (reply, Vec::new(), String::new(), String::new())
     };
 
     if !status.is_success() {
@@ -6722,14 +6893,22 @@ pub async fn assistant_call_model(
             extract_error_message(&text, status)
         ));
     }
-    if reply.is_empty() {
-        return Err("模型响应为空".to_string());
+    if reply.is_empty() && tool_calls.is_empty() {
+        let reason = if stream_error.is_empty() {
+            "模型响应为空".to_string()
+        } else {
+            stream_error.clone()
+        };
+        return Err(reason);
     }
 
     Ok(json!({
         "success": true,
         "status": status_code,
         "reply": reply,
+        "toolCalls": tool_calls,
+        "finishReason": finish_reason,
+        "streamError": stream_error,
         "usedApi": used_api,
         "reqUrl": req_url,
         "reqBody": req_body_json,

@@ -3343,7 +3343,7 @@ async function executeToolWithSafety(toolName, args, tcForConfirm) {
 // 带工具调用的 AI 请求（流式，支持 tool_calls 循环 + 打字机效果）
 async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
   const apiType = normalizeApiType(_config.apiType)
-  if (!_config.baseUrl || !_config.model || (requiresApiKey(apiType) && !_config.apiKey)) {
+  if (!_config.baseUrl || !_config.model || !hasUsableApiKey(apiType, _config.apiKey, _config.baseUrl)) {
     throw new Error(t('assistant.errConfigFirst'))
   }
 
@@ -3502,22 +3502,6 @@ async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
     }
     if (tools.length > 0) body.tools = tools
 
-    const resp = await fetchWithRetry(base + '/chat/completions', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body),
-      signal: _abortController.signal,
-    })
-
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => '')
-      let errMsg = `API 错误 ${resp.status}`
-      try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
-      // #Compat-5: callAIWithTools 场景下 tools 带进 body 最容易踩 vLLM tool choice 限制，
-      // 识别并给出启动参数指引，避免用户一脸懵
-      throw new Error(enhanceModelCallError(errMsg))
-    }
-
     // 流式累积状态
     let contentBuf = ''
     let reasoningBuf = ''
@@ -3525,69 +3509,112 @@ async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
     const pendingToolCalls = []   // [{ id, type, function: { name, arguments } }]
     let finishReason = ''
 
-    const ct = resp.headers.get('content-type') || ''
-    if (ct.includes('text/event-stream') || ct.includes('text/plain')) {
-      // ── SSE 流式解析 ──
-      await readSSEStream(resp, (json) => {
-        if (json.error) {
-          streamError = streamError || json.error?.message || json.error || ''
-        }
-        const choice = json.choices?.[0]
-        if (!choice) return
-        if (choice.finish_reason) finishReason = choice.finish_reason
-
-        const d = choice.delta
-        if (!d) return
-
-        // 累积 content → 打字机效果
-        if (d.content) {
-          contentBuf += d.content
-          if (onChunk) onChunk(d.content)
-        }
-
-        // 累积 reasoning_content
-        if (d.reasoning_content) {
-          reasoningBuf += d.reasoning_content
-        }
-
-        // 累积 tool_calls 分块
-        if (d.tool_calls) {
-          for (const tc of d.tool_calls) {
-            const idx = tc.index ?? pendingToolCalls.length
-            if (!pendingToolCalls[idx]) {
-              pendingToolCalls[idx] = {
-                id: tc.id || '',
-                type: tc.type || 'function',
-                function: { name: '', arguments: '' },
-              }
-            }
-            const slot = pendingToolCalls[idx]
-            if (tc.id) slot.id = tc.id
-            if (tc.function?.name) slot.function.name += tc.function.name
-            if (tc.function?.arguments) slot.function.arguments += tc.function.arguments
-          }
-          // 实时显示工具调用进度（显示已知名称）
-          const names = pendingToolCalls.filter(t => t.function.name).map(t => t.function.name)
-          if (names.length) {
-            onStatus(t('assistant.aiCallingTools', { tools: names.join(', ') }) || `调用工具: ${names.join(', ')}`)
-          }
-        }
-      }, _abortController?.signal)
-    } else {
-      // ── 非流式回退（API 忽略了 stream:true）──
-      const data = await resp.json()
-      const choice = data.choices?.[0]
-      const msg = choice?.message
-      if (!msg) {
-        const errMsg = data.error?.message || ''
-        throw new Error(errMsg || t('assistant.errInvalidResponse'))
+    if (api.assistantCallModel) {
+      const result = await api.assistantCallModel(
+        base,
+        _config.apiKey || '',
+        _config.model,
+        apiType,
+        currentMessages,
+        _config.temperature || 0.7,
+        tools,
+      )
+      _lastDebugInfo = {
+        url: result?.reqUrl || base,
+        method: 'POST',
+        requestBody: result?.reqBody || body,
+        status: result?.status || 0,
+        responseBody: result?.respBody ? '[captured by native client]' : '',
+        usedApi: result?.usedApi || apiType,
+        responseTime: new Date().toLocaleString('zh-CN'),
+        nativeClient: true,
       }
-      finishReason = choice.finish_reason || ''
-      contentBuf = msg.content || msg.reasoning_content || ''
+      contentBuf = result?.reply || ''
+      finishReason = result?.finishReason || ''
+      streamError = result?.streamError || ''
+      for (const tc of (result?.toolCalls || [])) pendingToolCalls.push(tc)
       if (contentBuf && onChunk) onChunk(contentBuf)
-      if (msg.tool_calls) {
-        for (const tc of msg.tool_calls) {
-          pendingToolCalls.push(tc)
+    } else {
+      const resp = await fetchWithRetry(base + '/chat/completions', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+        signal: _abortController.signal,
+      })
+
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => '')
+        let errMsg = `API 错误 ${resp.status}`
+        try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
+        // #Compat-5: callAIWithTools 场景下 tools 带进 body 最容易踩 vLLM tool choice 限制，
+        // 识别并给出启动参数指引，避免用户一脸懵
+        throw new Error(enhanceModelCallError(errMsg))
+      }
+
+      const ct = resp.headers.get('content-type') || ''
+      if (ct.includes('text/event-stream') || ct.includes('text/plain')) {
+      // ── SSE 流式解析 ──
+        await readSSEStream(resp, (json) => {
+          if (json.error) {
+            streamError = streamError || json.error?.message || json.error || ''
+          }
+          const choice = json.choices?.[0]
+          if (!choice) return
+          if (choice.finish_reason) finishReason = choice.finish_reason
+
+          const d = choice.delta
+          if (!d) return
+
+          // 累积 content → 打字机效果
+          if (d.content) {
+            contentBuf += d.content
+            if (onChunk) onChunk(d.content)
+          }
+
+          // 累积 reasoning_content
+          if (d.reasoning_content) {
+            reasoningBuf += d.reasoning_content
+          }
+
+          // 累积 tool_calls 分块
+          if (d.tool_calls) {
+            for (const tc of d.tool_calls) {
+              const idx = tc.index ?? pendingToolCalls.length
+              if (!pendingToolCalls[idx]) {
+                pendingToolCalls[idx] = {
+                  id: tc.id || '',
+                  type: tc.type || 'function',
+                  function: { name: '', arguments: '' },
+                }
+              }
+              const slot = pendingToolCalls[idx]
+              if (tc.id) slot.id = tc.id
+              if (tc.function?.name) slot.function.name += tc.function.name
+              if (tc.function?.arguments) slot.function.arguments += tc.function.arguments
+            }
+            // 实时显示工具调用进度（显示已知名称）
+            const names = pendingToolCalls.filter(t => t.function.name).map(t => t.function.name)
+            if (names.length) {
+              onStatus(t('assistant.aiCallingTools', { tools: names.join(', ') }) || `调用工具: ${names.join(', ')}`)
+            }
+          }
+        }, _abortController?.signal)
+      } else {
+        // ── 非流式回退（API 忽略了 stream:true）──
+        const data = await resp.json()
+        const choice = data.choices?.[0]
+        const msg = choice?.message
+        if (!msg) {
+          const errMsg = data.error?.message || ''
+          throw new Error(errMsg || t('assistant.errInvalidResponse'))
+        }
+        finishReason = choice.finish_reason || ''
+        contentBuf = msg.content || msg.reasoning_content || ''
+        if (contentBuf && onChunk) onChunk(contentBuf)
+        if (msg.tool_calls) {
+          for (const tc of msg.tool_calls) {
+            pendingToolCalls.push(tc)
+          }
         }
       }
     }
