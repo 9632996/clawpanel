@@ -8,7 +8,7 @@ window._jsLoaded = true
 import { registerRoute, initRouter, navigate, setDefaultRoute } from './router.js'
 import { renderSidebar, openMobileSidebar } from './components/sidebar.js'
 import { initTheme } from './lib/theme.js'
-import { detectOpenclawStatus, isOpenclawReady, isUpgrading, isGatewayRunning, isGatewayForeign, onGatewayChange, startGatewayPoll, onGuardianGiveUp, resetAutoRestart, loadActiveInstance, getActiveInstance, onInstanceChange } from './lib/app-state.js'
+import { detectOpenclawStatus, isOpenclawReady, isUpgrading, isGatewayRunning, isGatewayForeign, onGatewayChange, onGatewayOperationChange, runGatewayOperation, startGatewayPoll, onGuardianGiveUp, resetAutoRestart, loadActiveInstance, getActiveInstance, onInstanceChange, syncGatewayActionButtons } from './lib/app-state.js'
 import { wsClient } from './lib/ws-client.js'
 import { api, checkBackendHealth, isBackendOnline, isTauriRuntime, onBackendStatusChange } from './lib/tauri-api.js'
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
@@ -688,7 +688,7 @@ function setupGatewayBanner() {
         btn.disabled = true
         btn.textContent = t('common.processing')
         try {
-          await api.claimGateway()
+          await runGatewayOperation('claim', () => api.claimGateway(), { label: t('common.processing') })
           // 认领后立刻刷新全局状态
           const { refreshGatewayStatus } = await import('./lib/app-state.js')
           await refreshGatewayStatus()
@@ -698,6 +698,7 @@ function setupGatewayBanner() {
           console.error('[banner] claim failed:', err)
         }
       })
+      syncGatewayActionButtons(banner)
       return
     }
 
@@ -721,7 +722,37 @@ function setupGatewayBanner() {
         btn.classList.add('btn-loading')
         btn.textContent = t('dashboard.starting')
         try {
-          await api.startService('ai.openclaw.gateway')
+          await runGatewayOperation('start', async () => {
+            resetAutoRestart()
+            await api.startService('ai.openclaw.gateway')
+            // 轮询等待实际启动。OpenClaw 会先监听端口再加载插件/sidecars，冷启动可能超过 30s。
+            const t0 = Date.now()
+            while (Date.now() - t0 < 150000) {
+              try {
+                const healthy = await api.probeGatewayPort()
+                if (healthy) { update(true); return }
+              } catch {}
+              const sec = Math.floor((Date.now() - t0) / 1000)
+              btn.textContent = `${t('dashboard.starting')} ${sec}s`
+              await new Promise(r => setTimeout(r, 1500))
+            }
+            // 超时后尝试获取日志帮助排查
+            let logHint = ''
+            try {
+              const logs = await api.readLogTail('gateway', 5)
+              if (logs?.trim()) logHint = `<div style="font-size:12px;margin-top:4px;opacity:0.8;font-family:monospace;white-space:pre-wrap">${logs.trim().split('\n').slice(-3).join('\n')}</div>`
+            } catch {}
+            banner.innerHTML = `
+              <div class="gw-banner-content">
+                <span class="gw-banner-icon">${statusIcon('info', 16)}</span>
+                <span>${t('dashboard.startTimeout')}</span>
+                <button class="btn btn-sm btn-secondary" id="btn-gw-start" style="margin-left:auto">${t('dashboard.retry')}</button>
+                <a class="btn btn-sm btn-ghost" href="#/logs">${t('sidebar.logs')}</a>
+              </div>
+              ${logHint}
+            `
+            update(false)
+          }, { label: t('dashboard.starting') })
         } catch (err) {
           if (isForeignGatewayError(err)) {
             await openGatewayConflict(err)
@@ -742,38 +773,13 @@ function setupGatewayBanner() {
           update(false)
           return
         }
-        // 轮询等待实际启动。OpenClaw 会先监听端口再加载插件/sidecars，冷启动可能超过 30s。
-        const t0 = Date.now()
-        while (Date.now() - t0 < 150000) {
-          try {
-            const healthy = await api.probeGatewayPort()
-            if (healthy) { update(true); return }
-          } catch {}
-          const sec = Math.floor((Date.now() - t0) / 1000)
-          btn.textContent = `${t('dashboard.starting')} ${sec}s`
-          await new Promise(r => setTimeout(r, 1500))
-        }
-        // 超时后尝试获取日志帮助排查
-        let logHint = ''
-        try {
-          const logs = await api.readLogTail('gateway', 5)
-          if (logs?.trim()) logHint = `<div style="font-size:12px;margin-top:4px;opacity:0.8;font-family:monospace;white-space:pre-wrap">${logs.trim().split('\n').slice(-3).join('\n')}</div>`
-        } catch {}
-        banner.innerHTML = `
-          <div class="gw-banner-content">
-            <span class="gw-banner-icon">${statusIcon('info', 16)}</span>
-            <span>${t('dashboard.startTimeout')}</span>
-            <button class="btn btn-sm btn-secondary" id="btn-gw-start" style="margin-left:auto">${t('dashboard.retry')}</button>
-            <a class="btn btn-sm btn-ghost" href="#/logs">${t('sidebar.logs')}</a>
-          </div>
-          ${logHint}
-        `
-        update(false)
       })
+    syncGatewayActionButtons(banner)
   }
 
   update(isGatewayRunning(), isGatewayForeign())
   onGatewayChange(update)
+  onGatewayOperationChange(() => syncGatewayActionButtons(banner))
   // 引擎切换时刷新横幅（Hermes 模式隐藏，OpenClaw 模式按 Gateway 状态显示）
   onEngineChange(() => update(isGatewayRunning(), isGatewayForeign()))
 }
@@ -828,7 +834,7 @@ function showGuardianRecovery() {
         statusEl.innerHTML = `<span style="color:var(--success)">${t('dashboard.fixDoneRestarting')}</span>`
         resetAutoRestart()
         try {
-          await api.startService('ai.openclaw.gateway')
+          await runGatewayOperation('start', () => api.startService('ai.openclaw.gateway'), { label: t('dashboard.starting') })
           statusEl.innerHTML = `<span style="color:var(--success)">${t('dashboard.fixDoneRestarted')}</span>`
         } catch (err) {
           if (isForeignGatewayError(err)) await openGatewayConflict(err)
@@ -849,7 +855,7 @@ function showGuardianRecovery() {
     btn.textContent = t('dashboard.fixing')
     resetAutoRestart()
     try {
-      await api.startService('ai.openclaw.gateway')
+      await runGatewayOperation('start', () => api.startService('ai.openclaw.gateway'), { label: t('dashboard.starting') })
       btn.textContent = t('dashboard.startSent')
     } catch (err) {
       if (isForeignGatewayError(err)) await openGatewayConflict(err)
@@ -857,6 +863,7 @@ function showGuardianRecovery() {
       btn.disabled = false
     }
   })
+  syncGatewayActionButtons(banner)
 }
 
 // === 全局版本更新检测 ===

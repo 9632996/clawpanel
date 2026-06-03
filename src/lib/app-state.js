@@ -20,6 +20,28 @@ let _isUpgrading = false // 升级/切换版本期间，阻止 setup 跳转
 let _userStopped = false // 用户主动停止，不自动拉起
 let _gatewayRunningSince = 0 // Gateway 最近一次进入稳定运行状态的时间
 let _guardianListeners = [] // 守护放弃时的回调（后端 guardian-event 触发）
+let _gatewayOperation = null // 当前 Gateway 启停/安装操作，全局按钮共用
+let _gatewayOperationPromise = null
+let _gatewayOperationListeners = []
+let _gatewayOperationSeq = 0
+
+const GATEWAY_ACTION_SELECTOR = [
+  '#btn-restart-gw',
+  '#btn-gw-start',
+  '#btn-gw-claim',
+  '#btn-gw-recover-fix',
+  '#btn-gw-recover-restart',
+  '[data-action="start-gw"]',
+  '[data-action="stop-gw"]',
+  '[data-action="restart-gw"]',
+  '[data-action="claim-gateway"]',
+  '[data-action="install-gateway"]',
+  '[data-action="uninstall-gateway"]',
+  '[data-action="start"][data-label="ai.openclaw.gateway"]',
+  '[data-action="stop"][data-label="ai.openclaw.gateway"]',
+  '[data-action="restart"][data-label="ai.openclaw.gateway"]',
+  '[data-action="save-config"]',
+].join(',')
 
 /** openclaw 是否就绪（CLI 已安装 + 配置文件存在） */
 export function isOpenclawReady() {
@@ -45,6 +67,81 @@ export function resetAutoRestart() {
 export function onGuardianGiveUp(fn) {
   _guardianListeners.push(fn)
   return () => { _guardianListeners = _guardianListeners.filter(cb => cb !== fn) }
+}
+
+export function getGatewayOperation() {
+  return _gatewayOperation
+}
+
+export function isGatewayOperationActive() {
+  return !!_gatewayOperation
+}
+
+export function onGatewayOperationChange(fn) {
+  _gatewayOperationListeners.push(fn)
+  return () => { _gatewayOperationListeners = _gatewayOperationListeners.filter(cb => cb !== fn) }
+}
+
+function _emitGatewayOperationChange() {
+  _gatewayOperationListeners.forEach(fn => { try { fn(_gatewayOperation) } catch {} })
+}
+
+export function syncGatewayActionButtons(root = document) {
+  if (!root?.querySelectorAll) return
+  const op = _gatewayOperation
+  root.querySelectorAll(GATEWAY_ACTION_SELECTOR).forEach(btn => {
+    if (!(btn instanceof HTMLElement)) return
+    if (op) {
+      if (btn.dataset.gatewayOpLocked !== '1') {
+        btn.dataset.gatewayOpLocked = '1'
+        btn.dataset.gatewayOpWasDisabled = btn.disabled ? '1' : '0'
+        btn.dataset.gatewayOpTitle = btn.getAttribute('title') || ''
+      }
+      btn.disabled = true
+      btn.classList.add('btn-loading')
+      btn.setAttribute('title', op.label || 'Gateway 操作执行中')
+    } else if (btn.dataset.gatewayOpLocked === '1') {
+      btn.disabled = btn.dataset.gatewayOpWasDisabled === '1'
+      btn.classList.remove('btn-loading')
+      const originalTitle = btn.dataset.gatewayOpTitle || ''
+      if (originalTitle) btn.setAttribute('title', originalTitle)
+      else btn.removeAttribute('title')
+      delete btn.dataset.gatewayOpLocked
+      delete btn.dataset.gatewayOpWasDisabled
+      delete btn.dataset.gatewayOpTitle
+    }
+  })
+}
+
+export async function runGatewayOperation(action, fn, opts = {}) {
+  if (_gatewayOperationPromise) {
+    if (_gatewayOperation?.action === action && opts.joinExisting !== false) {
+      return _gatewayOperationPromise
+    }
+    const err = new Error(_gatewayOperation?.label ? `${_gatewayOperation.label}，请稍候` : 'Gateway 操作执行中，请稍候')
+    err.code = 'GATEWAY_OPERATION_IN_FLIGHT'
+    throw err
+  }
+
+  _gatewayOperation = {
+    id: ++_gatewayOperationSeq,
+    action,
+    label: opts.label || 'Gateway 操作执行中',
+    startedAt: Date.now(),
+  }
+  _emitGatewayOperationChange()
+
+  _gatewayOperationPromise = (async () => {
+    try {
+      return await fn()
+    } finally {
+      _gatewayOperation = null
+      _gatewayOperationPromise = null
+      _emitGatewayOperationChange()
+      refreshGatewayStatus().catch(() => {})
+    }
+  })()
+  return _gatewayOperationPromise
 }
 
 /** Gateway 是否正在运行（仅 owned） */
@@ -190,6 +287,33 @@ export async function refreshGatewayStatus() {
     if (_gwStopCount >= 3) _setGatewayRunning(false)
   }
   return _gatewayRunning
+}
+
+export async function waitForGatewayServiceState(expectRunning, opts = {}) {
+  const timeoutMs = Number.isFinite(opts.timeoutMs) ? opts.timeoutMs : (expectRunning ? 150000 : 30000)
+  const intervalMs = Number.isFinite(opts.intervalMs) ? opts.intervalMs : 1500
+  const requirePort = opts.requirePort ?? expectRunning
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const services = await api.getServicesStatus()
+      const gw = services?.find?.(s => s.label === 'ai.openclaw.gateway') || services?.[0]
+      const foreign = gw?.running === true && gw?.owned_by_current_instance === false
+      const running = gw?.running === true && !foreign
+
+      if (running === expectRunning) {
+        if (!expectRunning || !requirePort) return true
+        try {
+          if (await api.probeGatewayPort()) return true
+        } catch {}
+      }
+    } catch {}
+
+    await new Promise(r => setTimeout(r, intervalMs))
+  }
+
+  return false
 }
 
 let _pollTimer = null

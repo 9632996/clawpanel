@@ -15,6 +15,7 @@ import { t } from '../lib/i18n.js'
 import { getActiveEngineId } from '../lib/engine-manager.js'
 import { enhanceModelCallError } from '../lib/model-error-diagnosis.js'
 import { getFieldSchema } from '../lib/config-schema.js'
+import { runGatewayOperation, waitForGatewayServiceState } from '../lib/app-state.js'
 import { wsClient } from '../lib/ws-client.js'
 
 // ── 常量 ──
@@ -4821,7 +4822,10 @@ function showSettings() {
         await api.writeOpenclawConfig(config)
         qtcoolStatus.innerHTML = `<span style="color:#34d399">${statusIcon('ok', 14)} ${t('assistant.qtcoolSetMainDone', { model: selectedModel })}</span>`
         try {
-          await api.restartGateway()
+          await runGatewayOperation('restart', async () => {
+            await api.restartGateway()
+            await waitForGatewayServiceState(true, { timeoutMs: 150000 })
+          }, { label: t('dashboard.restarting') })
           toast(t('assistant.qtcoolMainSwitched', { model: selectedModel }), 'success')
           qtcoolStatus.innerHTML = `<span style="color:#34d399">${statusIcon('ok', 14)} ${t('assistant.qtcoolAllDone', { model: selectedModel })}</span>`
         } catch (e) {
@@ -4866,7 +4870,12 @@ function showSettings() {
       config.agents.defaults.model.primary = qtcoolProviderKey + '/' + model
       await api.writeOpenclawConfig(config)
       toast(t('assistant.qtcoolSyncToDone', { model }), 'success')
-      try { await api.restartGateway() } catch {}
+      try {
+        await runGatewayOperation('restart', async () => {
+          await api.restartGateway()
+          await waitForGatewayServiceState(true, { timeoutMs: 150000 })
+        }, { label: t('dashboard.restarting') })
+      } catch {}
     } catch (e) {
       toast(humanizeError(e, t('assistant.qtcoolSyncFail')), 'error')
     }

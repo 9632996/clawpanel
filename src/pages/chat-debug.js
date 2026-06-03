@@ -4,7 +4,7 @@
  */
 import { api, getRequestLogs, clearRequestLogs, isTauriRuntime } from '../lib/tauri-api.js'
 import { wsClient } from '../lib/ws-client.js'
-import { isOpenclawReady, isGatewayRunning } from '../lib/app-state.js'
+import { isOpenclawReady, isGatewayRunning, resetAutoRestart, runGatewayOperation, setUserStopped } from '../lib/app-state.js'
 import { isForeignGatewayError, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { toast } from '../components/toast.js'
@@ -289,7 +289,7 @@ async function runFix(page) {
     // 3. 重启 Gateway
     toast(t('chatDebug.fixStepGateway'), 'info')
     try {
-      await api.restartService('ai.openclaw.gateway')
+      await runGatewayOperation('restart', () => api.restartService('ai.openclaw.gateway'), { label: t('chatDebug.fixStepGateway') })
     } catch (e) {
       if (isForeignGatewayError(e)) {
         await openGatewayConflict(e)
@@ -433,16 +433,20 @@ async function fixPairingAdv(page) {
     log('✅ ' + result)
 
     log('⚡ ' + t('chatDebug.fixStoppingGw'))
-    try { await api.stopService('ai.openclaw.gateway') } catch (e) {
-      if (isForeignGatewayError(e)) { await openGatewayConflict(e); throw e }
-    }
-    await new Promise(r => setTimeout(r, 3000))
+    await runGatewayOperation('restart', async () => {
+      setUserStopped(true)
+      try { await api.stopService('ai.openclaw.gateway') } catch (e) {
+        if (isForeignGatewayError(e)) { await openGatewayConflict(e); throw e }
+      }
+      await new Promise(r => setTimeout(r, 3000))
 
-    log('⚡ ' + t('chatDebug.fixStartingGw'))
-    try { await api.startService('ai.openclaw.gateway') } catch (e) {
-      if (isForeignGatewayError(e)) await openGatewayConflict(e)
-      throw e
-    }
+      log('⚡ ' + t('chatDebug.fixStartingGw'))
+      resetAutoRestart()
+      try { await api.startService('ai.openclaw.gateway') } catch (e) {
+        if (isForeignGatewayError(e)) await openGatewayConflict(e)
+        throw e
+      }
+    }, { label: t('chatDebug.fixStepGateway') })
     log('✅ ' + t('chatDebug.fixGwStartSent'))
     await new Promise(r => setTimeout(r, 5000))
 

@@ -6,12 +6,15 @@ import { api, isTauriRuntime } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { humanizeError } from '../lib/humanize-error.js'
 import { showConfirm, showModal, showUpgradeModal } from '../components/modal.js'
-import { isMacPlatform, isInDocker, setUpgrading, setUserStopped, resetAutoRestart } from '../lib/app-state.js'
+import { isMacPlatform, isInDocker, onGatewayChange, onGatewayOperationChange, runGatewayOperation, setUpgrading, setUserStopped, resetAutoRestart, syncGatewayActionButtons, waitForGatewayServiceState } from '../lib/app-state.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { diagnoseInstallError } from '../lib/error-diagnosis.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 import { wsClient } from '../lib/ws-client.js'
+
+let _unsubGatewayOperation = null
+let _unsubGatewayChange = null
 
 // HTML 转义，防止 XSS
 function escapeHtml(str) {
@@ -75,8 +78,18 @@ export async function render() {
   `
 
   bindEvents(page)
+  if (_unsubGatewayOperation) _unsubGatewayOperation()
+  _unsubGatewayOperation = onGatewayOperationChange(() => syncGatewayActionButtons(page))
+  if (_unsubGatewayChange) _unsubGatewayChange()
+  _unsubGatewayChange = onGatewayChange(() => loadServices(page).catch(() => {}))
+  syncGatewayActionButtons(page)
   loadAll(page)
   return page
+}
+
+export function cleanup() {
+  if (_unsubGatewayOperation) { _unsubGatewayOperation(); _unsubGatewayOperation = null }
+  if (_unsubGatewayChange) { _unsubGatewayChange(); _unsubGatewayChange = null }
 }
 
 async function loadAll(page) {
@@ -304,6 +317,7 @@ async function loadServices(page) {
   try {
     const services = await api.getServicesStatus()
     renderServices(container, services)
+    syncGatewayActionButtons(container)
     const gw = services?.find?.(s => s.label === 'ai.openclaw.gateway') || services?.[0] || null
     if (gw) {
       maybeShowForeignGatewayBindingPrompt({
@@ -680,6 +694,13 @@ const POLL_INTERVAL = 1500  // 轮询间隔 ms
 const POLL_TIMEOUT = 30000  // 最长等待 30s
 
 async function handleServiceAction(action, label, page) {
+  const actionLabel = ACTION_LABELS[action] || action
+  return runGatewayOperation(action, () => doHandleServiceAction(action, label, page), {
+    label: t('services.actionProgress', { action: actionLabel }),
+  })
+}
+
+async function doHandleServiceAction(action, label, page) {
   const fn = { start: api.startService, stop: api.stopService, restart: api.restartService }[action]
   const actionLabel = ACTION_LABELS[action]
   const expectRunning = action !== 'stop'
@@ -920,7 +941,12 @@ async function handleSaveConfig(page, restart) {
 
     if (restart) {
       try {
-        await api.restartGateway()
+        await runGatewayOperation('restart', async () => {
+          await api.restartGateway()
+          await waitForGatewayServiceState(true, { timeoutMs: 150000 })
+        }, {
+          label: t('services.actionProgress', { action: t('services.restart') }),
+        })
         toast(t('services.gwRestarted'), 'success')
       } catch (e) {
         toast(humanizeError(e, t('services.configSavedGwFailed')), 'warning')
@@ -1034,7 +1060,7 @@ async function handleClaimGateway(btn, page) {
   btn.classList.add('btn-loading')
   btn.textContent = t('common.processing')
   try {
-    await api.claimGateway()
+    await runGatewayOperation('claim', () => api.claimGateway(), { label: t('common.processing') })
     toast(t('services.claimSuccess'), 'success')
     // 立刻刷新全局 Gateway 状态
     const { refreshGatewayStatus } = await import('../lib/app-state.js')
@@ -1053,7 +1079,7 @@ async function handleInstallGateway(btn, page) {
   btn.classList.add('btn-loading')
   btn.textContent = t('services.installing')
   try {
-    await api.installGateway()
+    await runGatewayOperation('install', () => api.installGateway(), { label: t('services.installing') })
     toast(t('services.gwInstalled'), 'success')
     await loadServices(page)
   } catch (e) {
@@ -1079,7 +1105,7 @@ async function handleUninstallGateway(btn, page) {
   btn.classList.add('btn-loading')
   btn.textContent = t('services.uninstalling')
   try {
-    await api.uninstallGateway()
+    await runGatewayOperation('uninstall', () => api.uninstallGateway(), { label: t('services.uninstalling') })
     toast(t('services.gwUninstalled'), 'success')
     await loadServices(page)
   } catch (e) {

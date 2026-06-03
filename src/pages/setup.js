@@ -5,7 +5,7 @@
 import { api, invalidate } from '../lib/tauri-api.js'
 import { showConfirm, showUpgradeModal } from '../components/modal.js'
 import { toast } from '../components/toast.js'
-import { setUpgrading, isMacPlatform } from '../lib/app-state.js'
+import { runGatewayOperation, setUpgrading, isMacPlatform } from '../lib/app-state.js'
 import { getActiveEngine } from '../lib/engine-manager.js'
 import { diagnoseInstallError } from '../lib/error-diagnosis.js'
 import { icon, statusIcon } from '../lib/icons.js'
@@ -154,11 +154,13 @@ async function maybeRefreshGatewayServiceBinding() {
     const gw = services?.find?.(s => s.label === 'ai.openclaw.gateway') || services?.[0] || null
     const shouldStartAgain = gw?.running === true && gw?.owned_by_current_instance !== false
 
-    await api.uninstallGateway().catch(() => {})
-    await api.installGateway()
-    if (shouldStartAgain) {
-      await api.startService('ai.openclaw.gateway')
-    }
+    await runGatewayOperation('refresh-service-binding', async () => {
+      await api.uninstallGateway().catch(() => {})
+      await api.installGateway()
+      if (shouldStartAgain) {
+        await api.startService('ai.openclaw.gateway')
+      }
+    }, { label: t('settings.gatewayServiceRefreshing') })
 
     toast(t('settings.gatewayServiceRefreshed'), 'success')
     return true

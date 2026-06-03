@@ -4,7 +4,7 @@
 import { api, invalidate } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { humanizeError } from '../lib/humanize-error.js'
-import { getActiveInstance, onGatewayChange } from '../lib/app-state.js'
+import { getActiveInstance, onGatewayChange, onGatewayOperationChange, resetAutoRestart, runGatewayOperation, setUserStopped, syncGatewayActionButtons, waitForGatewayServiceState } from '../lib/app-state.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance, showInstallationCleanup } from '../lib/gateway-ownership.js'
 import { navigate } from '../router.js'
 import { t } from '../lib/i18n.js'
@@ -13,6 +13,7 @@ import { attachCliConflictBanner } from '../components/cli-conflict-banner.js'
 import { icon } from '../lib/icons.js'
 
 let _unsubGw = null
+let _unsubGwOp = null
 let _dashboardLoadChain = Promise.resolve()
 let _lastGwChangeLoad = 0
 let _detachCliConflict = null
@@ -51,6 +52,9 @@ export async function render() {
 
   // 绑定事件（只绑一次）
   bindActions(page)
+  if (_unsubGwOp) _unsubGwOp()
+  _unsubGwOp = onGatewayOperationChange(() => syncGatewayActionButtons(page))
+  syncGatewayActionButtons(page)
 
   // 挂载 CLI 冲突检测横幅（异步扫描 PATH，发现非 standalone 的 openclaw 时显示）
   const cliConflictMount = page.querySelector('#cli-conflict-mount')
@@ -91,6 +95,7 @@ export async function render() {
 
 export function cleanup() {
   if (_unsubGw) { _unsubGw(); _unsubGw = null }
+  if (_unsubGwOp) { _unsubGwOp(); _unsubGwOp = null }
   if (_detachCliConflict) { try { _detachCliConflict() } catch (_) {} _detachCliConflict = null }
 }
 
@@ -599,6 +604,7 @@ function renderOverview(page, services, mcpConfig, backups, config, agents, stat
       navigate(card.dataset.nav)
     })
   })
+  syncGatewayActionButtons(containerEl)
 }
 
 function renderSessionStatus(sessions) {
@@ -791,7 +797,11 @@ function bindActions(page) {
     if (action === 'start-gw') {
       actionBtn.disabled = true; actionBtn.textContent = t('dashboard.starting')
       try {
-        await api.startService('ai.openclaw.gateway')
+        await runGatewayOperation('start', async () => {
+          resetAutoRestart()
+          await api.startService('ai.openclaw.gateway')
+          await waitForGatewayServiceState(true, { timeoutMs: 150000 })
+        }, { label: t('dashboard.starting') })
         toast(t('dashboard.gwStartSent'), 'success')
         setTimeout(() => loadDashboardData(page), 2000)
       } catch (err) {
@@ -802,7 +812,11 @@ function bindActions(page) {
     if (action === 'stop-gw') {
       actionBtn.disabled = true; actionBtn.textContent = t('dashboard.stopping')
       try {
-        await api.stopService('ai.openclaw.gateway')
+        await runGatewayOperation('stop', async () => {
+          setUserStopped(true)
+          await api.stopService('ai.openclaw.gateway')
+          await waitForGatewayServiceState(false, { timeoutMs: 30000, requirePort: false })
+        }, { label: t('dashboard.stopping') })
         toast(t('dashboard.gwStopped'), 'success')
         setTimeout(() => loadDashboardData(page), 1500)
       } catch (err) {
@@ -814,7 +828,10 @@ function bindActions(page) {
     if (action === 'restart-gw') {
       actionBtn.disabled = true; actionBtn.textContent = t('dashboard.restarting')
       try {
-        await api.restartService('ai.openclaw.gateway')
+        await runGatewayOperation('restart', async () => {
+          await api.restartService('ai.openclaw.gateway')
+          await waitForGatewayServiceState(true, { timeoutMs: 150000 })
+        }, { label: t('dashboard.restarting') })
         toast(t('dashboard.gwRestartSent'), 'success')
         setTimeout(() => loadDashboardData(page), 3000)
       } catch (err) {
@@ -829,7 +846,28 @@ function bindActions(page) {
     btnRestart.classList.add('btn-loading')
     btnRestart.textContent = t('dashboard.restarting')
     try {
-      await api.restartService('ai.openclaw.gateway')
+      await runGatewayOperation('restart', async () => {
+        await api.restartService('ai.openclaw.gateway')
+        // 轮询等待实际重启完成。Gateway 会先监听端口再加载插件，必须等待 /health。
+        const t0 = Date.now()
+        while (Date.now() - t0 < 150000) {
+          try {
+            const healthy = await api.probeGatewayPort()
+            if (healthy) {
+              const s = await api.getServicesStatus().catch(() => [])
+              const gw = s?.find?.(x => x.label === 'ai.openclaw.gateway') || s?.[0]
+              toast(t('dashboard.gwRestarted', { pid: gw?.pid || '' }), 'success')
+              loadDashboardData(page)
+              return
+            }
+          } catch {}
+          const sec = Math.floor((Date.now() - t0) / 1000)
+          btnRestart.textContent = t('dashboard.restarting') + ` ${sec}s`
+          await new Promise(r => setTimeout(r, 1500))
+        }
+        toast(t('dashboard.restartTimeout'), 'warning')
+        loadDashboardData(page)
+      }, { label: t('dashboard.restarting') })
     } catch (e) {
       await handleGatewayStartError(page, e, t('dashboard.restartFail'))
       btnRestart.disabled = false
@@ -837,31 +875,9 @@ function bindActions(page) {
       btnRestart.textContent = t('dashboard.restartGw')
       return
     }
-    // 轮询等待实际重启完成。Gateway 会先监听端口再加载插件，必须等待 /health。
-    const t0 = Date.now()
-    while (Date.now() - t0 < 150000) {
-      try {
-        const healthy = await api.probeGatewayPort()
-        if (healthy) {
-          const s = await api.getServicesStatus().catch(() => [])
-          const gw = s?.find?.(x => x.label === 'ai.openclaw.gateway') || s?.[0]
-          toast(t('dashboard.gwRestarted', { pid: gw?.pid || '' }), 'success')
-          btnRestart.disabled = false
-          btnRestart.classList.remove('btn-loading')
-          btnRestart.textContent = t('dashboard.restartGw')
-          loadDashboardData(page)
-          return
-        }
-      } catch {}
-      const sec = Math.floor((Date.now() - t0) / 1000)
-      btnRestart.textContent = t('dashboard.restarting') + ` ${sec}s`
-      await new Promise(r => setTimeout(r, 1500))
-    }
-    toast(t('dashboard.restartTimeout'), 'warning')
     btnRestart.disabled = false
     btnRestart.classList.remove('btn-loading')
     btnRestart.textContent = t('dashboard.restartGw')
-    loadDashboardData(page)
   })
 
   btnUpdate?.addEventListener('click', async () => {
