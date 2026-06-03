@@ -6,7 +6,7 @@ import { api, isTauriRuntime } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { humanizeError } from '../lib/humanize-error.js'
 import { showConfirm, showModal, showUpgradeModal } from '../components/modal.js'
-import { isMacPlatform, isInDocker, onGatewayChange, onGatewayOperationChange, runGatewayOperation, setUpgrading, setUserStopped, resetAutoRestart, syncGatewayActionButtons, waitForGatewayServiceState } from '../lib/app-state.js'
+import { isGatewayOperationActive, isGatewayRunning, isMacPlatform, isInDocker, markGatewayRunning, markGatewayStopped, onGatewayChange, onGatewayOperationChange, runGatewayOperation, setUpgrading, setUserStopped, resetAutoRestart, syncGatewayActionButtons, waitForGatewayServiceState } from '../lib/app-state.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { diagnoseInstallError } from '../lib/error-diagnosis.js'
 import { icon, statusIcon } from '../lib/icons.js'
@@ -81,7 +81,10 @@ export async function render() {
   if (_unsubGatewayOperation) _unsubGatewayOperation()
   _unsubGatewayOperation = onGatewayOperationChange(() => syncGatewayActionButtons(page))
   if (_unsubGatewayChange) _unsubGatewayChange()
-  _unsubGatewayChange = onGatewayChange(() => loadServices(page).catch(() => {}))
+  _unsubGatewayChange = onGatewayChange(() => {
+    if (isGatewayOperationActive()) return
+    loadServices(page).catch(() => {})
+  })
   syncGatewayActionButtons(page)
   loadAll(page)
   return page
@@ -691,7 +694,7 @@ function bindEvents(page) {
 
 const ACTION_LABELS = { start: t('services.start'), stop: t('services.stop'), restart: t('services.restart') }
 const POLL_INTERVAL = 1500  // 轮询间隔 ms
-const POLL_TIMEOUT = 30000  // 最长等待 30s
+const POLL_TIMEOUT = { start: 150000, restart: 150000, stop: 30000 }
 
 async function handleServiceAction(action, label, page) {
   const actionLabel = ACTION_LABELS[action] || action
@@ -704,6 +707,7 @@ async function doHandleServiceAction(action, label, page) {
   const fn = { start: api.startService, stop: api.stopService, restart: api.restartService }[action]
   const actionLabel = ACTION_LABELS[action]
   const expectRunning = action !== 'stop'
+  const timeout = POLL_TIMEOUT[action] || 30000
 
   // 通知守护模块：用户主动操作
   if (action === 'stop') setUserStopped(true)
@@ -771,7 +775,7 @@ async function doHandleServiceAction(action, label, page) {
     }
 
     // 超时
-    if (elapsed > POLL_TIMEOUT) {
+    if (elapsed > timeout) {
       toast(t('services.actionTimeout', { action: actionLabel }), 'warning')
       break
     }
@@ -781,9 +785,10 @@ async function doHandleServiceAction(action, label, page) {
       const services = await api.getServicesStatus()
       const svc = services?.find?.(s => s.label === label) || services?.[0]
       if (svc && svc.running === expectRunning) {
+        if (expectRunning) markGatewayRunning()
+        else markGatewayStopped()
         toast(t('services.actionDone', { label, action: actionLabel }) + (svc.pid ? ' (PID: ' + svc.pid + ')' : ''), 'success')
         // 立刻同步全局 Gateway 状态（顶部 banner + WS 连接）
-        import('../lib/app-state.js').then(m => m.refreshGatewayStatus()).catch(() => {})
         await loadServices(page)
         return
       }
@@ -941,13 +946,18 @@ async function handleSaveConfig(page, restart) {
 
     if (restart) {
       try {
-        await runGatewayOperation('restart', async () => {
-          await api.restartGateway()
-          await waitForGatewayServiceState(true, { timeoutMs: 150000 })
-        }, {
-          label: t('services.actionProgress', { action: t('services.restart') }),
-        })
-        toast(t('services.gwRestarted'), 'success')
+        if (isGatewayRunning()) {
+          await runGatewayOperation('restart', async () => {
+            await api.restartGateway()
+            await waitForGatewayServiceState(true, { timeoutMs: 150000 })
+            markGatewayRunning()
+          }, {
+            label: t('services.actionProgress', { action: t('services.restart') }),
+          })
+          toast(t('services.gwRestarted'), 'success')
+        } else {
+          toast(`${t('services.configSaved')}, ${t('settings.effectNextLaunch')}`, 'success')
+        }
       } catch (e) {
         toast(humanizeError(e, t('services.configSavedGwFailed')), 'warning')
       }

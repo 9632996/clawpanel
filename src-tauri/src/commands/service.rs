@@ -195,7 +195,7 @@ fn ensure_owned_gateway_or_err(pid: Option<u32>) -> Result<(), String> {
     Err(foreign_gateway_error(pid))
 }
 
-async fn current_gateway_runtime(label: &str) -> (bool, Option<u32>) {
+pub(crate) async fn current_gateway_runtime(label: &str) -> (bool, Option<u32>) {
     #[cfg(target_os = "windows")]
     {
         platform::check_service_status(0, label)
@@ -1893,19 +1893,22 @@ mod platform {
             }
         }
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
         cleanup_legacy_gateway_window();
 
-        if !check_service_status(0, "").0 {
-            // 清空记录
-            let mut known = LAST_KNOWN_GATEWAY_PID.lock().unwrap();
-            *known = None;
-            let mut active = ACTIVE_GATEWAY_CHILD.lock().unwrap();
-            *active = None;
-            Ok(())
-        } else {
-            Err("停止 Gateway 失败，请手动检查进程".into())
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            if !check_service_status(0, "").0 {
+                // 清空记录
+                let mut known = LAST_KNOWN_GATEWAY_PID.lock().unwrap();
+                *known = None;
+                let mut active = ACTIVE_GATEWAY_CHILD.lock().unwrap();
+                *active = None;
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(300)).await;
         }
+
+        Err("停止 Gateway 失败，请手动检查进程".into())
     }
 
     #[allow(dead_code)]

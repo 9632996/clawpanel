@@ -8,7 +8,7 @@ window._jsLoaded = true
 import { registerRoute, initRouter, navigate, setDefaultRoute } from './router.js'
 import { renderSidebar, openMobileSidebar } from './components/sidebar.js'
 import { initTheme } from './lib/theme.js'
-import { detectOpenclawStatus, isOpenclawReady, isUpgrading, isGatewayRunning, isGatewayForeign, onGatewayChange, onGatewayOperationChange, runGatewayOperation, startGatewayPoll, onGuardianGiveUp, resetAutoRestart, loadActiveInstance, getActiveInstance, onInstanceChange, syncGatewayActionButtons } from './lib/app-state.js'
+import { detectOpenclawStatus, isOpenclawReady, isUpgrading, isGatewayRunning, isGatewayForeign, markGatewayRunning, onGatewayChange, onGatewayOperationChange, runGatewayOperation, startGatewayPoll, onGuardianGiveUp, resetAutoRestart, loadActiveInstance, getActiveInstance, onInstanceChange, syncGatewayActionButtons } from './lib/app-state.js'
 import { wsClient } from './lib/ws-client.js'
 import { api, checkBackendHealth, isBackendOnline, isTauriRuntime, onBackendStatusChange } from './lib/tauri-api.js'
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
@@ -730,7 +730,11 @@ function setupGatewayBanner() {
             while (Date.now() - t0 < 150000) {
               try {
                 const healthy = await api.probeGatewayPort()
-                if (healthy) { update(true); return }
+                if (healthy) {
+                  markGatewayRunning()
+                  update(true)
+                  return
+                }
               } catch {}
               const sec = Math.floor((Date.now() - t0) / 1000)
               btn.textContent = `${t('dashboard.starting')} ${sec}s`

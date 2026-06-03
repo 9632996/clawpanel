@@ -56,6 +56,7 @@ export function isUpgrading() { return _isUpgrading }
 
 /** 标记用户主动停止 Gateway（不触发自动重启） */
 export function setUserStopped(v) { _userStopped = !!v }
+export function isUserStopped() { return _userStopped }
 
 /** 重置守护状态（用户手动启动后重置） */
 export function resetAutoRestart() {
@@ -152,6 +153,16 @@ export function isGatewayRunning() {
 /** Gateway 是否在运行但属于外部实例 */
 export function isGatewayForeign() {
   return _gatewayForeign
+}
+
+export function markGatewayStopped() {
+  _gwStopCount = 3
+  _setGatewayRunning(false, false)
+}
+
+export function markGatewayRunning() {
+  _gwStopCount = 0
+  _setGatewayRunning(true, false)
 }
 
 /** 获取后端平台 ('macos' | 'win32') */

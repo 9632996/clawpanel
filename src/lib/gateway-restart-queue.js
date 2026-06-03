@@ -19,7 +19,7 @@
  */
 
 import { api } from './tauri-api.js'
-import { runGatewayOperation, waitForGatewayServiceState } from './app-state.js'
+import { isGatewayRunning, isUserStopped, runGatewayOperation, waitForGatewayServiceState } from './app-state.js'
 
 const DEFAULT_DELAY_MS = 3000
 const RESCHEDULE_DELAY_MS = 500
@@ -146,6 +146,10 @@ async function runRestart() {
   emit('started')
 
   try {
+    if (isUserStopped() || !isGatewayRunning()) {
+      emit('cancelled', { reason: 'gateway-stopped' })
+      return
+    }
     let result = null
     const portReady = await runGatewayOperation('restart', async () => {
       result = await api.restartGateway()

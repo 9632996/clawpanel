@@ -5186,6 +5186,11 @@ async fn reload_gateway_internal(app: Option<&tauri::AppHandle>) -> Result<Strin
     }
     #[cfg(not(target_os = "macos"))]
     {
+        let (running, _) =
+            crate::commands::service::current_gateway_runtime("ai.openclaw.gateway").await;
+        if !running {
+            return Ok("Gateway 当前未运行，配置将在下次启动时生效".to_string());
+        }
         match reload_gateway_via_http().await {
             Ok(msg) => Ok(msg),
             Err(_) => crate::commands::service::restart_service(

@@ -4,7 +4,7 @@
 import { api, invalidate } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { humanizeError } from '../lib/humanize-error.js'
-import { getActiveInstance, onGatewayChange, onGatewayOperationChange, resetAutoRestart, runGatewayOperation, setUserStopped, syncGatewayActionButtons, waitForGatewayServiceState } from '../lib/app-state.js'
+import { getActiveInstance, markGatewayRunning, markGatewayStopped, onGatewayChange, onGatewayOperationChange, resetAutoRestart, runGatewayOperation, setUserStopped, syncGatewayActionButtons, waitForGatewayServiceState } from '../lib/app-state.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance, showInstallationCleanup } from '../lib/gateway-ownership.js'
 import { navigate } from '../router.js'
 import { t } from '../lib/i18n.js'
@@ -801,6 +801,7 @@ function bindActions(page) {
           resetAutoRestart()
           await api.startService('ai.openclaw.gateway')
           await waitForGatewayServiceState(true, { timeoutMs: 150000 })
+          markGatewayRunning()
         }, { label: t('dashboard.starting') })
         toast(t('dashboard.gwStartSent'), 'success')
         setTimeout(() => loadDashboardData(page), 2000)
@@ -816,6 +817,7 @@ function bindActions(page) {
           setUserStopped(true)
           await api.stopService('ai.openclaw.gateway')
           await waitForGatewayServiceState(false, { timeoutMs: 30000, requirePort: false })
+          markGatewayStopped()
         }, { label: t('dashboard.stopping') })
         toast(t('dashboard.gwStopped'), 'success')
         setTimeout(() => loadDashboardData(page), 1500)
@@ -831,6 +833,7 @@ function bindActions(page) {
         await runGatewayOperation('restart', async () => {
           await api.restartService('ai.openclaw.gateway')
           await waitForGatewayServiceState(true, { timeoutMs: 150000 })
+          markGatewayRunning()
         }, { label: t('dashboard.restarting') })
         toast(t('dashboard.gwRestartSent'), 'success')
         setTimeout(() => loadDashboardData(page), 3000)
@@ -856,6 +859,7 @@ function bindActions(page) {
             if (healthy) {
               const s = await api.getServicesStatus().catch(() => [])
               const gw = s?.find?.(x => x.label === 'ai.openclaw.gateway') || s?.[0]
+              markGatewayRunning()
               toast(t('dashboard.gwRestarted', { pid: gw?.pid || '' }), 'success')
               loadDashboardData(page)
               return
