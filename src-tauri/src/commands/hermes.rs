@@ -6,7 +6,7 @@
 //!   3. 写入 ~/.hermes/config.yaml + .env
 
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::OnceLock;
@@ -17,6 +17,8 @@ use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+const HERMES_DASHBOARD_SESSION_TOKEN: &str = "zhizhua-platform-local-dashboard";
 
 // ---------------------------------------------------------------------------
 // Gateway Guardian — 进程守护 + 状态追踪
@@ -209,6 +211,28 @@ fn kill_gateway_pid() -> bool {
     }
 }
 
+fn cleanup_stale_gateway_runtime_files(home: &Path) {
+    for name in [
+        "gateway.lock",
+        "gateway.pid",
+        "gateway_state.json",
+        "gateway-run.log",
+    ] {
+        let path = home.join(name);
+        if !path.exists() {
+            continue;
+        }
+        if let Ok(metadata) = std::fs::metadata(&path) {
+            let mut permissions = metadata.permissions();
+            if permissions.readonly() {
+                permissions.set_readonly(false);
+                let _ = std::fs::set_permissions(&path, permissions);
+            }
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
 /// Guardian 后台任务：定期健康检查，失败时自动重启
 async fn gateway_guardian_loop() {
     const CHECK_INTERVAL_SECS: u64 = 15;
@@ -335,6 +359,9 @@ fn normalize_provider_url(raw: &str) -> String {
 
 fn normalize_hermes_provider_for_base_url(provider: &str, base_url: Option<&str>) -> String {
     let pid = provider.trim();
+    if pid.eq_ignore_ascii_case("aizuopin") {
+        return "custom".into();
+    }
     if pid == "openrouter" {
         if let Some(url) = base_url {
             let base = normalize_provider_url(url);
@@ -492,12 +519,9 @@ async fn do_restart_gateway() -> Result<(), String> {
     kill_gateway_pid();
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    // 2. 清理 PID 文件
+    // 2. 清理旧运行态文件
     let home = hermes_home();
-    let pid_file = home.join("gateway.pid");
-    if pid_file.exists() {
-        let _ = std::fs::remove_file(&pid_file);
-    }
+    cleanup_stale_gateway_runtime_files(&home);
 
     // 3. 启动新进程
     let enhanced = hermes_enhanced_path();
@@ -511,13 +535,15 @@ async fn do_restart_gateway() -> Result<(), String> {
         .try_clone()
         .map_err(|e| format!("克隆日志句柄失败: {e}"))?;
 
-    let mut cmd = std::process::Command::new("hermes");
+    let hermes_cmd = hermes_executable_path().unwrap_or_else(|| PathBuf::from("hermes"));
+    let mut cmd = std::process::Command::new(&hermes_cmd);
     cmd.args(["gateway", "run"])
         .current_dir(&home)
         .env("PATH", &enhanced)
         .stdin(std::process::Stdio::null())
         .stdout(log_file)
         .stderr(log_err);
+    apply_hermes_runtime_env_std(&mut cmd);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
@@ -602,11 +628,106 @@ fn hermes_home() -> PathBuf {
     if let Ok(h) = std::env::var("HERMES_HOME") {
         return PathBuf::from(h);
     }
+    if let Some(root) = super::portable_product_root() {
+        return root.join("data").join("config").join("hermes");
+    }
     dirs::home_dir().unwrap_or_default().join(".hermes")
+}
+
+fn portable_hermes_runtime_dir() -> Option<PathBuf> {
+    super::portable_product_root().map(|root| root.join("data").join("runtime").join("hermes"))
+}
+
+fn hermes_uv_tool_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("UV_TOOL_DIR") {
+        let dir = dir.trim();
+        if !dir.is_empty() {
+            return Some(PathBuf::from(dir));
+        }
+    }
+    portable_hermes_runtime_dir().map(|dir| dir.join("tools"))
+}
+
+fn hermes_uv_tool_bin_dir() -> Option<PathBuf> {
+    hermes_uv_tool_dir().map(|dir| dir.join("bin"))
+}
+
+fn hermes_uv_tool_venv_bin_dir() -> Option<PathBuf> {
+    hermes_uv_tool_dir().map(|dir| {
+        if cfg!(target_os = "windows") {
+            dir.join("hermes-agent").join("Scripts")
+        } else {
+            dir.join("hermes-agent").join("bin")
+        }
+    })
+}
+
+fn hermes_executable_path() -> Option<PathBuf> {
+    let name = if cfg!(target_os = "windows") {
+        "hermes.exe"
+    } else {
+        "hermes"
+    };
+    hermes_uv_tool_venv_bin_dir()
+        .map(|dir| dir.join(name))
+        .filter(|path| path.is_file())
+}
+
+fn hermes_uv_cache_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("UV_CACHE_DIR") {
+        let dir = dir.trim();
+        if !dir.is_empty() {
+            return Some(PathBuf::from(dir));
+        }
+    }
+    super::portable_product_root().map(|root| {
+        root.join("data")
+            .join("cache")
+            .join("hermes")
+            .join("uv-cache")
+    })
+}
+
+fn hermes_venv_dir() -> PathBuf {
+    portable_hermes_runtime_dir()
+        .map(|dir| dir.join("venv"))
+        .or_else(|| dirs::home_dir().map(|home| home.join(".hermes-venv")))
+        .unwrap_or_else(|| PathBuf::from(".hermes-venv"))
+}
+
+fn apply_hermes_runtime_env_std(cmd: &mut std::process::Command) {
+    cmd.env("HERMES_HOME", hermes_home());
+    cmd.env(
+        "HERMES_DASHBOARD_SESSION_TOKEN",
+        HERMES_DASHBOARD_SESSION_TOKEN,
+    );
+    if let Some(tool_dir) = hermes_uv_tool_dir() {
+        cmd.env("UV_TOOL_DIR", tool_dir);
+    }
+    if let Some(cache_dir) = hermes_uv_cache_dir() {
+        cmd.env("UV_CACHE_DIR", cache_dir);
+    }
+}
+
+fn apply_hermes_runtime_env_tokio(cmd: &mut tokio::process::Command) {
+    cmd.env("HERMES_HOME", hermes_home());
+    cmd.env(
+        "HERMES_DASHBOARD_SESSION_TOKEN",
+        HERMES_DASHBOARD_SESSION_TOKEN,
+    );
+    if let Some(tool_dir) = hermes_uv_tool_dir() {
+        cmd.env("UV_TOOL_DIR", tool_dir);
+    }
+    if let Some(cache_dir) = hermes_uv_cache_dir() {
+        cmd.env("UV_CACHE_DIR", cache_dir);
+    }
 }
 
 /// ClawPanel 管理的 uv 二进制存放路径
 fn uv_bin_dir() -> PathBuf {
+    if let Some(dir) = portable_hermes_runtime_dir() {
+        return dir.join("uv").join("bin");
+    }
     #[cfg(target_os = "windows")]
     {
         let appdata = std::env::var("APPDATA").unwrap_or_default();
@@ -675,6 +796,31 @@ fn hermes_enhanced_path() -> String {
     // ClawPanel 管理的 uv 二进制目录
     extra.push(uv_bin_dir().to_string_lossy().to_string());
 
+    if let Some(bin) = hermes_uv_tool_bin_dir() {
+        extra.push(bin.to_string_lossy().to_string());
+    }
+    if let Some(bin) = hermes_uv_tool_venv_bin_dir() {
+        extra.push(bin.to_string_lossy().to_string());
+    }
+    if let Some(runtime) = portable_hermes_runtime_dir() {
+        #[cfg(target_os = "windows")]
+        extra.push(
+            runtime
+                .join("venv")
+                .join("Scripts")
+                .to_string_lossy()
+                .to_string(),
+        );
+        #[cfg(not(target_os = "windows"))]
+        extra.push(
+            runtime
+                .join("venv")
+                .join("bin")
+                .to_string_lossy()
+                .to_string(),
+        );
+    }
+
     // uv tool 安装的可执行文件目录
     #[cfg(target_os = "windows")]
     {
@@ -712,9 +858,29 @@ fn run_silent(program: &str, args: &[&str]) -> Result<String, String> {
     let enhanced = hermes_enhanced_path();
     let mut cmd = Command::new(program);
     cmd.args(args).env("PATH", &enhanced);
+    apply_hermes_runtime_env_std(&mut cmd);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
     let output = cmd.output().map_err(|e| format!("{program}: {e}"))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(stderr)
+    }
+}
+
+fn run_hermes_silent(args: &[&str]) -> Result<String, String> {
+    let hermes_cmd = hermes_executable_path().unwrap_or_else(|| PathBuf::from("hermes"));
+    let enhanced = hermes_enhanced_path();
+    let mut cmd = Command::new(&hermes_cmd);
+    cmd.args(args).env("PATH", &enhanced);
+    apply_hermes_runtime_env_std(&mut cmd);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    let output = cmd
+        .output()
+        .map_err(|e| format!("{}: {e}", hermes_cmd.display()))?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     } else {
@@ -727,6 +893,7 @@ fn run_silent(program: &str, args: &[&str]) -> Result<String, String> {
 fn run_at_path(program: &str, args: &[&str], path: &str) -> Result<String, String> {
     let mut cmd = Command::new(program);
     cmd.args(args).env("PATH", path);
+    apply_hermes_runtime_env_std(&mut cmd);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
     let output = cmd.output().map_err(|e| format!("{program}: {e}"))?;
@@ -859,6 +1026,7 @@ fn find_executable_path(name: &str, enhanced_path: &str) -> Option<String> {
     {
         let mut cmd = Command::new("where");
         cmd.arg(name).env("PATH", enhanced_path);
+        apply_hermes_runtime_env_std(&mut cmd);
         cmd.creation_flags(CREATE_NO_WINDOW);
         if let Ok(output) = cmd.output() {
             if output.status.success() {
@@ -872,6 +1040,7 @@ fn find_executable_path(name: &str, enhanced_path: &str) -> Option<String> {
     {
         let mut cmd = Command::new("which");
         cmd.arg(name).env("PATH", enhanced_path);
+        apply_hermes_runtime_env_std(&mut cmd);
         if let Ok(output) = cmd.output() {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1098,8 +1267,8 @@ fn hermes_dashboard_port() -> u16 {
 }
 
 fn hermes_dashboard_cli_status(port: u16) -> Option<(bool, String)> {
-    let output = run_silent("hermes", &["dashboard", "--status"])
-        .or_else(|_| run_silent("hermes", &["dashboard", "status"]))
+    let output = run_hermes_silent(&["dashboard", "--status"])
+        .or_else(|_| run_hermes_silent(&["dashboard", "status"]))
         .ok()?;
     let lower = output.to_ascii_lowercase();
     if lower.contains("not running")
@@ -1129,10 +1298,85 @@ fn hermes_dashboard_tcp_running(port: u16, timeout_ms: u64) -> bool {
         .is_ok()
 }
 
+async fn hermes_dashboard_http_ready(port: u16, timeout_ms: u64) -> bool {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(timeout_ms))
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+    let Ok(resp) = client
+        .get(format!("http://127.0.0.1:{port}/"))
+        .header("X-Hermes-Session-Token", HERMES_DASHBOARD_SESSION_TOKEN)
+        .send()
+        .await
+    else {
+        return false;
+    };
+    if !resp.status().is_success() {
+        return false;
+    }
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !content_type.contains("text/html") {
+        return false;
+    }
+    resp.text()
+        .await
+        .map(|body| body.contains("<!doctype html") || body.contains("<html"))
+        .unwrap_or(false)
+}
+
 fn hermes_dashboard_cli_stop() -> bool {
-    run_silent("hermes", &["dashboard", "--stop"])
-        .or_else(|_| run_silent("hermes", &["dashboard", "stop"]))
+    run_hermes_silent(&["dashboard", "--stop"])
+        .or_else(|_| run_hermes_silent(&["dashboard", "stop"]))
         .is_ok()
+}
+
+async fn ensure_managed_dashboard_ready(app: &tauri::AppHandle) -> Result<u16, String> {
+    let port = hermes_dashboard_port();
+    if hermes_dashboard_http_ready(port, 1500).await {
+        return Ok(port);
+    }
+
+    let result = hermes_dashboard_start(app.clone()).await?;
+    let started = result
+        .get("started")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !started {
+        let kind = result
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("spawn_failed");
+        let tail = result
+            .get("log_tail")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        return Err(format!(
+            "Dashboard 自动启动失败: {kind}{}",
+            if tail.trim().is_empty() {
+                String::new()
+            } else {
+                format!("\n最近日志:\n{tail}")
+            }
+        ));
+    }
+
+    for _ in 0..40 {
+        if hermes_dashboard_http_ready(port, 1500).await {
+            return Ok(port);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    Err(format!(
+        "Dashboard 已启动但 http://127.0.0.1:{port}/ 未就绪"
+    ))
 }
 
 /// 探测 Hermes Dashboard 是否在运行（TCP 连接 127.0.0.1 上的 dashboard 端口）
@@ -1141,15 +1385,9 @@ fn hermes_dashboard_cli_stop() -> bool {
 pub async fn hermes_dashboard_probe() -> Result<Value, String> {
     let port = hermes_dashboard_port();
     let cli_status = hermes_dashboard_cli_status(port);
-    let cli_running = cli_status.as_ref().map(|(running, _)| *running);
     let cli_output = cli_status.as_ref().map(|(_, output)| output.clone());
-    let running = tokio::task::spawn_blocking(move || {
-        let tcp_running = hermes_dashboard_tcp_running(port, 800);
-        tcp_running || cli_running.unwrap_or(false)
-    })
-    .await
-    .unwrap_or(false);
-    Ok(serde_json::json!({ "running": running, "port": port, "status": cli_output }))
+    let http_ready = hermes_dashboard_http_ready(port, 1500).await;
+    Ok(serde_json::json!({ "running": http_ready, "port": port, "status": cli_output }))
 }
 
 /// 我们 spawn 的 Dashboard 进程 PID（0 = 没有）
@@ -1196,14 +1434,12 @@ fn kill_dashboard_pid() -> bool {
 pub async fn hermes_dashboard_start(app: tauri::AppHandle) -> Result<Value, String> {
     let port = hermes_dashboard_port();
     // 1. 已运行？
-    if hermes_dashboard_tcp_running(port, 500)
-        || hermes_dashboard_cli_status(port)
-            .map(|(running, _)| running)
-            .unwrap_or(false)
-    {
+    if hermes_dashboard_tcp_running(port, 500) || hermes_dashboard_http_ready(port, 1500).await {
+        let ready = hermes_dashboard_http_ready(port, 1500).await;
         return Ok(serde_json::json!({
-            "started": true,
-            "already_running": true,
+            "started": ready,
+            "already_running": ready,
+            "kind": if ready { "ready" } else { "port_open_but_http_not_ready" },
             "port": port,
         }));
     }
@@ -1225,13 +1461,24 @@ pub async fn hermes_dashboard_start(app: tauri::AppHandle) -> Result<Value, Stri
         .map_err(|e| format!("克隆日志句柄失败: {e}"))?;
 
     let enhanced = hermes_enhanced_path();
-    let mut cmd = std::process::Command::new("hermes");
-    cmd.args(["dashboard"])
-        .current_dir(&home)
-        .env("PATH", &enhanced)
-        .stdin(std::process::Stdio::null())
-        .stdout(log_file)
-        .stderr(log_err);
+    let hermes_cmd = hermes_executable_path().unwrap_or_else(|| PathBuf::from("hermes"));
+    let port_arg = port.to_string();
+    let mut cmd = std::process::Command::new(&hermes_cmd);
+    cmd.args([
+        "dashboard",
+        "--no-open",
+        "--skip-build",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        port_arg.as_str(),
+    ])
+    .current_dir(&home)
+    .env("PATH", &enhanced)
+    .stdin(std::process::Stdio::null())
+    .stdout(log_file)
+    .stderr(log_err);
+    apply_hermes_runtime_env_std(&mut cmd);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
@@ -1297,7 +1544,7 @@ pub async fn hermes_dashboard_start(app: tauri::AppHandle) -> Result<Value, Stri
             }
             Ok(None) => {
                 // 还活着，探端口
-                if hermes_dashboard_tcp_running(port, 300) {
+                if hermes_dashboard_http_ready(port, 1500).await {
                     // PID 仍记录在 DASH_PID，供后续 stop 使用
                     return Ok(serde_json::json!({
                         "started": true,
@@ -1778,6 +2025,7 @@ fn hermes_uv_tool_root() -> Option<std::path::PathBuf> {
     let mut cmd = std::process::Command::new(&uv_cmd);
     cmd.args(["tool", "dir"]);
     cmd.env("PATH", hermes_enhanced_path());
+    apply_hermes_runtime_env_std(&mut cmd);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -2028,6 +2276,7 @@ async fn install_via_uv_tool(
     let mut cmd = tokio::process::Command::new(uv_path);
     cmd.args(["tool", "install", "--force", &pkg, "--python", "3.11"]);
     append_hermes_runtime_extras(&mut cmd);
+    apply_hermes_runtime_env_tokio(&mut cmd);
 
     // 配置 PyPI 镜像（extras 的依赖仍从 PyPI 下载）
     if let Some(mirror) = pypi_mirror_url() {
@@ -2081,6 +2330,7 @@ async fn install_via_uv_tool(
         // 更新 shell PATH
         let mut update_cmd = tokio::process::Command::new(uv_path);
         update_cmd.args(["tool", "update-shell"]);
+        apply_hermes_runtime_env_tokio(&mut update_cmd);
         #[cfg(target_os = "windows")]
         update_cmd.creation_flags(CREATE_NO_WINDOW);
         let _ = update_cmd.output().await;
@@ -2117,8 +2367,7 @@ async fn install_via_uv_pip(
     );
     let _ = app.emit("hermes-install-progress", 25u32);
 
-    let home = dirs::home_dir().unwrap_or_default();
-    let venv_dir = home.join(".hermes-venv");
+    let venv_dir = hermes_venv_dir();
     let venv_str = venv_dir.to_string_lossy().to_string();
 
     // 创建 venv
@@ -2128,6 +2377,7 @@ async fn install_via_uv_pip(
     );
     let mut venv_cmd = tokio::process::Command::new(uv_path);
     venv_cmd.args(["venv", &venv_str, "--python", "3.11"]);
+    apply_hermes_runtime_env_tokio(&mut venv_cmd);
     super::apply_proxy_env_tokio(&mut venv_cmd);
     #[cfg(target_os = "windows")]
     venv_cmd.creation_flags(CREATE_NO_WINDOW);
@@ -2152,6 +2402,7 @@ async fn install_via_uv_pip(
 
     let mut pip_cmd = tokio::process::Command::new(uv_path);
     pip_cmd.args(["pip", "install", &pkg]);
+    apply_hermes_runtime_env_tokio(&mut pip_cmd);
     pip_cmd.env("GIT_TERMINAL_PROMPT", "0");
     pip_cmd.env("VIRTUAL_ENV", &venv_str);
     if let Some(mirror) = pypi_mirror_url() {
@@ -2258,8 +2509,15 @@ pub async fn configure_hermes(
     // config.yaml 的 model.provider 字段。
     use super::hermes_providers;
 
-    let provider = normalize_hermes_provider_for_base_url(&provider, base_url.as_deref());
-    let pcfg = hermes_providers::get_provider(&provider);
+    let requested_provider = provider.trim().to_string();
+    let provider = normalize_hermes_provider_for_base_url(&requested_provider, base_url.as_deref());
+    let credential_provider = if requested_provider.eq_ignore_ascii_case("aizuopin") {
+        "aizuopin"
+    } else {
+        provider.as_str()
+    };
+    let pcfg = hermes_providers::get_provider(credential_provider)
+        .or_else(|| hermes_providers::get_provider(&provider));
 
     // 模型标识：优先使用调用方传入，否则用 provider 的首个已知模型；
     // aggregator 没有默认模型，要求调用方显式提供。
@@ -2286,18 +2544,31 @@ pub async fn configure_hermes(
     } else {
         format!("  provider: {provider}\n")
     };
+    let api_key_line = if !api_key.trim().is_empty()
+        && (provider == "custom" || requested_provider.eq_ignore_ascii_case("aizuopin"))
+    {
+        format!("  api_key: {}\n", api_key.trim())
+    } else {
+        String::new()
+    };
 
     let config_content = if config_path.exists() {
         // 读取现有配置，只更新 model 区块，保留其余内容
         let existing = std::fs::read_to_string(&config_path).unwrap_or_default();
-        merge_hermes_config_yaml(&existing, &model_str, &base_url_line, &provider_line)
+        merge_hermes_config_yaml(
+            &existing,
+            &model_str,
+            &base_url_line,
+            &provider_line,
+            &api_key_line,
+        )
     } else {
         // 首次创建：生成完整的基线配置
         format!(
             r#"# Hermes Agent configuration (managed by Zhizhua Workbench)
 model:
   default: {model_str}
-{provider_line}{base_url_line}platform_toolsets:
+{provider_line}{base_url_line}{api_key_line}platform_toolsets:
   api_server:
     - hermes-api-server
 terminal:
@@ -2314,8 +2585,9 @@ platforms:
     // ---- 写入 .env（合并模式：保留用户自定义的环境变量如 TAVILY_API_KEY 等） ----
     // 根据 provider 选择正确的 env var；OAuth/external_process 类没有 api_key_env_vars，
     // 此时跳过写 key（CLI 登录后 Hermes 会自行管理 auth.json）。
-    let key_env = hermes_providers::primary_api_key_env(&provider);
-    let url_env = hermes_providers::primary_base_url_env(&provider);
+    let key_env = hermes_providers::primary_api_key_env(credential_provider);
+    let url_env = hermes_providers::primary_base_url_env(credential_provider)
+        .or_else(|| hermes_providers::primary_base_url_env(&provider));
 
     // ClawPanel 管理的 key 列表：包含所有 provider 的 api_key_env_vars + base_url_env_vars
     // + ClawPanel 特定的两个 key。换 provider 时这些会被重写或清除。
@@ -2330,7 +2602,13 @@ platforms:
     if let Some(env) = key_env {
         if !api_key.trim().is_empty() {
             new_pairs.push((env.into(), api_key.trim().into()));
-            if provider == "custom" && env != "CUSTOM_API_KEY" {
+            if credential_provider == "aizuopin" {
+                for alias in ["OPENAI_API_KEY", "CUSTOM_API_KEY"] {
+                    if env != alias {
+                        new_pairs.push((alias.into(), api_key.trim().into()));
+                    }
+                }
+            } else if provider == "custom" && env != "CUSTOM_API_KEY" {
                 new_pairs.push(("CUSTOM_API_KEY".into(), api_key.trim().into()));
             }
         }
@@ -2381,6 +2659,7 @@ fn merge_hermes_config_yaml(
     model_str: &str,
     base_url_line: &str,
     provider_line: &str,
+    api_key_line: &str,
 ) -> String {
     let mut result = Vec::new();
     let mut in_model_block = false;
@@ -2405,6 +2684,9 @@ fn merge_hermes_config_yaml(
             // provider_line 仅在非空时写入，确保模型路由稳定。
             if !provider_line.is_empty() {
                 result.push(provider_line.trim_end().to_string());
+            }
+            if !api_key_line.is_empty() {
+                result.push(api_key_line.trim_end().to_string());
             }
             i += 1;
             // 跳过旧 model 区块的缩进行
@@ -2449,6 +2731,9 @@ fn merge_hermes_config_yaml(
         }
         if !provider_line.is_empty() {
             result.push(provider_line.trim_end().to_string());
+        }
+        if !api_key_line.is_empty() {
+            result.push(api_key_line.trim_end().to_string());
         }
     }
 
@@ -12655,7 +12940,7 @@ pub async fn hermes_read_config() -> Result<Value, String> {
         .collect();
 
     // 推断 provider：优先 config.yaml.model.provider，其次从 .env 反查
-    let provider_id: String = if !provider_from_yaml.is_empty() {
+    let mut provider_id: String = if !provider_from_yaml.is_empty() {
         provider_from_yaml.clone()
     } else {
         let keys_refs: Vec<&str> = env_map.keys().map(|s| s.as_str()).collect();
@@ -12663,6 +12948,17 @@ pub async fn hermes_read_config() -> Result<Value, String> {
             .map(String::from)
             .unwrap_or_default()
     };
+    if provider_id == "custom" && env_map.contains_key("AIZUOPIN_API_KEY") {
+        let base_hint = if !base_url_from_yaml.is_empty() {
+            base_url_from_yaml.clone()
+        } else {
+            env_map.get("OPENAI_BASE_URL").cloned().unwrap_or_default()
+        };
+        let base = normalize_provider_url(&base_hint);
+        if base == "https://ai.iazp.cn/v1" {
+            provider_id = "aizuopin".to_string();
+        }
+    }
 
     // 按 provider 的 api_key_env_vars 顺序拿 api_key
     let api_key: String = hermes_providers::get_provider(&provider_id)
@@ -12813,16 +13109,14 @@ fn hermes_venv_python() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    // 2. 旧的 ~/.hermes-venv 位置（uv pip install 路径）
-    if let Some(home) = dirs::home_dir() {
-        let venv_dir = home.join(".hermes-venv");
-        #[cfg(target_os = "windows")]
-        let py = venv_dir.join("Scripts").join("python.exe");
-        #[cfg(not(target_os = "windows"))]
-        let py = venv_dir.join("bin").join("python");
-        if py.exists() {
-            return Some(py);
-        }
+    // 2. uv pip install 备选安装路径（便携包内 data/runtime/hermes/venv 或旧 ~/.hermes-venv）
+    let venv_dir = hermes_venv_dir();
+    #[cfg(target_os = "windows")]
+    let py = venv_dir.join("Scripts").join("python.exe");
+    #[cfg(not(target_os = "windows"))]
+    let py = venv_dir.join("bin").join("python");
+    if py.exists() {
+        return Some(py);
     }
     // 3. uv tool 默认路径（ClawPanel 默认安装方式）
     hermes_uv_tool_python()
@@ -12837,7 +13131,8 @@ async fn run_venv_python_json(script: &str) -> Result<Value, String> {
     let mut cmd = tokio::process::Command::new(&py);
     cmd.arg("-c").arg(script);
     cmd.env("PYTHONIOENCODING", "utf-8");
-    cmd.env("PATH", super::enhanced_path());
+    cmd.env("PATH", hermes_enhanced_path());
+    apply_hermes_runtime_env_tokio(&mut cmd);
 
     let output = cmd
         .output()
@@ -13240,6 +13535,7 @@ pub async fn hermes_gateway_action(
 
                 // 2. 先精准杀掉之前我们 spawn 的进程
                 kill_gateway_pid();
+                cleanup_stale_gateway_runtime_files(&home);
                 // 如果仍有残留（非我们启动的），再 taskkill
                 tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                 if std::net::TcpStream::connect_timeout(
@@ -13270,7 +13566,9 @@ pub async fn hermes_gateway_action(
                     .try_clone()
                     .map_err(|e| format!("克隆日志句柄失败: {e}"))?;
 
-                let mut cmd = std::process::Command::new("hermes");
+                let hermes_cmd =
+                    hermes_executable_path().unwrap_or_else(|| PathBuf::from("hermes"));
+                let mut cmd = std::process::Command::new(&hermes_cmd);
                 cmd.args(["gateway", "run"])
                     .current_dir(&home)
                     .env("PATH", &enhanced)
@@ -13278,6 +13576,7 @@ pub async fn hermes_gateway_action(
                     .stdout(log_file)
                     .stderr(log_err)
                     .creation_flags(CREATE_NO_WINDOW);
+                apply_hermes_runtime_env_std(&mut cmd);
                 // 注入 .env 环境变量
                 let env_path = home.join(".env");
                 if let Ok(env_content) = std::fs::read_to_string(&env_path) {
@@ -13354,14 +13653,18 @@ pub async fn hermes_gateway_action(
                 let home = hermes_home();
                 // 先精准杀掉之前我们 spawn 的进程
                 kill_gateway_pid();
+                cleanup_stale_gateway_runtime_files(&home);
 
-                let mut cmd = std::process::Command::new("hermes");
+                let hermes_cmd =
+                    hermes_executable_path().unwrap_or_else(|| PathBuf::from("hermes"));
+                let mut cmd = std::process::Command::new(&hermes_cmd);
                 cmd.args(["gateway", "run"])
                     .current_dir(&home)
                     .env("PATH", &enhanced)
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null());
+                apply_hermes_runtime_env_std(&mut cmd);
 
                 // 注入 .env 环境变量
                 let env_path = home.join(".env");
@@ -13409,6 +13712,7 @@ pub async fn hermes_gateway_action(
                         // fallback: hermes gateway start
                         let mut fallback = tokio::process::Command::new("hermes");
                         fallback.args(["gateway", "start"]).env("PATH", &enhanced);
+                        apply_hermes_runtime_env_tokio(&mut fallback);
                         let out = fallback
                             .output()
                             .await
@@ -13442,6 +13746,7 @@ pub async fn hermes_gateway_action(
             // 2. 尝试 hermes gateway stop（作为补充）
             let mut cmd = tokio::process::Command::new("hermes");
             cmd.args(["gateway", "stop"]).env("PATH", &enhanced);
+            apply_hermes_runtime_env_tokio(&mut cmd);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let stop_result = cmd.output().await;
@@ -13485,6 +13790,7 @@ pub async fn hermes_gateway_action(
         "status" => {
             let mut cmd = tokio::process::Command::new("hermes");
             cmd.args(["gateway", "status"]).env("PATH", &enhanced);
+            apply_hermes_runtime_env_tokio(&mut cmd);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let out = cmd.output().await.map_err(|e| format!("查询失败: {e}"))?;
@@ -13494,6 +13800,7 @@ pub async fn hermes_gateway_action(
         "install" => {
             let mut cmd = tokio::process::Command::new("hermes");
             cmd.args(["gateway", "install"]).env("PATH", &enhanced);
+            apply_hermes_runtime_env_tokio(&mut cmd);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let out = cmd.output().await.map_err(|e| format!("安装失败: {e}"))?;
@@ -13506,6 +13813,7 @@ pub async fn hermes_gateway_action(
         "uninstall" => {
             let mut cmd = tokio::process::Command::new("hermes");
             cmd.args(["gateway", "uninstall"]).env("PATH", &enhanced);
+            apply_hermes_runtime_env_tokio(&mut cmd);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let out = cmd.output().await.map_err(|e| format!("卸载失败: {e}"))?;
@@ -13783,6 +14091,7 @@ pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
     let mut cmd = tokio::process::Command::new(&uv);
     cmd.args(["tool", "install", "--reinstall", &pkg, "--python", "3.11"]);
     append_hermes_runtime_extras(&mut cmd);
+    apply_hermes_runtime_env_tokio(&mut cmd);
     let _ = app.emit("hermes-install-progress", 20u32);
     let _ = app.emit(
         "hermes-install-log",
@@ -13849,6 +14158,7 @@ pub async fn uninstall_hermes(app: tauri::AppHandle, clean_config: bool) -> Resu
     // uv tool uninstall
     let mut cmd = tokio::process::Command::new(&uv);
     cmd.args(["tool", "uninstall", "hermes-agent"]);
+    apply_hermes_runtime_env_tokio(&mut cmd);
     let _ = app.emit("hermes-install-log", "> uv tool uninstall hermes-agent");
     cmd.env("PATH", hermes_enhanced_path());
     #[cfg(target_os = "windows")]
@@ -13869,7 +14179,7 @@ pub async fn uninstall_hermes(app: tauri::AppHandle, clean_config: bool) -> Resu
     let _ = app.emit("hermes-install-progress", 65u32);
 
     // 清理 venv（如果存在）
-    let venv_dir = dirs::home_dir().unwrap_or_default().join(".hermes-venv");
+    let venv_dir = hermes_venv_dir();
     if venv_dir.exists() {
         let _ = app.emit(
             "hermes-install-log",
@@ -14524,11 +14834,14 @@ pub async fn hermes_run_status(run_id: String) -> Result<Value, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn hermes_session_export(session_id: String) -> Result<Value, String> {
+pub async fn hermes_session_export(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<Value, String> {
     if session_id.is_empty() {
         return Err("session_id 不能为空".to_string());
     }
-    let port = hermes_dashboard_port();
+    let port = ensure_managed_dashboard_ready(&app).await?;
     let url = format!("http://127.0.0.1:{port}/api/sessions/{session_id}/messages");
 
     let client = reqwest::Client::builder()
@@ -14536,12 +14849,11 @@ pub async fn hermes_session_export(session_id: String) -> Result<Value, String> 
         .build()
         .map_err(|e| format!("HTTP 客户端创建失败: {e}"))?;
 
-    let resp = client.get(&url).send().await.map_err(|e| {
-        format!(
-            "export 请求失败: {}（提示：请先启动 Dashboard）",
-            reqwest_error_detail(&e)
-        )
-    })?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("export 请求失败: {}", reqwest_error_detail(&e)))?;
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -14611,7 +14923,15 @@ async fn fetch_dashboard_session_token(port: u16) -> Result<String, String> {
     Err("无法从 dashboard HTML 提取 session token（dashboard 可能未启动）".to_string())
 }
 
-async fn dashboard_session_token(port: u16, force_refresh: bool) -> Result<String, String> {
+async fn dashboard_session_token(_port: u16, _force_refresh: bool) -> Result<String, String> {
+    Ok(HERMES_DASHBOARD_SESSION_TOKEN.to_string())
+}
+
+#[allow(dead_code)]
+async fn dashboard_session_token_from_html(
+    port: u16,
+    force_refresh: bool,
+) -> Result<String, String> {
     if !force_refresh {
         if let Ok(guard) = DASHBOARD_SESSION_TOKEN.lock() {
             if let Some(t) = guard.as_ref() {
@@ -14628,12 +14948,13 @@ async fn dashboard_session_token(port: u16, force_refresh: bool) -> Result<Strin
 
 #[tauri::command]
 pub async fn hermes_dashboard_api_proxy(
+    app: tauri::AppHandle,
     method: String,
     path: String,
     body: Option<String>,
     headers: Option<Value>,
 ) -> Result<Value, String> {
-    let port = hermes_dashboard_port();
+    let port = ensure_managed_dashboard_ready(&app).await?;
     let url = format!("http://127.0.0.1:{port}{path}");
 
     let client = reqwest::Client::builder()
@@ -14673,12 +14994,10 @@ pub async fn hermes_dashboard_api_proxy(
 
     // 拿缓存的 token（首次为空，让 send 触发 401 再抓）
     let mut token = dashboard_session_token(port, false).await.ok();
-    let resp = build_request(token.as_deref())?.send().await.map_err(|e| {
-        format!(
-            "Dashboard 请求失败: {}（提示：请先启动 Dashboard）",
-            reqwest_error_detail(&e)
-        )
-    })?;
+    let resp = build_request(token.as_deref())?
+        .send()
+        .await
+        .map_err(|e| format!("Dashboard 请求失败: {}", reqwest_error_detail(&e)))?;
 
     let status = resp.status();
     if status.as_u16() == 401 {
@@ -17074,6 +17393,7 @@ pub async fn hermes_multi_gateway_start(
         .stdin(std::process::Stdio::null())
         .stdout(log_file)
         .stderr(log_err);
+    apply_hermes_runtime_env_std(&mut cmd);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 

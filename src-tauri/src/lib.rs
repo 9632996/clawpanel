@@ -1,15 +1,18 @@
 mod commands;
 mod models;
+mod single_instance;
 mod tray;
 mod utils;
 
 use commands::{
-    agent, assistant, cli_conflict, config, device, diagnose, extensions, hermes, hermes_providers,
-    logs, memory, messaging, pairing, service, skills, update,
+    agent, assistant, cli_conflict, codewhale, codex, config, device, diagnose, extensions, hermes,
+    hermes_providers, logs, memory, messaging, model_tools, pairing, service, skills, update,
 };
-use tauri::Manager;
-
 pub fn run() {
+    let Some(_single_instance_guard) = single_instance::SingleInstanceGuard::acquire() else {
+        return;
+    };
+
     let hot_update_dir = commands::openclaw_dir()
         .join("clawpanel")
         .join("web-update");
@@ -101,6 +104,9 @@ pub fn run() {
             config::get_assistant_default_model_config,
             config::assistant_call_model,
             config::scan_model_client_configs,
+            model_tools::list_model_tools,
+            model_tools::apply_model_to_tool,
+            model_tools::restore_tool_model_config,
             config::list_openclaw_versions,
             config::upgrade_openclaw,
             config::uninstall_openclaw,
@@ -123,6 +129,11 @@ pub fn run() {
             config::doctor_fix,
             config::doctor_check,
             config::relaunch_app,
+            codex::codex_status,
+            codex::codex_launch_app,
+            codex::codex_run_once,
+            codewhale::codewhale_status,
+            codewhale::codewhale_run_once,
             // 设备密钥 + Gateway 握手
             device::create_connect_frame,
             // 设备配对
@@ -394,16 +405,11 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let app = window.app_handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ =
-                        crate::commands::service::stop_service("ai.openclaw.gateway".into()).await;
-                    app.exit(0);
-                });
+                let _ = window.hide();
             }
         })
         .build(tauri::generate_context!())
-        .expect("启动智爪多智能体工作台失败")
+        .expect("启动智爪平台失败")
         .run(|_app, _event| {});
 }
 

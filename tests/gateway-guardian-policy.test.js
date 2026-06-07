@@ -7,7 +7,7 @@ import {
   STABLE_RUNNING_MS,
   evaluateAutoRestartAttempt,
   shouldResetAutoRestartCount,
-} from '../src/lib/gateway-guardian-policy.js'
+} from '../src/lib/gateway-guardian-policy.ts'
 
 test('短暂恢复运行不应立即清零自动重启计数', () => {
   assert.equal(

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const channelsPageSource = readFileSync(new URL('../src/pages/channels.js', import.meta.url), 'utf8')
+const channelsPageSource = readFileSync(new URL('../src/pages/channels.ts', import.meta.url), 'utf8')
 
 function getRegistryBlock(platformId) {
   const start = channelsPageSource.indexOf(`  ${platformId}: {`)

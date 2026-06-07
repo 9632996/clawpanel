@@ -5,7 +5,7 @@ import {
   API_TYPES,
   PROVIDER_PRESETS,
   MODEL_PRESETS,
-} from '../src/lib/model-presets.js'
+} from '../src/lib/model-presets.ts'
 
 // ===== Provider Presets =====
 

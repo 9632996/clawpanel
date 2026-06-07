@@ -234,6 +234,18 @@ async fn gateway_health_ready(timeout: Duration) -> bool {
     let Ok(client) = reqwest::Client::builder().timeout(timeout).build() else {
         return false;
     };
+    if let Ok(resp) = client
+        .get(format!("http://127.0.0.1:{port}/readyz"))
+        .send()
+        .await
+    {
+        if resp.status().is_success() {
+            if let Ok(body) = resp.json::<serde_json::Value>().await {
+                return body.get("ready").and_then(|v| v.as_bool()).unwrap_or(false);
+            }
+            return true;
+        }
+    }
     match client
         .get(format!("http://127.0.0.1:{port}/health"))
         .send()
@@ -996,7 +1008,7 @@ mod platform {
             .stderr(stderr_log);
         cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                "OpenClaw CLI 未找到，请确认便携运行时完整并重启智爪多智能体工作台。".to_string()
+                "OpenClaw CLI 未找到，请确认便携运行时完整并重启智爪平台。".to_string()
             } else {
                 format!("启动 Gateway 失败: {e}")
             }
@@ -2227,6 +2239,7 @@ pub async fn get_services_status() -> Result<Vec<ServiceStatus>, String> {
     let mut results = Vec::new();
     for label in labels.iter().map(String::as_str) {
         let (running, pid) = current_gateway_runtime(label).await;
+        let ready = running && gateway_health_ready(Duration::from_secs(2)).await;
         let owner = read_gateway_owner();
         let mut owned_by_current_instance = running
             && owner
@@ -2256,6 +2269,7 @@ pub async fn get_services_status() -> Result<Vec<ServiceStatus>, String> {
             label: label.to_string(),
             pid,
             running,
+            ready: Some(ready),
             description: desc_map.get(label).unwrap_or(&"").to_string(),
             cli_installed,
             ownership,

@@ -1,4 +1,4 @@
-﻿{
+{
   "common": {
     "save": "儲存",
     "cancel": "取消",
@@ -1672,7 +1672,7 @@
     "sectionLinks": "快捷連結",
     "sectionAboutUs": "關於我們",
     "techStack": "ClawPanel 基於 Tauri v2 構建，前端 Vanilla JS + Vite，後端 Rust。",
-    "copyright": "© 2026 AI作品 · 智爪多智能體工作台",
+    "copyright": "© 2026 AI作品 · 智爪平台",
     "checkingUpdate": "檢查更新中...",
     "official": "原版",
     "chinese": "漢化版",

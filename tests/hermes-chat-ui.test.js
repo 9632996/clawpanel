@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const source = readFileSync(new URL('../src/engines/hermes/pages/chat.js', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../src/engines/hermes/pages/chat.ts', import.meta.url), 'utf8')
 const css = readFileSync(new URL('../src/engines/hermes/style/hermes.css', import.meta.url), 'utf8')
 
 function cssBlock(selector) {
@@ -14,8 +14,8 @@ test('Hermes 聊天页健康提示使用 svgIcon 时必须导入图标工具', (
   assert.match(source, /svgIcon\('alert-triangle'/, '缺少健康提示图标渲染')
   assert.match(
     source,
-    /import\s+\{\s*svgIcon\s*\}\s+from\s+['"]\.\.\/lib\/svg-icons\.js['"]/,
-    'chat.js 使用 svgIcon 前必须导入 Hermes 图标工具',
+    /import\s+\{\s*svgIcon\s*\}\s+from\s+['"]\.\.\/lib\/svg-icons\.ts['"]/,
+    'chat.ts 使用 svgIcon 前必须导入 Hermes 图标工具',
   )
 })
 

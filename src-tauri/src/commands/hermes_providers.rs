@@ -361,6 +361,20 @@ const P_XIAOMI: HermesProvider = HermesProvider {
     cli_auth_hint: "",
 };
 
+const P_AIZUOPIN: HermesProvider = HermesProvider {
+    id: "aizuopin",
+    name: "Aizuopin",
+    auth_type: AUTH_API_KEY,
+    base_url: "https://ai.iazp.cn/v1",
+    base_url_env_var: "OPENAI_BASE_URL",
+    api_key_env_vars: &["AIZUOPIN_API_KEY", "OPENAI_API_KEY", "CUSTOM_API_KEY"],
+    transport: TRANSPORT_OPENAI_CHAT,
+    models_probe: PROBE_OPENAI,
+    models: &["gpt-5.4", "gpt-5.5"],
+    is_aggregator: false,
+    cli_auth_hint: "",
+};
+
 const P_ARCEE: HermesProvider = HermesProvider {
     id: "arcee",
     name: "Arcee AI",
@@ -727,6 +741,7 @@ pub const ALL_PROVIDERS: &[HermesProvider] = &[
     P_ALIBABA_CODING_PLAN,
     P_MINIMAX_CN,
     P_XIAOMI,
+    P_AIZUOPIN,
     // SDK-backed providers
     P_BEDROCK,
     // Aggregators / routers
@@ -792,7 +807,12 @@ pub fn all_managed_env_keys() -> Vec<&'static str> {
         }
     }
     // ClawPanel-specific keys
-    for extra in &["GATEWAY_ALLOW_ALL_USERS", "API_SERVER_KEY"] {
+    for extra in &[
+        "GATEWAY_ALLOW_ALL_USERS",
+        "API_SERVER_KEY",
+        "AIZUOPIN_API_KEY",
+        "CUSTOM_BASE_URL",
+    ] {
         if !out.contains(extra) {
             out.push(extra);
         }

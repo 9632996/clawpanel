@@ -1,0 +1,19 @@
+{
+  "standalone": {
+    "baseUrl": "https://dl.qrj.ai/openclaw-standalone",
+    "enabled": true
+  },
+  "r2": {
+    "baseUrl": "https://dl.qrj.ai/openclaw-zh",
+    "enabled": true
+  },
+  "default": {
+    "official": {
+      "recommended": "2026.5.31"
+    },
+    "chinese": {
+      "recommended": "2026.5.18-zh.1"
+    }
+  },
+  "panels": {}
+}

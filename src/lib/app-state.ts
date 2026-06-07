@@ -1,0 +1,465 @@
+// @ts-nocheck
+/**
+ * 全局应用状态
+ * 管理 openclaw 安装状态，供各组件查询
+ */
+import { api } from './tauri-api.ts'
+
+const isTauri = !!window.__TAURI_INTERNALS__
+
+let _openclawReady = false
+let _gatewayRunning = false
+let _gatewayForeign = false
+let _platform = ''  // 'macos' | 'win32' | ...
+let _deployMode = 'local' // 'local' | 'docker'
+let _inDocker = false
+let _dockerAvailable = false
+let _listeners = []
+let _gwListeners = []
+let _gwStopCount = 0  // 连续检测到"停止"的次数，防抖用
+let _isUpgrading = false // 升级/切换版本期间，阻止 setup 跳转
+let _userStopped = false // 用户主动停止，不自动拉起
+let _gatewayRunningSince = 0 // Gateway 最近一次进入稳定运行状态的时间
+let _guardianListeners = [] // 守护放弃时的回调（后端 guardian-event 触发）
+let _gatewayOperation = null // 当前 Gateway 启停/安装操作，全局按钮共用
+let _gatewayOperationPromise = null
+let _gatewayOperationListeners = []
+let _gatewayOperationSeq = 0
+let _configApplyTimer = null
+let _configApplyInFlight = false
+let _configApplyRequested = false
+let _configApplyReason = ''
+
+const CONFIG_APPLY_DELAY_MS = 3000
+const CONFIG_APPLY_STARTUP_GRACE_MS = 30000
+
+const GATEWAY_ACTION_SELECTOR = [
+  '#btn-restart-gw',
+  '#btn-gw-start',
+  '#btn-gw-claim',
+  '#btn-gw-recover-fix',
+  '#btn-gw-recover-restart',
+  '[data-action="start-gw"]',
+  '[data-action="stop-gw"]',
+  '[data-action="restart-gw"]',
+  '[data-action="claim-gateway"]',
+  '[data-action="install-gateway"]',
+  '[data-action="uninstall-gateway"]',
+  '[data-action="start"][data-label="ai.openclaw.gateway"]',
+  '[data-action="stop"][data-label="ai.openclaw.gateway"]',
+  '[data-action="restart"][data-label="ai.openclaw.gateway"]',
+  '[data-action="save-config"]',
+].join(',')
+
+/** openclaw 是否就绪（CLI 已安装 + 配置文件存在） */
+export function isOpenclawReady() {
+  // 升级期间视为就绪，避免跳转到 setup
+  if (_isUpgrading) return true
+  return _openclawReady
+}
+
+/** 标记升级中（阻止 setup 跳转） */
+export function setUpgrading(v) { _isUpgrading = !!v }
+export function isUpgrading() { return _isUpgrading }
+
+/** 标记用户主动停止 Gateway（不触发自动重启） */
+export function setUserStopped(v) { _userStopped = !!v }
+export function isUserStopped() { return _userStopped }
+
+/** 重置守护状态（用户手动启动后重置） */
+export function resetAutoRestart() {
+  _gatewayRunningSince = 0
+  _userStopped = false
+}
+
+/** 监听守护放弃事件（连续重启失败后触发，UI 可弹出恢复选项） */
+export function onGuardianGiveUp(fn) {
+  _guardianListeners.push(fn)
+  return () => { _guardianListeners = _guardianListeners.filter(cb => cb !== fn) }
+}
+
+export function getGatewayOperation() {
+  return _gatewayOperation
+}
+
+export function isGatewayOperationActive() {
+  return !!_gatewayOperation
+}
+
+export function onGatewayOperationChange(fn) {
+  _gatewayOperationListeners.push(fn)
+  return () => { _gatewayOperationListeners = _gatewayOperationListeners.filter(cb => cb !== fn) }
+}
+
+function _emitGatewayOperationChange() {
+  _gatewayOperationListeners.forEach(fn => { try { fn(_gatewayOperation) } catch {} })
+}
+
+function gatewayActionForButton(btn) {
+  const action = btn.dataset?.action || ''
+  const label = btn.dataset?.label || ''
+  if (btn.id === 'btn-restart-gw') return 'restart'
+  if (btn.id === 'btn-gw-start' || btn.id === 'btn-gw-recover-restart') return 'start'
+  if (btn.id === 'btn-gw-claim') return 'claim'
+  if (btn.id === 'btn-gw-recover-fix') return 'fix'
+
+  if (action === 'start-gw') return 'start'
+  if (action === 'stop-gw') return 'stop'
+  if (action === 'restart-gw') return 'restart'
+  if (action === 'claim-gateway') return 'claim'
+  if (action === 'install-gateway') return 'install'
+  if (action === 'uninstall-gateway') return 'uninstall'
+  if (action === 'save-config') return 'restart'
+  if (['start', 'stop', 'restart'].includes(action) && label === 'ai.openclaw.gateway') {
+    return action
+  }
+  return ''
+}
+
+function gatewayButtonMatchesOperation(btn, op) {
+  const buttonAction = gatewayActionForButton(btn)
+  if (!buttonAction || !op?.action) return false
+  if (buttonAction === op.action) return true
+  if (buttonAction === 'restart' && op.action === 'reload') return true
+  return false
+}
+
+export function syncGatewayActionButtons(root = document) {
+  if (!root?.querySelectorAll) return
+  const op = _gatewayOperation
+  root.querySelectorAll(GATEWAY_ACTION_SELECTOR).forEach(btn => {
+    if (!(btn instanceof HTMLElement)) return
+    if (op) {
+      if (btn.dataset.gatewayOpLocked !== '1') {
+        btn.dataset.gatewayOpLocked = '1'
+        btn.dataset.gatewayOpWasDisabled = btn.disabled ? '1' : '0'
+        btn.dataset.gatewayOpTitle = btn.getAttribute('title') || ''
+      }
+      btn.disabled = true
+      if (gatewayButtonMatchesOperation(btn, op)) {
+        btn.classList.add('btn-loading')
+        btn.dataset.gatewayOpLoading = '1'
+      } else if (btn.dataset.gatewayOpLoading === '1') {
+        btn.classList.remove('btn-loading')
+        delete btn.dataset.gatewayOpLoading
+      }
+      btn.setAttribute('title', op.label || 'Gateway 操作执行中')
+    } else if (btn.dataset.gatewayOpLocked === '1') {
+      btn.disabled = btn.dataset.gatewayOpWasDisabled === '1'
+      if (btn.dataset.gatewayOpLoading === '1') {
+        btn.classList.remove('btn-loading')
+      }
+      const originalTitle = btn.dataset.gatewayOpTitle || ''
+      if (originalTitle) btn.setAttribute('title', originalTitle)
+      else btn.removeAttribute('title')
+      delete btn.dataset.gatewayOpLocked
+      delete btn.dataset.gatewayOpWasDisabled
+      delete btn.dataset.gatewayOpTitle
+      delete btn.dataset.gatewayOpLoading
+    }
+  })
+}
+
+export async function runGatewayOperation(action, fn, opts = {}) {
+  if (_gatewayOperationPromise) {
+    if (_gatewayOperation?.action === action && opts.joinExisting !== false) {
+      return _gatewayOperationPromise
+    }
+    const err = new Error(_gatewayOperation?.label ? `${_gatewayOperation.label}，请稍候` : 'Gateway 操作执行中，请稍候')
+    err.code = 'GATEWAY_OPERATION_IN_FLIGHT'
+    throw err
+  }
+
+  _gatewayOperation = {
+    id: ++_gatewayOperationSeq,
+    action,
+    label: opts.label || 'Gateway 操作执行中',
+    startedAt: Date.now(),
+  }
+  _emitGatewayOperationChange()
+
+  _gatewayOperationPromise = (async () => {
+    try {
+      return await fn()
+    } finally {
+      _gatewayOperation = null
+      _gatewayOperationPromise = null
+      _emitGatewayOperationChange()
+      refreshGatewayStatus().catch(() => {})
+    }
+  })()
+  return _gatewayOperationPromise
+}
+
+export function scheduleGatewayConfigApply(opts = {}) {
+  const reason = opts.reason || 'config-change'
+  const delayMs = Number.isFinite(opts.delayMs) ? opts.delayMs : CONFIG_APPLY_DELAY_MS
+  const force = opts.force === true
+
+  _configApplyRequested = true
+  _configApplyReason = reason
+
+  if (_configApplyTimer) clearTimeout(_configApplyTimer)
+  _configApplyTimer = setTimeout(() => {
+    _configApplyTimer = null
+    applyPendingGatewayConfig({ force }).catch(err => {
+      console.warn('[gateway-lifecycle] apply config failed:', err)
+    })
+  }, Math.max(0, delayMs))
+}
+
+export function cancelGatewayConfigApply() {
+  if (_configApplyTimer) {
+    clearTimeout(_configApplyTimer)
+    _configApplyTimer = null
+  }
+  _configApplyRequested = false
+  _configApplyReason = ''
+}
+
+export async function applyPendingGatewayConfig(opts = {}) {
+  if (!_configApplyRequested && !opts.force) return { applied: false, reason: 'no-pending-change' }
+  if (_configApplyInFlight) return { applied: false, reason: 'already-running' }
+
+  if (_userStopped || !_gatewayRunning || _gatewayForeign) {
+    _configApplyRequested = false
+    return { applied: false, reason: 'gateway-stopped' }
+  }
+
+  const runningAge = _gatewayRunningSince ? Date.now() - _gatewayRunningSince : 0
+  if (!opts.force && runningAge < CONFIG_APPLY_STARTUP_GRACE_MS) {
+    scheduleGatewayConfigApply({
+      reason: _configApplyReason || 'startup-grace',
+      delayMs: CONFIG_APPLY_STARTUP_GRACE_MS - runningAge,
+    })
+    return { applied: false, reason: 'startup-grace' }
+  }
+
+  _configApplyInFlight = true
+  try {
+    const result = await runGatewayOperation('restart', async () => {
+      const reloadResult = await api.reloadGateway()
+      await waitForGatewayServiceState(true, { timeoutMs: 150000 })
+      markGatewayRunning()
+      return reloadResult
+    }, {
+      label: opts.label || 'Gateway 配置应用中',
+      joinExisting: false,
+    })
+    _configApplyRequested = false
+    _configApplyReason = ''
+    return { applied: true, result }
+  } finally {
+    _configApplyInFlight = false
+  }
+}
+
+export async function writeGatewayConfig(config, opts = {}) {
+  const result = await api.writeOpenclawConfig(config)
+  if (opts.apply === 'now') {
+    _configApplyRequested = true
+    _configApplyReason = opts.reason || 'config-change'
+    await applyPendingGatewayConfig({ force: true, label: opts.label })
+  } else if (opts.apply !== false) {
+    scheduleGatewayConfigApply({ reason: opts.reason || 'config-change', delayMs: opts.delayMs })
+  }
+  return result
+}
+
+/** Gateway 是否正在运行（仅 owned） */
+export function isGatewayRunning() {
+  return _gatewayRunning
+}
+
+/** Gateway 是否在运行但属于外部实例 */
+export function isGatewayForeign() {
+  return _gatewayForeign
+}
+
+export function markGatewayStopped() {
+  _gwStopCount = 3
+  _setGatewayRunning(false, false)
+}
+
+export function markGatewayRunning() {
+  _gwStopCount = 0
+  _setGatewayRunning(true, false)
+}
+
+/** 获取后端平台 ('macos' | 'win32') */
+export function getPlatform() {
+  return _platform
+}
+export function isMacPlatform() {
+  return _platform === 'macos'
+}
+
+/** 部署模式 */
+export function getDeployMode() { return _deployMode }
+export function isInDocker() { return _inDocker }
+export function isDockerAvailable() { return _dockerAvailable }
+
+/** 实例管理 */
+let _activeInstance = { id: 'local', name: '本机', type: 'local' }
+let _instanceListeners = []
+
+export function getActiveInstance() { return _activeInstance }
+export function isLocalInstance() { return _activeInstance.type === 'local' }
+
+export function onInstanceChange(fn) {
+  _instanceListeners.push(fn)
+  return () => { _instanceListeners = _instanceListeners.filter(cb => cb !== fn) }
+}
+
+export async function switchInstance(id) {
+  // instanceSetActive 内部已调用 _cache.clear()，切换后所有缓存自动失效
+  await api.instanceSetActive(id)
+  const data = await api.instanceList()
+  _activeInstance = data.instances.find(i => i.id === id) || data.instances[0]
+  _instanceListeners.forEach(fn => { try { fn(_activeInstance) } catch {} })
+}
+
+export async function loadActiveInstance() {
+  try {
+    const data = await api.instanceList()
+    _activeInstance = data.instances.find(i => i.id === data.activeId) || data.instances[0]
+  } catch {
+    _activeInstance = { id: 'local', name: '本机', type: 'local' }
+  }
+}
+
+/** 监听 Gateway 状态变化 */
+export function onGatewayChange(fn) {
+  _gwListeners.push(fn)
+  return () => { _gwListeners = _gwListeners.filter(cb => cb !== fn) }
+}
+
+/** 检测 openclaw 安装状态 */
+export async function detectOpenclawStatus() {
+  try {
+    const [installation, services] = await Promise.allSettled([
+      api.checkInstallation(),
+      api.getServicesStatus(),
+    ])
+    const configExists = installation.status === 'fulfilled' && installation.value?.installed
+    if (installation.status === 'fulfilled' && installation.value?.platform) {
+      _platform = installation.value.platform
+    }
+    if (installation.status === 'fulfilled' && installation.value?.inDocker) {
+      _inDocker = true
+      _deployMode = 'docker'
+    }
+    const cliInstalled = services.status === 'fulfilled'
+      && services.value?.length > 0
+      && services.value[0]?.cli_installed !== false
+    _openclawReady = configExists && cliInstalled
+
+    // 顺便检测 Gateway 运行状态
+    if (services.status === 'fulfilled' && services.value?.length > 0) {
+      const gw = services.value.find?.(s => s.label === 'ai.openclaw.gateway') || services.value[0]
+      const foreign = gw?.running === true && gw?.owned_by_current_instance === false
+      _setGatewayRunning(gw?.running === true && !foreign, foreign)
+    }
+  } catch {
+    _openclawReady = false
+  }
+  _listeners.forEach(fn => { try { fn(_openclawReady) } catch {} })
+  return _openclawReady
+}
+
+function _setGatewayRunning(val, foreign = false) {
+  const wasRunning = _gatewayRunning
+  const wasForeign = _gatewayForeign
+  const changed = wasRunning !== val || wasForeign !== foreign
+  _gatewayRunning = val
+  _gatewayForeign = foreign
+  if (changed) {
+    if (val) {
+      // 仅记录恢复运行时间，避免短暂存活就把重启计数清零
+      _gatewayRunningSince = Date.now()
+    } else if (wasRunning && !_userStopped && !_isUpgrading && _openclawReady && !foreign) {
+      _gatewayRunningSince = 0
+      // Gateway 意外停止 → 后端 Rust guardian 负责自动重启，前端仅更新 UI 状态
+      console.log('[app-state] Gateway 意外停止，等待后端 guardian 重启...')
+    } else if (!val) {
+      _gatewayRunningSince = 0
+    }
+    _gwListeners.forEach(fn => { try { fn(val, foreign) } catch {} })
+  }
+}
+
+/** 刷新 Gateway 运行状态（轻量，仅查服务状态）
+ *  防抖：running→stopped 需要连续 3 次检测才切换，避免瞬态误判 */
+export async function refreshGatewayStatus() {
+  try {
+    const services = await api.getServicesStatus()
+    if (services?.length > 0) {
+      const gw = services.find?.(s => s.label === 'ai.openclaw.gateway') || services[0]
+      const ownedRunning = gw?.running === true && gw?.owned_by_current_instance !== false
+      const foreignRunning = gw?.running === true && gw?.owned_by_current_instance === false
+      const nowRunning = ownedRunning
+      if (nowRunning) {
+        _gwStopCount = 0
+        if (!_gatewayRunning) {
+          _setGatewayRunning(true, false)
+        }
+      } else {
+        if (foreignRunning) {
+          _gwStopCount = 0
+        } else {
+          _gwStopCount++
+        }
+        if (foreignRunning || _gwStopCount >= 3 || !_gatewayRunning) {
+          _setGatewayRunning(false, foreignRunning)
+        }
+      }
+    }
+  } catch {
+    _gwStopCount++
+    if (_gwStopCount >= 3) _setGatewayRunning(false)
+  }
+  return _gatewayRunning
+}
+
+export async function waitForGatewayServiceState(expectRunning, opts = {}) {
+  const timeoutMs = Number.isFinite(opts.timeoutMs) ? opts.timeoutMs : (expectRunning ? 150000 : 30000)
+  const intervalMs = Number.isFinite(opts.intervalMs) ? opts.intervalMs : 1500
+  const requirePort = opts.requirePort ?? expectRunning
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const services = await api.getServicesStatus()
+      const gw = services?.find?.(s => s.label === 'ai.openclaw.gateway') || services?.[0]
+      const foreign = gw?.running === true && gw?.owned_by_current_instance === false
+      const running = gw?.running === true && !foreign
+
+      if (running === expectRunning) {
+        if (!expectRunning || !requirePort) return true
+        try {
+          if (await api.probeGatewayPort()) return true
+        } catch {}
+      }
+    } catch {}
+
+    await new Promise(r => setTimeout(r, intervalMs))
+  }
+
+  return false
+}
+
+let _pollTimer = null
+/** 启动 Gateway 状态轮询（每 15 秒检测一次） */
+export function startGatewayPoll() {
+  if (_pollTimer) return
+  _pollTimer = setInterval(() => refreshGatewayStatus(), 15000)
+}
+export function stopGatewayPoll() {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null }
+}
+
+/** 监听状态变化 */
+export function onReadyChange(fn) {
+  _listeners.push(fn)
+  return () => { _listeners = _listeners.filter(cb => cb !== fn) }
+}

@@ -6,6 +6,30 @@ import { homedir } from 'os'
 
 // 读取 package.json 版本号，构建时注入前端
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+const zhizhuaServiceUrl = (process.env.VITE_ZHIZHUA_SERVICE_URL || 'https://ai.iazp.cn').replace(/\/+$/, '')
+const zhizhuaModelBaseUrl = (process.env.VITE_ZHIZHUA_MODEL_BASE_URL || `${zhizhuaServiceUrl}/v1`).replace(/\/+$/, '')
+
+function zhizhuaUrlPlugin() {
+  const replacements = new Map([
+    ['https://ai.iazp.cn/v1', zhizhuaModelBaseUrl],
+    ['https://ai.iazp.cn', zhizhuaServiceUrl],
+    ['ai.iazp.cn', zhizhuaServiceUrl.replace(/^https?:\/\//, '')],
+  ])
+  return {
+    name: 'zhizhua-url-config',
+    transform(code, id) {
+      if (!/\.(js|ts|html)$/.test(id)) return null
+      let next = code
+      for (const [from, to] of replacements) next = next.split(from).join(to)
+      return next === code ? null : { code: next, map: null }
+    },
+    transformIndexHtml(html) {
+      let next = html
+      for (const [from, to] of replacements) next = next.split(from).join(to)
+      return next
+    },
+  }
+}
 
 // 读取 Gateway 端口（启动时读取一次）
 // 注意：Gateway 默认端口是 18789，不是 18790
@@ -25,11 +49,15 @@ try {
 }
 
 console.log(`[vite] Gateway WebSocket 代理目标: ws://127.0.0.1:${gatewayPort}`)
+console.log(`[vite] Zhizhua service URL: ${zhizhuaServiceUrl}`)
+console.log(`[vite] Zhizhua model base URL: ${zhizhuaModelBaseUrl}`)
 
 export default defineConfig({
-  plugins: [devApiPlugin()],
+  plugins: [zhizhuaUrlPlugin(), devApiPlugin()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __ZHIZHUA_SERVICE_URL__: JSON.stringify(zhizhuaServiceUrl),
+    __ZHIZHUA_MODEL_BASE_URL__: JSON.stringify(zhizhuaModelBaseUrl),
   },
   clearScreen: false,
   server: {

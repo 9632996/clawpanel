@@ -6,8 +6,10 @@ use std::collections::HashMap;
 use std::fs;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::models::types::VersionInfo;
 
@@ -52,12 +54,15 @@ const GIT_HTTPS_REWRITES: &[(&str, &str)] = &[
     ("https://bitbucket.org/", "git+ssh://git@bitbucket.org/"),
 ];
 
-#[derive(Debug, Deserialize, Default)]
+const VERSION_POLICY_CACHE_TTL_SECS: u64 = 30 * 60;
+static VERSION_POLICY_CACHE: OnceLock<Mutex<Option<(Instant, VersionPolicy)>>> = OnceLock::new();
+
+#[derive(Debug, Clone, Deserialize, Default)]
 struct VersionPolicySource {
     recommended: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 struct VersionPolicyEntry {
     #[serde(default)]
     official: VersionPolicySource,
@@ -66,7 +71,7 @@ struct VersionPolicyEntry {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 struct R2Config {
     #[serde(default)]
     #[serde(rename = "baseUrl")]
@@ -75,7 +80,7 @@ struct R2Config {
     enabled: bool,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 struct StandaloneConfig {
     #[serde(default)]
     #[serde(rename = "baseUrl")]
@@ -84,7 +89,7 @@ struct StandaloneConfig {
     enabled: bool,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 struct VersionPolicy {
     #[serde(default)]
     standalone: StandaloneConfig,
@@ -188,17 +193,181 @@ fn recommended_is_newer(recommended: &str, current: &str) -> bool {
     false
 }
 
-fn load_version_policy() -> VersionPolicy {
+fn load_embedded_version_policy() -> VersionPolicy {
     serde_json::from_str(include_str!("../../../openclaw-version-policy.json")).unwrap_or_default()
 }
 
-#[allow(dead_code)]
-fn r2_config() -> R2Config {
-    load_version_policy().r2
+fn policy_cache() -> &'static Mutex<Option<(Instant, VersionPolicy)>> {
+    VERSION_POLICY_CACHE.get_or_init(|| Mutex::new(None))
 }
 
-fn standalone_config() -> StandaloneConfig {
-    load_version_policy().standalone
+fn version_policy_urls() -> Vec<String> {
+    let mut urls = Vec::new();
+    for key in [
+        "ZHIZHUA_OPENCLAW_VERSION_POLICY_URL",
+        "OPENCLAW_VERSION_POLICY_URL",
+    ] {
+        if let Ok(url) = std::env::var(key) {
+            let url = url.trim();
+            if !url.is_empty() {
+                urls.push(url.to_string());
+            }
+        }
+    }
+    urls.push(super::zhizhua_url("/update/openclaw-version-policy.json"));
+    urls.push(super::zhizhua_url("/openclaw-version-policy.json"));
+    urls
+}
+
+async fn fetch_remote_version_policy() -> Option<VersionPolicy> {
+    let client =
+        crate::commands::build_http_client(Duration::from_secs(8), Some("ZhizhuaWorkbench"))
+            .ok()?;
+    for url in version_policy_urls() {
+        let Ok(resp) = client
+            .get(&url)
+            .header("Accept", "application/json")
+            .send()
+            .await
+        else {
+            continue;
+        };
+        if !resp.status().is_success() {
+            continue;
+        }
+        if let Ok(policy) = resp.json::<VersionPolicy>().await {
+            return Some(policy);
+        }
+    }
+    None
+}
+
+fn read_openclaw_version_file(path: &Path) -> Option<(String, Option<String>)> {
+    let content = fs::read_to_string(path).ok()?;
+    let mut version = None;
+    let mut source = None;
+    for line in content.lines() {
+        if let Some(value) = line.strip_prefix("openclaw_version=") {
+            let value = value.trim();
+            if !value.is_empty() {
+                version = Some(value.to_string());
+            }
+        } else if let Some(value) = line.strip_prefix("package=") {
+            let value = value.trim().to_ascii_lowercase();
+            if value.contains(&legacy_openclaw_zh_package())
+                || value.contains(&legacy_openclaw_zh_scope())
+            {
+                source = Some("chinese".to_string());
+            } else if value == "openclaw" {
+                source = Some("official".to_string());
+            }
+        } else if let Some(value) = line.strip_prefix("edition=") {
+            let value = value.trim().to_ascii_lowercase();
+            if matches!(value.as_str(), "zh" | "zh-cn" | "chinese" | "cn") {
+                source = Some("chinese".to_string());
+            } else if matches!(value.as_str(), "en" | "official") {
+                source = Some("official".to_string());
+            }
+        }
+    }
+    version.map(|version| (version, source))
+}
+
+fn read_openclaw_package_version(path: &Path) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    serde_json::from_str::<Value>(&content)
+        .ok()
+        .and_then(|v| v.get("version")?.as_str().map(String::from))
+}
+
+fn read_bundled_openclaw_version_from_payload(payload_dir: &Path) -> Option<(String, String)> {
+    if let Some((version, source)) = read_openclaw_version_file(&payload_dir.join("VERSION")) {
+        return Some((version, source.unwrap_or_else(|| "official".to_string())));
+    }
+    read_openclaw_package_version(&payload_dir.join("openclaw").join("package.json"))
+        .map(|version| (version, "official".to_string()))
+}
+
+fn bundled_openclaw_version() -> Option<(String, String)> {
+    let root = super::portable_product_root()?;
+    let payloads = root.join("app").join("payloads");
+    let platform = standalone_platform_key();
+    if platform != "unknown" {
+        if let Some(version) = read_bundled_openclaw_version_from_payload(&payloads.join(platform))
+        {
+            return Some(version);
+        }
+    }
+    let entries = fs::read_dir(&payloads).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(version) = read_bundled_openclaw_version_from_payload(&path) {
+                return Some(version);
+            }
+        }
+    }
+    None
+}
+
+fn bundled_recommended_version_for(source: &str) -> Option<String> {
+    let (version, bundled_source) = bundled_openclaw_version()?;
+    let requested_source = if source == "official" {
+        "official"
+    } else {
+        "chinese"
+    };
+    if bundled_source == requested_source {
+        Some(version)
+    } else {
+        None
+    }
+}
+
+fn recommended_version_from_policy(policy: &VersionPolicy, source: &str) -> Option<String> {
+    let panel_entry = find_panel_policy_entry(policy, panel_version());
+    match source {
+        "official" => panel_entry
+            .and_then(|entry| entry.official.recommended.clone())
+            .or_else(|| policy.default.official.recommended.clone()),
+        _ => panel_entry
+            .and_then(|entry| entry.chinese.recommended.clone())
+            .or_else(|| policy.default.chinese.recommended.clone()),
+    }
+}
+
+fn offline_recommended_version_for(source: &str) -> Option<String> {
+    bundled_recommended_version_for(source)
+        .or_else(|| recommended_version_from_policy(&load_embedded_version_policy(), source))
+}
+
+async fn load_version_policy() -> VersionPolicy {
+    let ttl = Duration::from_secs(VERSION_POLICY_CACHE_TTL_SECS);
+    if let Ok(cache) = policy_cache().lock() {
+        if let Some((loaded_at, policy)) = cache.as_ref() {
+            if loaded_at.elapsed() < ttl {
+                return policy.clone();
+            }
+        }
+    }
+
+    if let Some(policy) = fetch_remote_version_policy().await {
+        if let Ok(mut cache) = policy_cache().lock() {
+            *cache = Some((Instant::now(), policy.clone()));
+        }
+        return policy;
+    }
+
+    load_embedded_version_policy()
+}
+
+#[allow(dead_code)]
+async fn r2_config() -> R2Config {
+    load_version_policy().await.r2
+}
+
+async fn standalone_config() -> StandaloneConfig {
+    load_version_policy().await.standalone
 }
 
 /// standalone 包的平台 key（与 CI 构建矩阵一致）
@@ -285,17 +454,10 @@ pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-fn recommended_version_for(source: &str) -> Option<String> {
-    let policy = load_version_policy();
-    let panel_entry = find_panel_policy_entry(&policy, panel_version());
-    match source {
-        "official" => panel_entry
-            .and_then(|entry| entry.official.recommended.clone())
-            .or(policy.default.official.recommended),
-        _ => panel_entry
-            .and_then(|entry| entry.chinese.recommended.clone())
-            .or(policy.default.chinese.recommended),
-    }
+async fn recommended_version_for(source: &str) -> Option<String> {
+    let policy = load_version_policy().await;
+    recommended_version_from_policy(&policy, source)
+        .or_else(|| offline_recommended_version_for(source))
 }
 
 /// 获取用户配置的 git 可执行文件路径，回退到 "git"
@@ -880,13 +1042,15 @@ fn calibration_required_origins() -> Vec<String> {
         "http://localhost".into(),
         "http://localhost:1420".into(),
         "http://127.0.0.1:1420".into(),
+        "http://localhost:18789".into(),
+        "http://127.0.0.1:18789".into(),
         "http://localhost:18777".into(),
         "http://127.0.0.1:18777".into(),
     ]
 }
 
 fn calibration_last_touched_version() -> String {
-    recommended_version_for("chinese").unwrap_or_else(|| "2026.1.1".to_string())
+    offline_recommended_version_for("chinese").unwrap_or_else(|| "2026.1.1".to_string())
 }
 
 fn calibration_default_workspace() -> String {
@@ -2374,7 +2538,7 @@ pub async fn get_version_info() -> Result<VersionInfo, String> {
     let recommended = if source == "unknown" {
         None
     } else {
-        recommended_version_for(&source)
+        recommended_version_for(&source).await
     };
     let update_available = match (&current, &recommended) {
         (Some(c), Some(r)) => recommended_is_newer(r, c),
@@ -3010,7 +3174,7 @@ pub async fn list_openclaw_versions(source: String) -> Result<Vec<String>, Strin
             vers
         })
         .unwrap_or_default();
-    if let Some(recommended) = recommended_version_for(&source) {
+    if let Some(recommended) = recommended_version_for(&source).await {
         if let Some(pos) = versions.iter().position(|v| v == &recommended) {
             let version = versions.remove(pos);
             versions.insert(0, version);
@@ -3180,7 +3344,7 @@ async fn try_standalone_install(
     };
     use tauri::Emitter;
 
-    let cfg = standalone_config();
+    let cfg = standalone_config().await;
     if !cfg.enabled {
         return Err("standalone 安装未启用".into());
     }
@@ -3476,7 +3640,7 @@ async fn try_r2_install(
     use sha2::{Digest, Sha256};
     use tauri::Emitter;
 
-    let r2 = r2_config();
+    let r2 = r2_config().await;
     if !r2.enabled {
         return Err("R2 加速未启用".into());
     }
@@ -3777,7 +3941,7 @@ async fn upgrade_openclaw_inner(
     let current_source = detect_installed_source();
     let pkg_name = npm_package_name(&source);
     let requested_version = version.clone();
-    let recommended_version = recommended_version_for(&source);
+    let recommended_version = recommended_version_for(&source).await;
     let ver = requested_version
         .as_deref()
         .or(recommended_version.as_deref())
@@ -3789,10 +3953,10 @@ async fn upgrade_openclaw_inner(
         && (method == "auto" || method == "standalone-r2" || method == "standalone-github");
 
     if try_standalone {
-        let github_release_base = format!(
-            "https://ai.aizuopin.com/openclaw-standalone/releases/download/v{}",
+        let github_release_base = super::zhizhua_url(&format!(
+            "/openclaw-standalone/releases/download/v{}",
             ver
-        );
+        ));
 
         if method == "standalone-github" {
             // standalone-github 模式：只走 GitHub
@@ -5158,14 +5322,13 @@ async fn reload_gateway_via_http() -> Result<String, String> {
         }
     }
 
-    // 所有 HTTP 重载方式都失败，回退到进程重启
-    eprintln!("[reload_gateway] HTTP 热重载不可用，将触发进程重启");
+    eprintln!("[reload_gateway] HTTP 热重载不可用");
     Err("Gateway HTTP 重载不可用".to_string())
 }
 
 /// 重载 Gateway 服务
-/// Windows/Linux: 优先尝试 HTTP 热重载（不重启进程）
-/// 如果 HTTP 重载失败，回退到 restart_service（会触发 Guardian 重启循环）
+/// Windows/Linux: 只尝试 HTTP 热重载，不隐式重启进程。
+/// 需要完整重启时必须调用 restart_gateway，让前端 Gateway 状态机统一管理。
 #[allow(unused_variables)]
 async fn reload_gateway_internal(app: Option<&tauri::AppHandle>) -> Result<String, String> {
     #[cfg(target_os = "macos")]
@@ -5191,17 +5354,23 @@ async fn reload_gateway_internal(app: Option<&tauri::AppHandle>) -> Result<Strin
         if !running {
             return Ok("Gateway 当前未运行，配置将在下次启动时生效".to_string());
         }
-        match reload_gateway_via_http().await {
-            Ok(msg) => Ok(msg),
-            Err(_) => crate::commands::service::restart_service(
-                app.cloned()
-                    .ok_or_else(|| "缺少 AppHandle，无法回退到 Gateway 进程重启".to_string())?,
-                "ai.openclaw.gateway".into(),
-            )
-            .await
-            .map(|_| "Gateway 已重启".to_string()),
-        }
+        reload_gateway_via_http().await
     }
+}
+
+async fn restart_gateway_internal(app: Option<&tauri::AppHandle>) -> Result<String, String> {
+    let (running, _) =
+        crate::commands::service::current_gateway_runtime("ai.openclaw.gateway").await;
+    if !running {
+        return Ok("Gateway 当前未运行，配置将在下次启动时生效".to_string());
+    }
+    crate::commands::service::restart_service(
+        app.cloned()
+            .ok_or_else(|| "缺少 AppHandle，无法重启 Gateway".to_string())?,
+        "ai.openclaw.gateway".into(),
+    )
+    .await
+    .map(|_| "Gateway 已重启".to_string())
 }
 
 /// 全局 Gateway 重启 mutex（单飞行锁）
@@ -5215,7 +5384,10 @@ const RESTART_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// 带单飞行锁和 2s 冷却的 restart 入口
 /// 即使前端穿透节流发来多个请求，后端也只串行执行，且 2s 内不重复
-async fn restart_gateway_guarded(app: Option<&tauri::AppHandle>) -> Result<String, String> {
+async fn restart_gateway_guarded(
+    app: Option<&tauri::AppHandle>,
+    full_restart: bool,
+) -> Result<String, String> {
     // 获取 mutex：并发调用时串行化
     let _guard = RESTART_MUTEX.lock().await;
 
@@ -5230,7 +5402,11 @@ async fn restart_gateway_guarded(app: Option<&tauri::AppHandle>) -> Result<Strin
         }
     }
 
-    let result = reload_gateway_internal(app).await;
+    let result = if full_restart {
+        restart_gateway_internal(app).await
+    } else {
+        reload_gateway_internal(app).await
+    };
 
     // 无论成功失败都记录时间，避免失败后被重试风暴压爆
     {
@@ -5243,13 +5419,13 @@ async fn restart_gateway_guarded(app: Option<&tauri::AppHandle>) -> Result<Strin
 
 #[tauri::command]
 pub async fn reload_gateway(app: tauri::AppHandle) -> Result<String, String> {
-    restart_gateway_guarded(Some(&app)).await
+    restart_gateway_guarded(Some(&app), false).await
 }
 
-/// 重启 Gateway 服务（与 reload_gateway 相同实现）
+/// 重启 Gateway 服务
 #[tauri::command]
 pub async fn restart_gateway(app: tauri::AppHandle) -> Result<String, String> {
-    restart_gateway_guarded(Some(&app)).await
+    restart_gateway_guarded(Some(&app), true).await
 }
 
 /// 运行 openclaw doctor --fix 自动修复配置问题
@@ -7147,14 +7323,14 @@ pub async fn check_panel_update() -> Result<Value, String> {
             .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
 
     let sources = [(
-        "https://ai.aizuopin.com/api/zhizhua-workbench/releases/latest",
-        "https://ai.aizuopin.com",
+        super::zhizhua_url("/api/zhizhua-workbench/releases/latest"),
+        super::zhizhua_url(""),
         "product",
     )];
 
     let mut last_err = String::new();
     for (api_url, releases_url, source) in &sources {
-        match client.get(*api_url).send().await {
+        match client.get(api_url).send().await {
             Ok(resp) if resp.status().is_success() => {
                 let json: Value = resp
                     .json()
@@ -7179,12 +7355,12 @@ pub async fn check_panel_update() -> Result<Value, String> {
                     "url".into(),
                     json.get("html_url")
                         .cloned()
-                        .unwrap_or(Value::String(releases_url.to_string())),
+                        .unwrap_or(Value::String(releases_url.clone())),
                 );
                 result.insert("source".into(), Value::String(source.to_string()));
                 result.insert(
                     "downloadUrl".into(),
-                    Value::String("https://ai.aizuopin.com".into()),
+                    Value::String(super::zhizhua_url("")),
                 );
                 return Ok(Value::Object(result));
             }

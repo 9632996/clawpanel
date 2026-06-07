@@ -9,8 +9,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { parseVersion, versionGte, buildSnapshot, recommendedIsNewer } from '../src/lib/kernel.js'
-import { FEATURE_CATALOG, KERNEL_FLOOR, KERNEL_TARGET } from '../src/lib/feature-catalog.js'
+import { parseVersion, versionGte, buildSnapshot, recommendedIsNewer } from '../src/lib/kernel.ts'
+import { FEATURE_CATALOG, KERNEL_FLOOR, KERNEL_TARGET } from '../src/lib/feature-catalog.ts'
 
 // ============================================================================
 // parseVersion

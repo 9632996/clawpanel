@@ -337,20 +337,24 @@ pub async fn install_cftunnel(app: tauri::AppHandle) -> Result<String, String> {
 
     let _ = app.emit("install-log", "下载安装脚本...");
     let _ = app.emit("install-progress", 30);
+    #[cfg(not(target_os = "windows"))]
+    let cftunnel_sh_url = super::zhizhua_url("/raw/cftunnel/main/install.sh");
+    #[cfg(target_os = "windows")]
+    let cftunnel_ps1_url = super::zhizhua_url("/raw/cftunnel/main/install.ps1");
 
     #[cfg(not(target_os = "windows"))]
     let mut child = {
-        let install_script = r#"
+        let install_script = format!(r#"
 #!/bin/bash
 set -e
 cd /tmp
 echo "下载 cftunnel..."
-curl -fsSL https://ai.aizuopin.com/raw/cftunnel/main/install.sh -o cftunnel-install.sh
+curl -fsSL {cftunnel_sh_url} -o cftunnel-install.sh
 chmod +x cftunnel-install.sh
 echo "执行安装..."
 ./cftunnel-install.sh
 echo "安装完成"
-"#;
+"#);
         Command::new("bash")
             .arg("-c")
             .arg(install_script)
@@ -362,17 +366,17 @@ echo "安装完成"
 
     #[cfg(target_os = "windows")]
     let mut child = {
-        let install_script = r#"
+        let install_script = format!(r#"
 $ErrorActionPreference = 'Stop'
 Write-Output '通过官方安装脚本安装 cftunnel...'
 $tmp = Join-Path $env:TEMP 'install-cftunnel.ps1'
 Write-Output '下载安装脚本到临时文件...'
-Invoke-WebRequest -Uri 'https://ai.aizuopin.com/raw/cftunnel/main/install.ps1' -OutFile $tmp -UseBasicParsing
+Invoke-WebRequest -Uri '{cftunnel_ps1_url}' -OutFile $tmp -UseBasicParsing
 Write-Output '执行安装脚本...'
 & $tmp
 Remove-Item $tmp -ErrorAction SilentlyContinue
 Write-Output '安装完成'
-"#;
+"#);
         // 使用完整路径调用 PowerShell，避免 MSYS2/Git Bash 环境下找不到
         let ps_path = std::env::var("SystemRoot")
             .map(|root| {
@@ -388,7 +392,7 @@ Write-Output '安装完成'
                 "-ExecutionPolicy",
                 "Bypass",
                 "-Command",
-                install_script,
+                &install_script,
             ])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -446,16 +450,20 @@ pub async fn install_clawapp(app: tauri::AppHandle) -> Result<String, String> {
 
     let _ = app.emit("install-log", "下载安装脚本...");
     let _ = app.emit("install-progress", 30);
+    #[cfg(not(target_os = "windows"))]
+    let clawapp_sh_url = super::zhizhua_url("/raw/clawapp/main/install.sh");
+    #[cfg(target_os = "windows")]
+    let clawapp_ps1_url = super::zhizhua_url("/raw/clawapp/main/install.ps1");
 
     #[cfg(not(target_os = "windows"))]
     let mut child = {
-        let install_script = r#"
+        let install_script = format!(r#"
 #!/bin/bash
 set -e
 echo "通过官方安装脚本安装 ClawApp..."
-curl -fsSL https://ai.aizuopin.com/raw/clawapp/main/install.sh | bash
+curl -fsSL {clawapp_sh_url} | bash
 echo "安装完成"
-"#;
+"#);
         Command::new("bash")
             .arg("-c")
             .arg(install_script)
@@ -467,17 +475,17 @@ echo "安装完成"
 
     #[cfg(target_os = "windows")]
     let mut child = {
-        let install_script = r#"
+        let install_script = format!(r#"
 $ErrorActionPreference = 'Stop'
 Write-Output '通过官方安装脚本安装 ClawApp...'
 $tmp = Join-Path $env:TEMP 'install-clawapp.ps1'
 Write-Output '下载安装脚本到临时文件...'
-Invoke-WebRequest -Uri 'https://ai.aizuopin.com/raw/clawapp/main/install.ps1' -OutFile $tmp -UseBasicParsing
+Invoke-WebRequest -Uri '{clawapp_ps1_url}' -OutFile $tmp -UseBasicParsing
 Write-Output '执行安装脚本...'
 & $tmp -Auto
 Remove-Item $tmp -ErrorAction SilentlyContinue
 Write-Output '安装完成'
-"#;
+"#);
         let ps_path = std::env::var("SystemRoot")
             .map(|root| {
                 format!(
@@ -492,7 +500,7 @@ Write-Output '安装完成'
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
-            install_script,
+            &install_script,
         ]);
         cmd.creation_flags(0x08000000);
         cmd.stdout(Stdio::piped())

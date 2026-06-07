@@ -16,6 +16,8 @@ static GATEWAY_PORT_CACHE: std::sync::LazyLock<std::sync::Mutex<(u16, std::time:
 pub mod agent;
 pub mod assistant;
 pub mod cli_conflict;
+pub mod codewhale;
+pub mod codex;
 pub mod config;
 pub mod device;
 pub mod diagnose;
@@ -25,11 +27,27 @@ pub mod hermes_providers;
 pub mod logs;
 pub mod memory;
 pub mod messaging;
+pub mod model_tools;
 pub mod pairing;
 pub mod service;
 pub mod skillhub;
 pub mod skills;
 pub mod update;
+
+fn zhizhua_service_url() -> &'static str {
+    option_env!("ZHIZHUA_SERVICE_URL").unwrap_or("https://ai.iazp.cn")
+}
+
+fn zhizhua_url(path: &str) -> String {
+    let base = zhizhua_service_url().trim_end_matches('/');
+    if path.is_empty() {
+        base.to_string()
+    } else if path.starts_with('/') {
+        format!("{base}{path}")
+    } else {
+        format!("{base}/{path}")
+    }
+}
 
 fn portable_product_root() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;

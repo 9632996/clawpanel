@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { humanizeError, humanizeErrorText } from '../src/lib/humanize-error.js'
+import { humanizeError, humanizeErrorText } from '../src/lib/humanize-error.ts'
 
 test('humanizeError must not be coerced with String() or template literals', () => {
   const h = humanizeError(new Error('ECONNREFUSED 127.0.0.1:443'), 'Import scan failed')

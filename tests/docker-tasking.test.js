@@ -5,7 +5,7 @@ import {
   DOCKER_TASK_TIMEOUT_MS,
   buildDockerDispatchTargets,
   buildDockerInstanceSwitchContext,
-} from '../src/lib/docker-tasking.js'
+} from '../src/lib/docker-tasking.ts'
 
 test('Docker 异步任务默认超时提升到 10 分钟', () => {
   assert.equal(DOCKER_TASK_TIMEOUT_MS, 10 * 60 * 1000)

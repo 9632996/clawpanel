@@ -1,6 +1,6 @@
-# 智爪多智能体工作台
+# 智爪平台
 
-`智爪多智能体工作台` 是 AI作品基于 ClawPanel 二次开发的多智能体产品基座，用于交付面向最终用户的便携式 AI 工作台。
+`智爪平台` 是 AI作品基于 ClawPanel 二次开发的多智能体产品基座，用于交付面向最终用户的便携式 AI 工作台。
 
 本仓库是 `OpenClawPortable` 项目使用的本地化二开源码，不再作为原 ClawPanel 的普通镜像维护。产品发布时由 builder 读取本仓库源码，打包为便携版运行时。
 
@@ -14,7 +14,7 @@
 ## 官方入口
 
 - AI作品主站：<https://aizuopin.com>
-- 智爪工具入口：<https://ai.aizuopin.com>
+- 智爪工具入口：<https://ai.iazp.cn>
 - 本项目 fork：<https://github.com/9632996/clawpanel>
 - 上游项目：<https://github.com/qingchencloud/clawpanel>
 
@@ -70,7 +70,7 @@ OpenClawPortable/vendor/clawpanel
 cargo run -p openclaw-portable-builder -- build-clawpanel-dist --target F:\TestU --force --build-panel --skip-openclaw-build
 ```
 
-builder 会校验本仓库已经是 `zhizhua-workbench` / `智爪多智能体工作台` 产品基座，然后叠加少量便携运行时补丁和发布资源。
+builder 会校验本仓库已经是 `zhizhua-workbench` / `智爪平台` 产品基座，然后叠加少量便携运行时补丁和发布资源。
 
 ## 维护规则
 
@@ -85,7 +85,7 @@ builder 会校验本仓库已经是 `zhizhua-workbench` / `智爪多智能体工
 - OpenClaw：中文增强运行时和便携 Gateway 管理。
 - Hermes Agent：多会话、记忆、人格和工具管理入口。
 - Codex：作为第三引擎入口预留，后续适配国内模型与便携运行时。
-- AI作品模型服务：默认面向 `https://ai.aizuopin.com` 的模型服务接入。
+- AI作品模型服务：默认面向 `https://ai.iazp.cn` 的模型服务接入。
 
 ## License
 

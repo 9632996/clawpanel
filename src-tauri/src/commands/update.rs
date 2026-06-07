@@ -11,9 +11,6 @@ pub fn update_dir() -> PathBuf {
         .join("web-update")
 }
 
-/// 更新清单 URL（智爪工具入口托管）
-const LATEST_JSON_URL: &str = "https://ai.aizuopin.com/update/latest.json";
-
 /// 检查前端是否有新版本可用
 #[tauri::command]
 pub async fn check_frontend_update() -> Result<Value, String> {
@@ -21,8 +18,9 @@ pub async fn check_frontend_update() -> Result<Value, String> {
         super::build_http_client(std::time::Duration::from_secs(10), Some("ZhizhuaWorkbench"))
             .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
 
+    let latest_json_url = super::zhizhua_url("/update/latest.json");
     let resp = client
-        .get(LATEST_JSON_URL)
+        .get(latest_json_url)
         .send()
         .await
         .map_err(|e| format!("请求失败: {e}"))?;

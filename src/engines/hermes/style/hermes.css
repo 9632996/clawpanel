@@ -415,12 +415,28 @@
 [data-engine="hermes"] .hm-native-dashboard-hint {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   margin: -8px 2px 20px;
   color: var(--hm-text-muted);
   font-family: var(--hm-font-mono);
   font-size: 11px;
+}
+[data-engine="hermes"] .hm-native-dashboard-status,
+[data-engine="hermes"] .hm-native-dashboard-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+[data-engine="hermes"] .hm-native-dashboard-status strong {
+  color: var(--hm-text-secondary);
+  font-weight: 600;
+}
+[data-engine="hermes"] .hm-native-dashboard-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 [data-engine="hermes"] .hm-native-dashboard-link {
   border: 0;

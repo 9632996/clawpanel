@@ -11,7 +11,7 @@
         "minHeight": 500,
         "minWidth": 800,
         "resizable": true,
-        "title": "智爪多智能体工作台",
+        "title": "智爪平台",
         "width": 1100
       }
     ],
@@ -48,6 +48,6 @@
     }
   },
   "identifier": "com.aizuopin.zhizhua.workbench",
-  "productName": "智爪多智能体工作台",
+  "productName": "智爪平台",
   "version": "0.17.0"
 }

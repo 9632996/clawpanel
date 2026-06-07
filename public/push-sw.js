@@ -7,7 +7,7 @@
  * 点通知 → 尝试聚焦已打开的 ClawPanel 标签；都没开就打开一个新窗口。
  */
 
-const PRODUCT_NAME = '智爪多智能体工作台'
+const PRODUCT_NAME = '智爪平台'
 
 self.addEventListener('install', (event) => {
   // 立刻激活，不等老 SW 退出

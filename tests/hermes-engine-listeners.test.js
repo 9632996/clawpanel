@@ -8,7 +8,7 @@ globalThis.localStorage = globalThis.localStorage || {
 }
 
 test('Hermes 引擎状态监听注册和取消不会引用不存在的监听数组', async () => {
-  const { default: hermesEngine } = await import('../src/engines/hermes/index.js')
+  const { default: hermesEngine } = await import('../src/engines/hermes/index.ts')
 
   let stateUnsub
   let readyUnsub

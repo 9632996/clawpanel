@@ -449,7 +449,7 @@ pub async fn restore_quarantined_openclaw(quarantined_path: String) -> Result<St
         .and_then(|n| n.to_str())
         .ok_or_else(|| "无效的文件名".to_string())?;
     let original_name = parse_quarantined_name(file_name)
-        .ok_or_else(|| format!("不是智爪工作台隔离文件，无法恢复: {}", file_name))?;
+        .ok_or_else(|| format!("不是智爪平台隔离文件，无法恢复: {}", file_name))?;
 
     let parent = qpath.parent().ok_or_else(|| "无法解析父目录".to_string())?;
     let original_path = parent.join(original_name);

@@ -5,7 +5,7 @@ import {
   formatRuntimeAge,
   getChannelRuntimeSummary,
   normalizeChannelRuntimeStatus,
-} from '../src/lib/channel-runtime.js'
+} from '../src/lib/channel-runtime.ts'
 
 test('normalizeChannelRuntimeStatus marks missing RPC result as unsupported', () => {
   const status = normalizeChannelRuntimeStatus(null)

@@ -1,7 +1,7 @@
 {
   "author": "AI作品",
   "bugs": {
-    "url": "https://ai.aizuopin.com"
+    "url": "https://ai.iazp.cn"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
@@ -9,12 +9,13 @@
     "@tauri-apps/plugin-shell": "^2.2.1",
     "yaml": "^2.9.0"
   },
-  "description": "智爪多智能体工作台 - OpenClaw 多智能体工作台",
+  "description": "智爪平台 - OpenClaw 多智能体工作台",
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",
+    "typescript": "^6.0.3",
     "vite": "^6.4.2"
   },
-  "homepage": "https://ai.aizuopin.com",
+  "homepage": "https://ai.iazp.cn",
   "keywords": [
     "openclaw",
     "ai-agent",
@@ -27,7 +28,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://ai.aizuopin.com"
+    "url": "https://ai.iazp.cn"
   },
   "scripts": {
     "build": "vite build",

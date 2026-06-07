@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { t } from '../src/lib/i18n.js'
+import { t } from '../src/lib/i18n.ts'
 
-const source = readFileSync(new URL('../src/engines/hermes/pages/channels.js', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../src/engines/hermes/pages/channels.ts', import.meta.url), 'utf8')
 
 function getChannelBlock(channelId) {
   const start = source.indexOf(`id: '${channelId}'`)

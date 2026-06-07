@@ -7,7 +7,7 @@ use tauri::{
     AppHandle, Manager,
 };
 
-const PRODUCT_NAME: &str = "智爪多智能体工作台";
+const PRODUCT_NAME: &str = "智爪平台";
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     // 菜单项

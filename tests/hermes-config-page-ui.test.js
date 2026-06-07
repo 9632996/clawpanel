@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { t } from '../src/lib/i18n.js'
+import { t } from '../src/lib/i18n.ts'
 
-const source = readFileSync(new URL('../src/engines/hermes/pages/config.js', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../src/engines/hermes/pages/config.ts', import.meta.url), 'utf8')
 
 function extractEngineKeys() {
   return [...source.matchAll(/['"](engine\.[A-Za-z0-9_.-]+)['"]/g)].map(match => match[1])
