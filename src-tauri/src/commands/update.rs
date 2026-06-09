@@ -6,17 +6,14 @@ use std::path::PathBuf;
 
 /// 前端热更新目录 (~/.openclaw/zhizhua-workbench/web-update/)
 pub fn update_dir() -> PathBuf {
-    super::openclaw_dir()
-        .join("zhizhua-workbench")
-        .join("web-update")
+    super::openclaw_dir().join("zhizhua-workbench").join("web-update")
 }
 
 /// 检查前端是否有新版本可用
 #[tauri::command]
 pub async fn check_frontend_update() -> Result<Value, String> {
-    let client =
-        super::build_http_client(std::time::Duration::from_secs(10), Some("ZhizhuaWorkbench"))
-            .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
+    let client = super::build_http_client(std::time::Duration::from_secs(10), Some("ZhizhuaWorkbench"))
+        .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
 
     let latest_json_url = super::zhizhua_url("/update/latest.json");
     let resp = client
@@ -31,11 +28,7 @@ pub async fn check_frontend_update() -> Result<Value, String> {
 
     let manifest: Value = resp.json().await.map_err(|e| format!("解析失败: {e}"))?;
 
-    let latest = manifest
-        .get("version")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    let latest = manifest.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
     // 优先读取已热更新的版本，避免 macOS/Linux 用户安装旧包后永远提示有更新
     let current = {
@@ -48,17 +41,14 @@ pub async fn check_frontend_update() -> Result<Value, String> {
     };
 
     // 检查最低兼容的 app 版本（前端可能依赖较新的 Rust 后端命令）
-    let min_app = manifest
-        .get("minAppVersion")
-        .and_then(|v| v.as_str())
-        .unwrap_or("0.0.0");
+    let min_app = manifest.get("minAppVersion").and_then(|v| v.as_str()).unwrap_or("0.0.0");
 
     let compatible = version_ge(&current, min_app);
     let remote_newer = !latest.is_empty() && compatible && version_gt(&latest, &current);
     let update_ready = remote_newer && update_dir().join("index.html").exists();
     let has_update = remote_newer && !update_ready;
 
-    Ok(serde_json::json!({
+    Ok(crate::jv!({
         "currentVersion": current,
         "latestVersion": latest,
         "hasUpdate": has_update,
@@ -70,40 +60,24 @@ pub async fn check_frontend_update() -> Result<Value, String> {
 
 /// 下载并解压前端更新包
 #[tauri::command]
-pub async fn download_frontend_update(
-    url: String,
-    expected_hash: String,
-    version: String,
-) -> Result<Value, String> {
-    let client = super::build_http_client(
-        std::time::Duration::from_secs(120),
-        Some("ZhizhuaWorkbench"),
-    )
-    .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
+pub async fn download_frontend_update(url: String, expected_hash: String, version: String) -> Result<Value, String> {
+    let client = super::build_http_client(std::time::Duration::from_secs(120), Some("ZhizhuaWorkbench"))
+        .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
 
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("下载失败: {e}"))?;
+    let resp = client.get(&url).send().await.map_err(|e| format!("下载失败: {e}"))?;
 
     if !resp.status().is_success() {
         return Err(format!("下载失败: HTTP {}", resp.status()));
     }
 
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("读取数据失败: {e}"))?;
+    let bytes = resp.bytes().await.map_err(|e| format!("读取数据失败: {e}"))?;
 
     // 校验 SHA-256
     if !expected_hash.is_empty() {
         let mut hasher = Sha256::new();
         hasher.update(&bytes);
         let hash = format!("{:x}", hasher.finalize());
-        let expected = expected_hash
-            .strip_prefix("sha256:")
-            .unwrap_or(&expected_hash);
+        let expected = expected_hash.strip_prefix("sha256:").unwrap_or(&expected_hash);
         if hash != expected {
             return Err(format!("哈希校验失败: 期望 {}，实际 {}", expected, hash));
         }
@@ -120,9 +94,7 @@ pub async fn download_frontend_update(
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("解压失败: {e}"))?;
 
     for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
-            .map_err(|e| format!("读取压缩条目失败: {e}"))?;
+        let mut file = archive.by_index(i).map_err(|e| format!("读取压缩条目失败: {e}"))?;
 
         let name = file.name().to_string();
         let target = dir.join(&name);
@@ -134,8 +106,7 @@ pub async fn download_frontend_update(
                 fs::create_dir_all(parent).map_err(|e| format!("创建父目录失败: {e}"))?;
             }
             let mut buf = Vec::new();
-            file.read_to_end(&mut buf)
-                .map_err(|e| format!("读取文件内容失败: {e}"))?;
+            file.read_to_end(&mut buf).map_err(|e| format!("读取文件内容失败: {e}"))?;
             fs::write(&target, &buf).map_err(|e| format!("写入文件失败: {e}"))?;
         }
     }
@@ -145,7 +116,7 @@ pub async fn download_frontend_update(
         let _ = std::fs::write(dir.join(".version"), &version);
     }
 
-    Ok(serde_json::json!({
+    Ok(crate::jv!({
         "success": true,
         "files": archive.len(),
         "path": dir.to_string_lossy()
@@ -159,7 +130,7 @@ pub fn rollback_frontend_update() -> Result<Value, String> {
     if dir.exists() {
         fs::remove_dir_all(&dir).map_err(|e| format!("回退失败: {e}"))?;
     }
-    Ok(serde_json::json!({ "success": true }))
+    Ok(crate::jv!({ "success": true }))
 }
 
 /// 获取当前热更新状态
@@ -179,7 +150,7 @@ pub fn get_update_status() -> Result<Value, String> {
         String::new()
     };
 
-    Ok(serde_json::json!({
+    Ok(crate::jv!({
         "currentVersion": env!("CARGO_PKG_VERSION"),
         "updateReady": ready,
         "updateVersion": update_version,
@@ -189,12 +160,7 @@ pub fn get_update_status() -> Result<Value, String> {
 
 /// 简单的语义化版本比较：current >= required
 pub fn version_ge(current: &str, required: &str) -> bool {
-    let parse = |s: &str| -> Vec<u32> {
-        s.trim_start_matches('v')
-            .split('.')
-            .filter_map(|p| p.parse().ok())
-            .collect()
-    };
+    let parse = |s: &str| -> Vec<u32> { s.trim_start_matches('v').split('.').filter_map(|p| p.parse().ok()).collect() };
     let c = parse(current);
     let r = parse(required);
     for i in 0..r.len().max(c.len()) {

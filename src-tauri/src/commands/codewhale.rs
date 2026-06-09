@@ -1,4 +1,3 @@
-use serde_json::json;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -39,31 +38,20 @@ fn codewhale_cli_path(root: &Path, panel: &Value) -> PathBuf {
                 .join("engines")
                 .join("codewhale")
                 .join("bin")
-                .join(if cfg!(windows) {
-                    "codewhale.exe"
-                } else {
-                    "codewhale"
-                })
+                .join(if cfg!(windows) { "codewhale.exe" } else { "codewhale" })
         })
 }
 
 fn codewhale_tui_path(root: &Path, panel: &Value) -> PathBuf {
     let cli = codewhale_cli_path(root, panel);
     let dir = cli.parent().unwrap_or_else(|| Path::new("."));
-    let name = if cfg!(windows) {
-        "codewhale-tui.exe"
-    } else {
-        "codewhale-tui"
-    };
+    let name = if cfg!(windows) { "codewhale-tui.exe" } else { "codewhale-tui" };
     dir.join(name)
 }
 
 fn codewhale_env_key(panel: &Value) -> Option<String> {
     let section = panel.get("codewhale")?;
-    let provider = section
-        .get("provider")
-        .and_then(|v| v.as_str())
-        .unwrap_or("deepseek");
+    let provider = section.get("provider").and_then(|v| v.as_str()).unwrap_or("deepseek");
     section
         .get("providers")
         .and_then(|v| v.get(provider))
@@ -83,9 +71,7 @@ fn codewhale_cli_provider(provider: &str) -> &str {
 fn codewhale_cli_env_key(provider: &str) -> Option<&'static str> {
     match codewhale_cli_provider(provider) {
         "openai" => Some("OPENAI_API_KEY"),
-        "deepseek" | "deepseek-cn" | "deepseek-china" | "deepseek_china" | "deepseekcn" => {
-            Some("DEEPSEEK_API_KEY")
-        }
+        "deepseek" | "deepseek-cn" | "deepseek-china" | "deepseek_china" | "deepseekcn" => Some("DEEPSEEK_API_KEY"),
         "xiaomi-mimo" | "xiaomi_mimo" | "mimo" | "xiaomi" => Some("MIMO_API_KEY"),
         "moonshot" => Some("MOONSHOT_API_KEY"),
         _ => None,
@@ -93,10 +79,7 @@ fn codewhale_cli_env_key(provider: &str) -> Option<&'static str> {
 }
 
 fn read_model_credentials(root: &Path, env_key: &str) -> Option<String> {
-    let path = root
-        .join("data")
-        .join("config")
-        .join("model-credentials.env");
+    let path = root.join("data").join("config").join("model-credentials.env");
     let content = std::fs::read_to_string(path).ok()?;
     for line in content.lines() {
         let trimmed = line.trim();
@@ -116,7 +99,7 @@ fn read_model_credentials(root: &Path, env_key: &str) -> Option<String> {
 #[tauri::command]
 pub fn codewhale_status() -> Result<Value, String> {
     let root = product_root()?;
-    let panel = super::read_panel_config_value().unwrap_or_else(|| json!({}));
+    let panel = super::read_panel_config_value().unwrap_or_else(|| crate::jv!({}));
     let home = codewhale_home(&root);
     let cli = codewhale_cli_path(&root, &panel);
     let tui = codewhale_tui_path(&root, &panel);
@@ -133,11 +116,7 @@ pub fn codewhale_status() -> Result<Value, String> {
         .unwrap_or(0);
     let env_key = codewhale_env_key(&panel);
     let env_present = env_key.as_deref().is_some_and(|key| {
-        std::env::var(key)
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .is_some()
-            || read_model_credentials(&root, key).is_some()
+        std::env::var(key).ok().filter(|v| !v.trim().is_empty()).is_some() || read_model_credentials(&root, key).is_some()
     });
 
     // 获取版本信息
@@ -158,7 +137,7 @@ pub fn codewhale_status() -> Result<Value, String> {
         None
     };
 
-    Ok(json!({
+    Ok(crate::jv!({
         "root": root.display().to_string(),
         "codewhaleHome": home.display().to_string(),
         "configPath": config_path.display().to_string(),
@@ -187,7 +166,7 @@ pub fn codewhale_run_once(prompt: String) -> Result<Value, String> {
     }
 
     let root = product_root()?;
-    let panel = super::read_panel_config_value().unwrap_or_else(|| json!({}));
+    let panel = super::read_panel_config_value().unwrap_or_else(|| crate::jv!({}));
     let cli = codewhale_cli_path(&root, &panel);
     if !cli.is_file() {
         return Err(format!("CodeWhale 可执行文件不存在: {}", cli.display()));
@@ -229,12 +208,7 @@ pub fn codewhale_run_once(prompt: String) -> Result<Value, String> {
         if let Some(value) = existing_value {
             command.env(&env_key, &value);
             if let Some(cli_env_key) = codewhale_cli_env_key(provider) {
-                if cli_env_key != env_key
-                    && std::env::var(cli_env_key)
-                        .ok()
-                        .filter(|v| !v.trim().is_empty())
-                        .is_none()
-                {
+                if cli_env_key != env_key && std::env::var(cli_env_key).ok().filter(|v| !v.trim().is_empty()).is_none() {
                     command.env(cli_env_key, value);
                 }
             }
@@ -267,16 +241,13 @@ pub fn codewhale_run_once(prompt: String) -> Result<Value, String> {
 
     let deadline = Instant::now() + Duration::from_secs(180);
     loop {
-        if let Some(_status) = child
-            .try_wait()
-            .map_err(|e| format!("等待 CodeWhale 失败: {e}"))?
-        {
+        if let Some(_status) = child.try_wait().map_err(|e| format!("等待 CodeWhale 失败: {e}"))? {
             let output = child
                 .wait_with_output()
                 .map_err(|e| format!("读取 CodeWhale 输出失败: {e}"))?;
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Ok(json!({
+            return Ok(crate::jv!({
                 "success": output.status.success(),
                 "exitCode": output.status.code(),
                 "stdout": stdout.chars().take(20000).collect::<String>(),

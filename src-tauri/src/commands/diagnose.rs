@@ -171,12 +171,7 @@ fn check_device_key() -> DiagnoseStep {
             Err(e) => finish_step("device_key", false, &format!("读取失败: {e}"), t),
         }
     } else {
-        finish_step(
-            "device_key",
-            false,
-            "设备密钥不存在（将在首次连接时自动生成）",
-            t,
-        )
+        finish_step("device_key", false, "设备密钥不存在（将在首次连接时自动生成）", t)
     }
 }
 
@@ -195,32 +190,17 @@ fn check_allowed_origins() -> DiagnoseStep {
                 match origins {
                     Some(arr) if !arr.is_empty() => {
                         let list: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-                        let has_tauri = list.iter().any(|o| {
-                            o.contains("tauri://") || o.contains("https://tauri.localhost")
-                        });
+                        let has_tauri = list
+                            .iter()
+                            .any(|o| o.contains("tauri://") || o.contains("https://tauri.localhost"));
                         if has_tauri {
-                            finish_step(
-                                "allowed_origins",
-                                true,
-                                &format!("allowedOrigins 包含 Tauri origin: {:?}", list),
-                                t,
-                            )
+                            finish_step("allowed_origins", true, &format!("allowedOrigins 包含 Tauri origin: {:?}", list), t)
                         } else {
-                            finish_step(
-                                "allowed_origins",
-                                false,
-                                &format!("allowedOrigins 缺少 Tauri origin: {:?}", list),
-                                t,
-                            )
+                            finish_step("allowed_origins", false, &format!("allowedOrigins 缺少 Tauri origin: {:?}", list), t)
                         }
                     }
                     Some(_) => finish_step("allowed_origins", false, "allowedOrigins 为空数组", t),
-                    None => finish_step(
-                        "allowed_origins",
-                        false,
-                        "未配置 allowedOrigins（autoPair 会自动修复）",
-                        t,
-                    ),
+                    None => finish_step("allowed_origins", false, "未配置 allowedOrigins（autoPair 会自动修复）", t),
                 }
             } else {
                 finish_step("allowed_origins", false, "配置文件解析失败", t)
@@ -234,51 +214,27 @@ fn check_allowed_origins() -> DiagnoseStep {
 async fn check_http_health(port: u16) -> DiagnoseStep {
     let t = step_timer();
     let url = format!("http://127.0.0.1:{port}/health");
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build();
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(5)).build();
     match client {
         Ok(c) => match c.get(&url).send().await {
             Ok(resp) => {
                 let status = resp.status();
                 if status.is_success() {
-                    finish_step(
-                        "http_health",
-                        true,
-                        &format!("HTTP /health 返回 {status}"),
-                        t,
-                    )
+                    finish_step("http_health", true, &format!("HTTP /health 返回 {status}"), t)
                 } else {
-                    finish_step(
-                        "http_health",
-                        false,
-                        &format!("HTTP /health 返回 {status}"),
-                        t,
-                    )
+                    finish_step("http_health", false, &format!("HTTP /health 返回 {status}"), t)
                 }
             }
-            Err(e) => finish_step(
-                "http_health",
-                false,
-                &format!("HTTP /health 请求失败: {e}"),
-                t,
-            ),
+            Err(e) => finish_step("http_health", false, &format!("HTTP /health 请求失败: {e}"), t),
         },
-        Err(e) => finish_step(
-            "http_health",
-            false,
-            &format!("HTTP client 创建失败: {e}"),
-            t,
-        ),
+        Err(e) => finish_step("http_health", false, &format!("HTTP client 创建失败: {e}"), t),
     }
 }
 
 /// 检查 Gateway 错误日志
 fn check_error_log() -> DiagnoseStep {
     let t = step_timer();
-    let log_path = crate::commands::openclaw_dir()
-        .join("logs")
-        .join("gateway.err.log");
+    let log_path = crate::commands::openclaw_dir().join("logs").join("gateway.err.log");
     if !log_path.exists() {
         return finish_step("err_log", true, "无错误日志（正常）", t);
     }
@@ -296,23 +252,11 @@ fn check_error_log() -> DiagnoseStep {
                     &content[..]
                 };
                 let text = String::from_utf8_lossy(tail).to_lowercase();
-                let has_fatal = text.contains("fatal")
-                    || text.contains("eaddrinuse")
-                    || text.contains("config invalid");
+                let has_fatal = text.contains("fatal") || text.contains("eaddrinuse") || text.contains("config invalid");
                 if has_fatal {
-                    finish_step(
-                        "err_log",
-                        false,
-                        &format!("错误日志含关键错误 ({size} bytes)"),
-                        t,
-                    )
+                    finish_step("err_log", false, &format!("错误日志含关键错误 ({size} bytes)"), t)
                 } else {
-                    finish_step(
-                        "err_log",
-                        true,
-                        &format!("错误日志存在但无致命错误 ({size} bytes)"),
-                        t,
-                    )
+                    finish_step("err_log", true, &format!("错误日志存在但无致命错误 ({size} bytes)"), t)
                 }
             }
         }
@@ -346,11 +290,7 @@ pub async fn diagnose_gateway_connection() -> DiagnoseResult {
     steps.push(check_error_log());
 
     let overall_ok = steps.iter().all(|s| s.ok);
-    let failed: Vec<&str> = steps
-        .iter()
-        .filter(|s| !s.ok)
-        .map(|s| s.name.as_str())
-        .collect();
+    let failed: Vec<&str> = steps.iter().filter(|s| !s.ok).map(|s| s.name.as_str()).collect();
     let summary = if overall_ok {
         "所有检查项通过".to_string()
     } else {
@@ -493,9 +433,7 @@ pub fn check_ciao_windowshide_bug() -> CiaoCheckResult {
         // The buggy version uses  exec("arp -a ...", (error, stdout) => ...).
         let affected = content.lines().any(|line| {
             let trimmed = line.trim_start();
-            trimmed.contains(".exec(\"arp -a")
-                && !trimmed.contains("windowsHide")
-                && !trimmed.contains("windows_hide")
+            trimmed.contains(".exec(\"arp -a") && !trimmed.contains("windowsHide") && !trimmed.contains("windows_hide")
         });
 
         let detail = if affected {

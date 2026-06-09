@@ -1,0 +1,253 @@
+﻿fn add_agent_to_config(id: &str, model: &str, workspace: &std::path::Path) -> Result<(), String> {
+    let mut config = super::config::load_openclaw_json()?;
+    // 确保 agents.list 存在
+    if config.get("agents").is_none() {
+        config
+            .as_object_mut()
+            .ok_or("配置格式错误")?
+            .insert("agents".to_string(), crate::jv!({}));
+    }
+    if config["agents"].get("list").is_none() {
+        config["agents"]
+            .as_object_mut()
+            .ok_or("agents 格式错误")?
+            .insert("list".to_string(), crate::jv!([]));
+    }
+
+    let list = config["agents"]["list"].as_array_mut().ok_or("agents.list 格式错误")?;
+
+    // 检查是否已存在同名 agent
+    let exists = list.iter().any(|a| a.get("id").and_then(|v| v.as_str()) == Some(id));
+    if exists {
+        return Err(format!("Agent「{id}」已存在"));
+    }
+
+    let mut agent = crate::jv!({
+        "id": id,
+        "workspace": workspace.to_string_lossy(),
+    });
+    if !model.is_empty() {
+        if let Some(agent_obj) = agent.as_object_mut() {
+            agent_obj.insert("model".to_string(), crate::jv!({ "primary": model }));
+        }
+    }
+    list.push(agent);
+
+    super::config::save_openclaw_json(&config)?;
+
+    Ok(())
+}
+
+/// 删除 agent（直接操作 openclaw.json + 删除 agent 目录，不走 CLI）
+#[tauri::command]
+pub async fn delete_agent(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    if id == "main" {
+        return Err("不能删除默认 Agent".into());
+    }
+
+    // 1. 从 openclaw.json 的 agents.list 中移除
+    let mut config = super::config::load_openclaw_json()?;
+    if let Some(list) = config
+        .get_mut("agents")
+        .and_then(|a| a.get_mut("list"))
+        .and_then(|l| l.as_array_mut())
+    {
+        list.retain(|a| a.get("id").and_then(|v| v.as_str()) != Some(&id));
+    }
+    // 同时清理 agents.profiles 中的配置
+    if let Some(profiles) = config
+        .get_mut("agents")
+        .and_then(|a| a.get_mut("profiles"))
+        .and_then(|p| p.as_object_mut())
+    {
+        profiles.remove(&id);
+    }
+    super::config::save_openclaw_json(&config)?;
+
+    // 2. 删除 agent 目录（workspace + sessions 等）
+    let agent_dir = super::openclaw_dir().join("agents").join(&id);
+    if agent_dir.exists() {
+        if let Err(e) = fs::remove_dir_all(&agent_dir) {
+            eprintln!("[agent] 删除 agent 目录失败: {e}，不影响配置删除");
+        }
+    }
+
+    // 3. 触发 Gateway 重载
+    let _ = super::config::do_reload_gateway(&app).await;
+
+    Ok("已删除".into())
+}
+
+/// 更新 agent 身份信息
+#[tauri::command]
+pub async fn update_agent_identity(
+    app: tauri::AppHandle,
+    id: String,
+    name: Option<String>,
+    emoji: Option<String>,
+) -> Result<String, String> {
+    let mut config = super::config::load_openclaw_json()?;
+    let agents_list = config
+        .get_mut("agents")
+        .and_then(|a| a.get_mut("list"))
+        .and_then(|l| l.as_array_mut())
+        .ok_or("配置格式错误")?;
+
+    let agent = agents_list
+        .iter_mut()
+        .find(|a| a.get("id").and_then(|v| v.as_str()) == Some(&id))
+        .ok_or(format!("Agent「{id}」不存在"))?;
+
+    // 确保 identity 字段存在且为对象
+    if agent.get("identity").and_then(|i| i.as_object()).is_none() {
+        agent
+            .as_object_mut()
+            .ok_or("Agent 格式错误")?
+            .insert("identity".to_string(), crate::jv!({}));
+    }
+
+    let identity = agent
+        .get_mut("identity")
+        .and_then(|i| i.as_object_mut())
+        .ok_or("identity 格式错误")?;
+
+    if let Some(n) = name {
+        if !n.is_empty() {
+            identity.insert("name".to_string(), Value::String(n));
+        }
+    }
+    if let Some(e) = emoji {
+        if !e.is_empty() {
+            identity.insert("emoji".to_string(), Value::String(e));
+        }
+    }
+
+    // 提前提取 workspace 路径（克隆为 String，避免借用冲突）
+    let workspace_path = agent
+        .get("workspace")
+        .and_then(|w| w.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            config
+                .get("agents")
+                .and_then(|a| a.get("defaults"))
+                .and_then(|d| d.get("workspace"))
+                .and_then(|w| w.as_str())
+                .map(|s| s.to_string())
+        });
+
+    super::config::save_openclaw_json(&config)?;
+
+    // 删除 IDENTITY.md 文件，让配置文件生效
+    if let Some(ws_str) = workspace_path {
+        let identity_file = std::path::PathBuf::from(ws_str).join("IDENTITY.md");
+        if identity_file.exists() {
+            let _ = fs::remove_file(&identity_file);
+        }
+    }
+
+    // 触发 Gateway 重载使配置生效
+    let _ = super::config::do_reload_gateway(&app).await;
+
+    Ok("已更新".into())
+}
+
+/// 备份 agent 数据（agent 配置 + 会话记录）打包为 zip
+#[tauri::command]
+pub fn backup_agent(id: String) -> Result<String, String> {
+    let agent_dir = super::openclaw_dir().join("agents").join(&id);
+    if !agent_dir.exists() {
+        return Err(format!("Agent「{id}」数据目录不存在"));
+    }
+
+    let tmp_dir = std::env::temp_dir();
+    let now = chrono::Local::now();
+    let zip_name = format!("agent-{}-{}.zip", id, now.format("%Y%m%d-%H%M%S"));
+    let zip_path = tmp_dir.join(&zip_name);
+
+    let file = fs::File::create(&zip_path).map_err(|e| format!("创建 zip 失败: {e}"))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+    collect_dir_to_zip(&agent_dir, &agent_dir, &mut zip, options)?;
+
+    zip.finish().map_err(|e| format!("完成 zip 失败: {e}"))?;
+    Ok(zip_path.to_string_lossy().to_string())
+}
+
+fn collect_dir_to_zip(
+    base: &std::path::Path,
+    dir: &std::path::Path,
+    zip: &mut zip::ZipWriter<fs::File>,
+    options: zip::write::SimpleFileOptions,
+) -> Result<(), String> {
+    let entries = fs::read_dir(dir).map_err(|e| format!("读取目录失败: {e}"))?;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let rel = path
+            .strip_prefix(base)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        if path.is_dir() {
+            collect_dir_to_zip(base, &path, zip, options)?;
+        } else {
+            let content = fs::read(&path).map_err(|e| format!("读取 {rel} 失败: {e}"))?;
+            zip.start_file(&rel, options).map_err(|e| format!("写入 zip 失败: {e}"))?;
+            zip.write_all(&content).map_err(|e| format!("写入内容失败: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// 更新 agent 模型配置
+#[tauri::command]
+pub async fn update_agent_model(app: tauri::AppHandle, id: String, model: String) -> Result<String, String> {
+    let mut config = super::config::load_openclaw_json()?;
+    let agents_list = config
+        .get_mut("agents")
+        .and_then(|a| a.get_mut("list"))
+        .and_then(|l| l.as_array_mut())
+        .ok_or("配置格式错误")?;
+
+    let agent = agents_list
+        .iter_mut()
+        .find(|a| a.get("id").and_then(|v| v.as_str()) == Some(&id))
+        .ok_or(format!("Agent「{id}」不存在"))?;
+
+    let model_obj = crate::jv!({ "primary": model });
+    agent
+        .as_object_mut()
+        .ok_or("Agent 格式错误")?
+        .insert("model".to_string(), model_obj);
+
+    super::config::save_openclaw_json(&config)?;
+
+    // 触发 Gateway 重载使配置生效
+    let _ = super::config::do_reload_gateway(&app).await;
+
+    Ok("已更新".into())
+}
+
+fn ensure_allowed_agent_file(name: &str) -> Result<(), String> {
+    if AGENT_FILE_ALLOWLIST.contains(&name) {
+        Ok(())
+    } else {
+        Err("不允许访问此文件".to_string())
+    }
+}
+
+fn bootstrap_file_desc(name: &str) -> &'static str {
+    match name {
+        "AGENTS.md" => "Agent 规则",
+        "SOUL.md" => "灵魂/人格",
+        "TOOLS.md" => "工具白名单",
+        "IDENTITY.md" => "身份信息",
+        "USER.md" => "用户上下文",
+        "HEARTBEAT.md" => "心跳指令",
+        "BOOTSTRAP.md" => "初始化引导",
+        "MEMORY.md" => "记忆存储",
+        _ => "",
+    }
+}

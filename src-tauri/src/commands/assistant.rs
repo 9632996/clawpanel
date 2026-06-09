@@ -96,14 +96,9 @@ pub async fn assistant_load_image(id: String) -> Result<String, String> {
     }
 
     let filepath = found.ok_or_else(|| format!("图片 {} 不存在", id))?;
-    let bytes = tokio::fs::read(&filepath)
-        .await
-        .map_err(|e| format!("读取图片失败: {e}"))?;
+    let bytes = tokio::fs::read(&filepath).await.map_err(|e| format!("读取图片失败: {e}"))?;
 
-    let ext = filepath
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("jpg");
+    let ext = filepath.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
     let mime = match ext {
         "png" => "image/png",
         "gif" => "image/gif",
@@ -135,12 +130,7 @@ pub async fn assistant_delete_image(id: String) -> Result<(), String> {
 /// 执行 shell 命令，返回 stdout + stderr
 #[tauri::command]
 pub async fn assistant_exec(command: String, cwd: Option<String>) -> Result<String, String> {
-    let work_dir = cwd.unwrap_or_else(|| {
-        dirs::home_dir()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string()
-    });
+    let work_dir = cwd.unwrap_or_else(|| dirs::home_dir().unwrap_or_default().to_string_lossy().to_string());
 
     audit_log("EXEC", &format!("cmd={command} cwd={work_dir}"));
 
@@ -209,11 +199,7 @@ pub async fn assistant_read_file(path: String) -> Result<String, String> {
         .map_err(|e| format!("读取文件失败 {path}: {e}"))?;
 
     if content.len() > 50000 {
-        Ok(format!(
-            "{}...\n(文件内容已截断，共 {} 字节)",
-            &content[..50000],
-            content.len()
-        ))
+        Ok(format!("{}...\n(文件内容已截断，共 {} 字节)", &content[..50000], content.len()))
     } else {
         Ok(content)
     }
@@ -241,10 +227,7 @@ pub async fn assistant_write_file(path: String, content: String) -> Result<Strin
 pub async fn assistant_system_info() -> Result<String, String> {
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
-    let home = dirs::home_dir()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
+    let home = dirs::home_dir().unwrap_or_default().to_string_lossy().to_string();
     let hostname = std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
         .unwrap_or_else(|_| "unknown".into());
@@ -297,10 +280,7 @@ pub async fn assistant_list_processes(filter: Option<String>) -> Result<String, 
             .lines()
             .filter(|line| {
                 let lower = line.to_lowercase();
-                lower.contains(&f_lower)
-                    || lower.starts_with("id")
-                    || lower.starts_with("user")
-                    || lower.contains("---")
+                lower.contains(&f_lower) || lower.starts_with("id") || lower.starts_with("user") || lower.contains("---")
             })
             .collect();
         if lines.len() <= 2 {
@@ -320,19 +300,14 @@ pub async fn assistant_check_port(port: u16) -> Result<String, String> {
     use std::time::Duration;
 
     let addr = format!("127.0.0.1:{}", port);
-    let result = std::net::TcpStream::connect_timeout(
-        &addr.parse().map_err(|e| format!("地址解析失败: {e}"))?,
-        Duration::from_secs(2),
-    );
+    let result =
+        std::net::TcpStream::connect_timeout(&addr.parse().map_err(|e| format!("地址解析失败: {e}"))?, Duration::from_secs(2));
 
     match result {
         Ok(_stream) => {
             // 尝试获取占用进程信息
             let process_info = get_port_process(port).await;
-            Ok(format!(
-                "端口 {} 已被占用（正在监听）{}",
-                port, process_info
-            ))
+            Ok(format!("端口 {} 已被占用（正在监听）{}", port, process_info))
         }
         Err(_) => Ok(format!("端口 {} 未被占用（空闲）", port)),
     }
@@ -372,15 +347,9 @@ async fn get_port_process(port: u16) -> String {
 
 /// 联网搜索（DuckDuckGo HTML）
 #[tauri::command]
-pub async fn assistant_web_search(
-    query: String,
-    max_results: Option<usize>,
-) -> Result<String, String> {
+pub async fn assistant_web_search(query: String, max_results: Option<usize>) -> Result<String, String> {
     let max = max_results.unwrap_or(5);
-    let url = format!(
-        "https://html.duckduckgo.com/html/?q={}",
-        urlencoding::encode(&query)
-    );
+    let url = format!("https://html.duckduckgo.com/html/?q={}", urlencoding::encode(&query));
 
     let client = super::build_http_client(
         std::time::Duration::from_secs(10),
@@ -400,10 +369,11 @@ pub async fn assistant_web_search(
     // 解析搜索结果
     let mut results = Vec::new();
     let re_result = regex::Regex::new(
-        r#"class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)</a>[\s\S]*?class="result__snippet"[^>]*>([\s\S]*?)</a>"#
-    ).unwrap();
+        r#"class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)</a>[\s\S]*?class="result__snippet"[^>]*>([\s\S]*?)</a>"#,
+    )
+    .map_err(|e| format!("初始化搜索结果解析器失败: {e}"))?;
 
-    let re_strip_tags = regex::Regex::new(r"<[^>]+>").unwrap();
+    let re_strip_tags = regex::Regex::new(r"<[^>]+>").map_err(|e| format!("初始化 HTML 清理器失败: {e}"))?;
 
     for cap in re_result.captures_iter(&html) {
         if results.len() >= max {
@@ -435,13 +405,7 @@ pub async fn assistant_web_search(
 
     let mut output = format!("搜索「{}」找到 {} 条结果：\n\n", query, results.len());
     for (i, (title, url, snippet)) in results.iter().enumerate() {
-        output.push_str(&format!(
-            "{}. **{}**\n   {}\n   {}\n\n",
-            i + 1,
-            title,
-            url,
-            snippet
-        ));
+        output.push_str(&format!("{}. **{}**\n   {}\n   {}\n\n", i + 1, title, url, snippet));
     }
     Ok(output)
 }
@@ -468,10 +432,7 @@ pub async fn assistant_fetch_url(url: String) -> Result<String, String> {
         .map_err(|e| format!("读取内容失败: {e}"))?;
 
     if content.len() > 100_000 {
-        Ok(format!(
-            "{}\n\n[内容已截断，超过 100KB 限制]",
-            &content[..100_000]
-        ))
+        Ok(format!("{}\n\n[内容已截断，超过 100KB 限制]", &content[..100_000]))
     } else if content.is_empty() {
         Ok("（页面内容为空）".into())
     } else {

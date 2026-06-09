@@ -5,10 +5,7 @@ use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
 fn log_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_default()
-        .join(".openclaw")
-        .join("logs")
+    dirs::home_dir().unwrap_or_default().join(".openclaw").join("logs")
 }
 
 fn log_path(log_name: &str) -> PathBuf {
@@ -33,21 +30,16 @@ pub fn read_log_tail(log_name: String, lines: Option<u32>) -> Result<String, Str
 
     let mut file = fs::File::open(&path).map_err(|e| format!("打开日志失败: {e}"))?;
 
-    let file_len = file
-        .metadata()
-        .map_err(|e| format!("获取文件元数据失败: {e}"))?
-        .len();
+    let file_len = file.metadata().map_err(|e| format!("获取文件元数据失败: {e}"))?.len();
 
     // 最多从尾部读取 1MB，避免 OOM
     let max_read: u64 = 1024 * 1024;
     let start_pos = file_len.saturating_sub(max_read);
 
-    file.seek(SeekFrom::Start(start_pos))
-        .map_err(|e| format!("Seek 失败: {e}"))?;
+    file.seek(SeekFrom::Start(start_pos)).map_err(|e| format!("Seek 失败: {e}"))?;
 
     let mut raw = Vec::new();
-    file.read_to_end(&mut raw)
-        .map_err(|e| format!("读取日志失败: {e}"))?;
+    file.read_to_end(&mut raw).map_err(|e| format!("读取日志失败: {e}"))?;
     let buf = String::from_utf8_lossy(&raw).into_owned();
 
     let mut all_lines: Vec<&str> = buf.lines().collect();
@@ -58,21 +50,13 @@ pub fn read_log_tail(log_name: String, lines: Option<u32>) -> Result<String, Str
     }
 
     // 取最后 N 行
-    let start = if all_lines.len() > lines {
-        all_lines.len() - lines
-    } else {
-        0
-    };
+    let start = if all_lines.len() > lines { all_lines.len() - lines } else { 0 };
 
     Ok(all_lines[start..].join("\n"))
 }
 
 #[tauri::command]
-pub fn search_log(
-    log_name: String,
-    query: String,
-    max_results: Option<u32>,
-) -> Result<Vec<String>, String> {
+pub fn search_log(log_name: String, query: String, max_results: Option<u32>) -> Result<Vec<String>, String> {
     let max_results = max_results.unwrap_or(50) as usize;
     let path = log_path(&log_name);
     if !path.exists() {
@@ -81,17 +65,13 @@ pub fn search_log(
 
     let mut file = fs::File::open(&path).map_err(|e| format!("打开日志失败: {e}"))?;
 
-    let file_len = file
-        .metadata()
-        .map_err(|e| format!("获取文件元数据失败: {e}"))?
-        .len();
+    let file_len = file.metadata().map_err(|e| format!("获取文件元数据失败: {e}"))?.len();
 
     // 搜索最多读取尾部 2MB，避免 OOM，同时保证搜索最新内容
     let max_read: u64 = 2 * 1024 * 1024;
     let start_pos = file_len.saturating_sub(max_read);
 
-    file.seek(SeekFrom::Start(start_pos))
-        .map_err(|e| format!("Seek 失败: {e}"))?;
+    file.seek(SeekFrom::Start(start_pos)).map_err(|e| format!("Seek 失败: {e}"))?;
 
     let reader = BufReader::new(file);
     let query_lower = query.to_lowercase();

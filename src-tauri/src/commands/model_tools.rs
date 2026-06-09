@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use std::{fs, path::PathBuf};
 
 #[derive(Debug, Deserialize)]
@@ -28,10 +28,7 @@ const TOOLS: &[ToolTemplate] = &[
         id: "openclaw",
         name: "OpenClaw",
         category: "agent",
-        files: &[
-            "data/config/openclaw.json",
-            "data/config/model-credentials.env",
-        ],
+        files: &["data/config/openclaw.json", "data/config/model-credentials.env"],
         protocols: &["openai"],
     },
     ToolTemplate {
@@ -45,10 +42,7 @@ const TOOLS: &[ToolTemplate] = &[
         id: "codex",
         name: "Codex CLI",
         category: "coding-agent",
-        files: &[
-            "data/config/codex/config.toml",
-            "data/config/codex/auth.json",
-        ],
+        files: &["data/config/codex/config.toml", "data/config/codex/auth.json"],
         protocols: &["openai", "responses"],
     },
     ToolTemplate {
@@ -66,7 +60,7 @@ pub fn list_model_tools() -> Result<Value, String> {
         TOOLS
             .iter()
             .map(|t| {
-                json!({
+                crate::jv!({
                     "id": t.id,
                     "name": t.name,
                     "category": t.category,
@@ -79,10 +73,7 @@ pub fn list_model_tools() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn apply_model_to_tool(
-    tool_id: String,
-    model_info: ApplyModelInput,
-) -> Result<Value, String> {
+pub async fn apply_model_to_tool(tool_id: String, model_info: ApplyModelInput) -> Result<Value, String> {
     let tool = TOOLS
         .iter()
         .find(|t| t.id == tool_id)
@@ -96,7 +87,7 @@ pub async fn apply_model_to_tool(
         "codewhale" => apply_codewhale_model(&model)?,
         _ => return Err(format!("不支持的工具: {}", tool.id)),
     };
-    Ok(json!({
+    Ok(crate::jv!({
         "success": true,
         "toolId": tool.id,
         "provider": model.provider,
@@ -118,7 +109,7 @@ pub fn restore_tool_model_config(tool_id: String) -> Result<Value, String> {
             fs::remove_dir_all(&dir).map_err(|e| format!("清理 {} 失败: {e}", dir.display()))?;
         }
     }
-    Ok(json!({ "success": true, "toolId": tool.id }))
+    Ok(crate::jv!({ "success": true, "toolId": tool.id }))
 }
 
 struct ResolvedModel {
@@ -136,13 +127,7 @@ impl ResolvedModel {
     fn from_input(input: ApplyModelInput) -> Result<Self, String> {
         let provider = input
             .provider
-            .or_else(|| {
-                input
-                    .id
-                    .as_deref()
-                    .and_then(|id| id.split('/').next())
-                    .map(str::to_string)
-            })
+            .or_else(|| input.id.as_deref().and_then(|id| id.split('/').next()).map(str::to_string))
             .unwrap_or_else(|| "custom".to_string());
         validate_id(&provider, "provider")?;
         let model = input.model.trim().to_string();
@@ -172,7 +157,7 @@ impl ResolvedModel {
 }
 
 fn root_dir() -> PathBuf {
-    super::portable_product_root().unwrap_or_else(|| super::openclaw_dir())
+    super::portable_product_root().unwrap_or_else(super::openclaw_dir)
 }
 
 fn config_dir() -> PathBuf {
@@ -212,15 +197,10 @@ fn provider_env_key(provider: &str) -> String {
     match provider.to_ascii_lowercase().as_str() {
         "aizuopin" => "AIZUOPIN_API_KEY".into(),
         "openai" => "OPENAI_API_KEY".into(),
-        "deepseek" | "deepseek-cn" | "deepseek-china" | "deepseek_china" => {
-            "DEEPSEEK_API_KEY".into()
-        }
+        "deepseek" | "deepseek-cn" | "deepseek-china" | "deepseek_china" => "DEEPSEEK_API_KEY".into(),
         "moonshot" => "MOONSHOT_API_KEY".into(),
         "xiaomi" | "mimo" | "xiaomi-mimo" | "xiaomi_mimo" => "MIMO_API_KEY".into(),
-        other => format!(
-            "{}_API_KEY",
-            other.replace(['-', '.'], "_").to_ascii_uppercase()
-        ),
+        other => format!("{}_API_KEY", other.replace(['-', '.'], "_").to_ascii_uppercase()),
     }
 }
 
@@ -267,12 +247,7 @@ fn write_model_credentials(model: &ResolvedModel) -> Result<PathBuf, String> {
     let dir = config_dir();
     fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败: {e}"))?;
     let path = dir.join("model-credentials.env");
-    let managed = [
-        model.env_key.as_str(),
-        "AIZUOPIN_API_KEY",
-        "OPENAI_API_KEY",
-        "CUSTOM_API_KEY",
-    ];
+    let managed = [model.env_key.as_str(), "AIZUOPIN_API_KEY", "OPENAI_API_KEY", "CUSTOM_API_KEY"];
     let mut lines = Vec::new();
     if let Ok(existing) = fs::read_to_string(&path) {
         for line in existing.lines() {
@@ -292,8 +267,7 @@ fn write_model_credentials(model: &ResolvedModel) -> Result<PathBuf, String> {
             lines.push(format!("{alias}={}", model.api_key));
         }
     }
-    fs::write(&path, format!("{}\n", lines.join("\n")))
-        .map_err(|e| format!("写入 {} 失败: {e}", path.display()))?;
+    fs::write(&path, format!("{}\n", lines.join("\n"))).map_err(|e| format!("写入 {} 失败: {e}", path.display()))?;
     Ok(path)
 }
 
@@ -325,7 +299,7 @@ fn codewhale_cli_provider(provider: &str) -> &str {
 }
 
 fn apply_openclaw_model(model: &ResolvedModel) -> Result<Vec<String>, String> {
-    let mut config = crate::commands::config::load_openclaw_json().unwrap_or_else(|_| json!({}));
+    let mut config = crate::commands::config::load_openclaw_json().unwrap_or_else(|_| crate::jv!({}));
     ensure_object_path(&mut config, &["models", "providers"])?;
     let providers = config
         .pointer_mut("/models/providers")
@@ -333,21 +307,17 @@ fn apply_openclaw_model(model: &ResolvedModel) -> Result<Vec<String>, String> {
         .ok_or_else(|| "models.providers 不是对象".to_string())?;
     let provider = providers
         .entry(model.provider.clone())
-        .or_insert_with(|| json!({}))
+        .or_insert_with(|| crate::jv!({}))
         .as_object_mut()
         .ok_or_else(|| "provider 配置不是对象".to_string())?;
     provider.insert("baseUrl".into(), Value::String(model.base_url.clone()));
-    provider.insert("apiKey".into(), json!({ "$env": model.env_key }));
+    provider.insert("apiKey".into(), crate::jv!({ "$env": model.env_key }));
     provider.insert("api".into(), Value::String(model.protocol.clone()));
     ensure_model_in_provider(provider, &model.model);
     ensure_object_path(&mut config, &["agents", "defaults", "model"])?;
-    config["agents"]["defaults"]["model"]["primary"] =
-        Value::String(format!("{}/{}", model.provider, model.model));
+    config["agents"]["defaults"]["model"]["primary"] = Value::String(format!("{}/{}", model.provider, model.model));
     crate::commands::config::save_openclaw_json(&config)?;
-    Ok(vec![super::openclaw_dir()
-        .join("openclaw.json")
-        .display()
-        .to_string()])
+    Ok(vec![super::openclaw_dir().join("openclaw.json").display().to_string()])
 }
 
 async fn apply_hermes_model(model: &ResolvedModel) -> Result<Vec<String>, String> {
@@ -395,22 +365,18 @@ supports_websockets = false
         env_key = escape_toml(&model.env_key),
         wire_api = wire_api,
     );
-    fs::write(&config_path, content)
-        .map_err(|e| format!("写入 {} 失败: {e}", config_path.display()))?;
+    fs::write(&config_path, content).map_err(|e| format!("写入 {} 失败: {e}", config_path.display()))?;
 
     let auth_path = home.join("auth.json");
-    let auth = serde_json::to_string_pretty(&json!({
+    let auth = serde_json::to_string_pretty(&crate::jv!({
         "OPENAI_API_KEY": model.api_key,
-        "tokens": null,
-        "last_refresh": null,
+        "tokens": crate::jv!(null),
+        "last_refresh": crate::jv!(null),
     }))
     .map_err(|e| format!("序列化 auth.json 失败: {e}"))?;
     fs::write(&auth_path, auth).map_err(|e| format!("写入 {} 失败: {e}", auth_path.display()))?;
     update_panel_engine_model("codex", model)?;
-    Ok(vec![
-        config_path.display().to_string(),
-        auth_path.display().to_string(),
-    ])
+    Ok(vec![config_path.display().to_string(), auth_path.display().to_string()])
 }
 
 fn apply_codewhale_model(model: &ResolvedModel) -> Result<Vec<String>, String> {
@@ -433,8 +399,7 @@ api_key = "{api_key}"
         base_url = escape_toml(&model.base_url),
         api_key = escape_toml(&model.api_key),
     );
-    fs::write(&config_path, content)
-        .map_err(|e| format!("写入 {} 失败: {e}", config_path.display()))?;
+    fs::write(&config_path, content).map_err(|e| format!("写入 {} 失败: {e}", config_path.display()))?;
     update_panel_engine_model("codewhale", model)?;
     Ok(vec![config_path.display().to_string()])
 }
@@ -445,12 +410,8 @@ fn ensure_object_path(value: &mut Value, path: &[&str]) -> Result<(), String> {
         if !current.is_object() {
             *current = Value::Object(Map::new());
         }
-        let object = current
-            .as_object_mut()
-            .ok_or_else(|| format!("{key} 不是对象"))?;
-        current = object
-            .entry((*key).to_string())
-            .or_insert_with(|| Value::Object(Map::new()));
+        let object = current.as_object_mut().ok_or_else(|| format!("{key} 不是对象"))?;
+        current = object.entry((*key).to_string()).or_insert_with(|| Value::Object(Map::new()));
     }
     if !current.is_object() {
         *current = Value::Object(Map::new());
@@ -459,29 +420,27 @@ fn ensure_object_path(value: &mut Value, path: &[&str]) -> Result<(), String> {
 }
 
 fn ensure_model_in_provider(provider: &mut Map<String, Value>, model_id: &str) {
-    let entry = provider
-        .entry("models")
-        .or_insert_with(|| Value::Array(Vec::new()));
+    let entry = provider.entry("models").or_insert_with(|| Value::Array(Vec::new()));
     if !entry.is_array() {
         *entry = Value::Array(Vec::new());
     }
-    let models = entry.as_array_mut().expect("models array");
-    let exists = models.iter().any(|item| {
-        item.as_str() == Some(model_id) || item.get("id").and_then(Value::as_str) == Some(model_id)
-    });
+    let Some(models) = entry.as_array_mut() else {
+        return;
+    };
+    let exists = models
+        .iter()
+        .any(|item| item.as_str() == Some(model_id) || item.get("id").and_then(Value::as_str) == Some(model_id));
     if !exists {
-        models.push(json!({ "id": model_id, "input": ["text", "image"] }));
+        models.push(crate::jv!({ "id": model_id, "input": ["text", "image"] }));
     }
 }
 
 fn update_panel_engine_model(engine: &str, model: &ResolvedModel) -> Result<(), String> {
-    let mut panel = super::read_panel_config_value().unwrap_or_else(|| json!({}));
+    let mut panel = super::read_panel_config_value().unwrap_or_else(|| crate::jv!({}));
     if !panel.is_object() {
-        panel = json!({});
+        panel = crate::jv!({});
     }
-    let obj = panel
-        .as_object_mut()
-        .ok_or_else(|| "面板配置不是对象".to_string())?;
+    let obj = panel.as_object_mut().ok_or_else(|| "面板配置不是对象".to_string())?;
     let section = obj
         .entry(engine.to_string())
         .or_insert_with(|| Value::Object(Map::new()))
@@ -497,7 +456,7 @@ fn update_panel_engine_model(engine: &str, model: &ResolvedModel) -> Result<(), 
         .ok_or_else(|| format!("{engine}.providers 不是对象"))?;
     providers.insert(
         model.provider.clone(),
-        json!({
+        crate::jv!({
             "name": display_name(model),
             "baseUrl": model.base_url,
             "model": model.model,
@@ -507,16 +466,13 @@ fn update_panel_engine_model(engine: &str, model: &ResolvedModel) -> Result<(), 
 
     let root = root_dir();
     let path = if root.join("data").join("config").is_dir() {
-        root.join("data")
-            .join("config")
-            .join("zhizhua-workbench.json")
+        root.join("data").join("config").join("zhizhua-workbench.json")
     } else {
         super::panel_config_path()
     };
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 {} 失败: {e}", parent.display()))?;
     }
-    let data =
-        serde_json::to_string_pretty(&panel).map_err(|e| format!("序列化面板配置失败: {e}"))?;
+    let data = serde_json::to_string_pretty(&panel).map_err(|e| format!("序列化面板配置失败: {e}"))?;
     fs::write(&path, data).map_err(|e| format!("写入 {} 失败: {e}", path.display()))
 }

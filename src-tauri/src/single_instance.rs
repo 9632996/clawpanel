@@ -75,9 +75,7 @@ fn lock_file_path() -> PathBuf {
     if let Some(root) = portable_product_root() {
         return root.join("data").join("runtime").join(LOCK_FILE_NAME);
     }
-    crate::commands::openclaw_dir()
-        .join("runtime")
-        .join(LOCK_FILE_NAME)
+    crate::commands::openclaw_dir().join("runtime").join(LOCK_FILE_NAME)
 }
 
 fn portable_product_root() -> Option<PathBuf> {
@@ -87,12 +85,9 @@ fn portable_product_root() -> Option<PathBuf> {
     if let Some(root) = exe_dir.parent().and_then(|app| app.parent()) {
         candidates.push(root.to_path_buf());
     }
-    for root in candidates {
-        if root.join("data").join("config").is_dir() && root.join("app").is_dir() {
-            return Some(root);
-        }
-    }
-    None
+    candidates
+        .into_iter()
+        .find(|root| root.join("data").join("config").is_dir() && root.join("app").is_dir())
 }
 
 fn unix_timestamp() -> u64 {

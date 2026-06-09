@@ -1,4 +1,3 @@
-use serde_json::json;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -94,10 +93,7 @@ fn non_empty(value: Option<&str>) -> Option<String> {
 
 fn panel_codex_env_key(panel: &Value) -> Option<String> {
     let codex = panel.get("codex")?;
-    let provider = codex
-        .get("provider")
-        .and_then(|v| v.as_str())
-        .unwrap_or("deepseek");
+    let provider = codex.get("provider").and_then(|v| v.as_str()).unwrap_or("deepseek");
     codex
         .get("providers")
         .and_then(|v| v.get(provider))
@@ -164,10 +160,7 @@ fn read_codex_runtime_config(root: &Path, panel: &Value) -> CodexRuntimeConfig {
 }
 
 fn read_model_credentials(root: &Path, env_key: &str) -> Option<String> {
-    let path = root
-        .join("data")
-        .join("config")
-        .join("model-credentials.env");
+    let path = root.join("data").join("config").join("model-credentials.env");
     let content = std::fs::read_to_string(path).ok()?;
     for line in content.lines() {
         let trimmed = line.trim();
@@ -197,11 +190,7 @@ fn inject_codex_env(command: &mut Command, root: &Path, runtime: &CodexRuntimeCo
     }
 
     if let Some(env_key) = runtime.env_key.as_deref() {
-        if std::env::var(&env_key)
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .is_none()
-        {
+        if std::env::var(env_key).ok().filter(|v| !v.trim().is_empty()).is_none() {
             if let Some(value) = read_model_credentials(root, env_key) {
                 command.env(env_key, value);
             }
@@ -212,7 +201,7 @@ fn inject_codex_env(command: &mut Command, root: &Path, runtime: &CodexRuntimeCo
 #[tauri::command]
 pub fn codex_status() -> Result<Value, String> {
     let root = product_root()?;
-    let panel = super::read_panel_config_value().unwrap_or_else(|| json!({}));
+    let panel = super::read_panel_config_value().unwrap_or_else(|| crate::jv!({}));
     let home = codex_home(&root);
     let package_root = codex_package_root(&root);
     let cli = codex_cli_path(&root, &panel);
@@ -228,14 +217,10 @@ pub fn codex_status() -> Result<Value, String> {
         })
         .unwrap_or(0);
     let env_present = runtime.env_key.as_deref().is_some_and(|key| {
-        std::env::var(key)
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .is_some()
-            || read_model_credentials(&root, key).is_some()
+        std::env::var(key).ok().filter(|v| !v.trim().is_empty()).is_some() || read_model_credentials(&root, key).is_some()
     });
 
-    Ok(json!({
+    Ok(crate::jv!({
         "root": root.display().to_string(),
         "codexHome": home.display().to_string(),
         "configPath": home.join("config.toml").display().to_string(),
@@ -258,7 +243,7 @@ pub fn codex_status() -> Result<Value, String> {
 #[tauri::command]
 pub async fn codex_launch_app() -> Result<Value, String> {
     let root = product_root()?;
-    let panel = super::read_panel_config_value().unwrap_or_else(|| json!({}));
+    let panel = super::read_panel_config_value().unwrap_or_else(|| crate::jv!({}));
     let runtime = read_codex_runtime_config(&root, &panel);
     let cli = codex_cli_path(&root, &panel);
     if !cli.is_file() {
@@ -266,38 +251,23 @@ pub async fn codex_launch_app() -> Result<Value, String> {
     }
 
     let status = codex_status()?;
-    if !status
-        .get("configExists")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
-        return Err(format!(
-            "Codex 配置文件不存在: {}",
-            codex_home(&root).join("config.toml").display()
-        ));
+    if !status.get("configExists").and_then(|v| v.as_bool()).unwrap_or(false) {
+        return Err(format!("Codex 配置文件不存在: {}", codex_home(&root).join("config.toml").display()));
     }
-    if !status
-        .get("envPresent")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
-        let key = status
-            .get("envKey")
-            .and_then(|v| v.as_str())
-            .unwrap_or("API Key");
+    if !status.get("envPresent").and_then(|v| v.as_bool()).unwrap_or(false) {
+        let key = status.get("envKey").and_then(|v| v.as_str()).unwrap_or("API Key");
         return Err(format!("未找到 Codex 模型密钥: {key}"));
     }
 
     let workspace = codex_workspace(&root);
     let logs = codex_logs_dir(&root);
-    std::fs::create_dir_all(&workspace)
-        .map_err(|e| format!("创建 Codex 工作目录失败: {e}"))?;
+    std::fs::create_dir_all(&workspace).map_err(|e| format!("创建 Codex 工作目录失败: {e}"))?;
     std::fs::create_dir_all(&logs).map_err(|e| format!("创建 Codex 日志目录失败: {e}"))?;
 
-    let stdout = std::fs::File::create(logs.join("codex-app.out.log"))
-        .map_err(|e| format!("创建 Codex App stdout 日志失败: {e}"))?;
-    let stderr = std::fs::File::create(logs.join("codex-app.err.log"))
-        .map_err(|e| format!("创建 Codex App stderr 日志失败: {e}"))?;
+    let stdout =
+        std::fs::File::create(logs.join("codex-app.out.log")).map_err(|e| format!("创建 Codex App stdout 日志失败: {e}"))?;
+    let stderr =
+        std::fs::File::create(logs.join("codex-app.err.log")).map_err(|e| format!("创建 Codex App stderr 日志失败: {e}"))?;
 
     let mut command = Command::new(&cli);
     command
@@ -312,11 +282,9 @@ pub async fn codex_launch_app() -> Result<Value, String> {
     #[cfg(target_os = "windows")]
     command.creation_flags(CREATE_NO_WINDOW);
 
-    let child = command
-        .spawn()
-        .map_err(|e| format!("启动原生 Codex App 失败: {e}"))?;
+    let child = command.spawn().map_err(|e| format!("启动原生 Codex App 失败: {e}"))?;
 
-    Ok(json!({
+    Ok(crate::jv!({
         "ok": true,
         "pid": child.id(),
         "mode": "native-app",
@@ -340,7 +308,7 @@ pub fn codex_run_once(prompt: String) -> Result<Value, String> {
     }
 
     let root = product_root()?;
-    let panel = super::read_panel_config_value().unwrap_or_else(|| json!({}));
+    let panel = super::read_panel_config_value().unwrap_or_else(|| crate::jv!({}));
     let runtime = read_codex_runtime_config(&root, &panel);
     let cli = codex_cli_path(&root, &panel);
     if !cli.is_file() {
@@ -366,16 +334,11 @@ pub fn codex_run_once(prompt: String) -> Result<Value, String> {
 
     let deadline = Instant::now() + Duration::from_secs(180);
     loop {
-        if let Some(_status) = child
-            .try_wait()
-            .map_err(|e| format!("等待 Codex 失败: {e}"))?
-        {
-            let output = child
-                .wait_with_output()
-                .map_err(|e| format!("读取 Codex 输出失败: {e}"))?;
+        if let Some(_status) = child.try_wait().map_err(|e| format!("等待 Codex 失败: {e}"))? {
+            let output = child.wait_with_output().map_err(|e| format!("读取 Codex 输出失败: {e}"))?;
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Ok(json!({
+            return Ok(crate::jv!({
                 "success": output.status.success(),
                 "exitCode": output.status.code(),
                 "stdout": stdout.chars().take(20000).collect::<String>(),

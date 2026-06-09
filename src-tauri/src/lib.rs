@@ -1,21 +1,25 @@
+#![cfg_attr(test, allow(clippy::disallowed_methods))]
+
 mod commands;
+mod json_value;
 mod models;
 mod single_instance;
 mod tray;
 mod utils;
 
 use commands::{
-    agent, assistant, cli_conflict, codewhale, codex, config, device, diagnose, extensions, hermes,
-    hermes_providers, logs, memory, messaging, model_tools, pairing, service, skills, update,
+    agent, assistant, cli_conflict, codewhale, codex, config, config_model_runtime, config_model_scan, device, diagnose,
+    extensions, hermes, hermes_dashboard, hermes_dashboard_assets, hermes_env_config, hermes_fs, hermes_lazy_deps,
+    hermes_multi_gateway, hermes_providers, hermes_workspace_assets, logs, memory, messaging, messaging_bindings,
+    messaging_channel_actions, messaging_diagnose, messaging_plugins, messaging_verify, model_tools, pairing, service, skills,
+    update,
 };
 pub fn run() {
     let Some(_single_instance_guard) = single_instance::SingleInstanceGuard::acquire() else {
         return;
     };
 
-    let hot_update_dir = commands::openclaw_dir()
-        .join("clawpanel")
-        .join("web-update");
+    let hot_update_dir = commands::openclaw_dir().join("clawpanel").join("web-update");
 
     // issue #261: 装新版 app 时，如果旧的热更新目录里装的是更旧版本的前端
     // （或根本没 .version 标记），protocol handler 会优先读它，导致
@@ -23,12 +27,9 @@ pub fn run() {
     // 启动时先比对版本，落后于当前 app 就直接清掉，让 protocol handler 回退到内嵌 bundle。
     cleanup_stale_hot_update(&hot_update_dir);
 
-    tauri::Builder::default()
+    let app_result = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
-        ))
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .register_uri_scheme_protocol("tauri", move |ctx, request| {
             let uri_path = request.uri().path();
             let path = if uri_path == "/" || uri_path.is_empty() {
@@ -41,32 +42,37 @@ pub fn run() {
             let update_file = hot_update_dir.join(path);
             if update_file.is_file() {
                 if let Ok(data) = std::fs::read(&update_file) {
-                    return tauri::http::Response::builder()
-                        .header(
-                            tauri::http::header::CONTENT_TYPE,
-                            update::mime_from_path(path),
-                        )
+                    return match tauri::http::Response::builder()
+                        .header(tauri::http::header::CONTENT_TYPE, update::mime_from_path(path))
                         .body(data)
-                        .unwrap();
+                    {
+                        Ok(response) => response,
+                        Err(_) => tauri::http::Response::new(Vec::new()),
+                    };
                 }
             }
 
             // 2. 回退到内嵌资源
             if let Some(asset) = ctx.app_handle().asset_resolver().get(path.to_string()) {
-                let builder = tauri::http::Response::builder()
-                    .header(tauri::http::header::CONTENT_TYPE, &asset.mime_type);
+                let builder = tauri::http::Response::builder().header(tauri::http::header::CONTENT_TYPE, &asset.mime_type);
                 // Tauri 内嵌资源可能带 CSP header
                 let builder = if let Some(csp) = asset.csp_header {
                     builder.header("Content-Security-Policy", csp)
                 } else {
                     builder
                 };
-                builder.body(asset.bytes).unwrap()
+                match builder.body(asset.bytes) {
+                    Ok(response) => response,
+                    Err(_) => tauri::http::Response::new(Vec::new()),
+                }
             } else {
-                tauri::http::Response::builder()
+                match tauri::http::Response::builder()
                     .status(tauri::http::StatusCode::NOT_FOUND)
                     .body(b"Not Found".to_vec())
-                    .unwrap()
+                {
+                    Ok(response) => response,
+                    Err(_) => tauri::http::Response::new(Vec::new()),
+                }
             }
         })
         .setup(|app| {
@@ -98,12 +104,12 @@ pub fn run() {
             config::delete_backup,
             config::reload_gateway,
             config::restart_gateway,
-            config::test_model,
-            config::test_model_verbose,
-            config::list_remote_models,
-            config::get_assistant_default_model_config,
-            config::assistant_call_model,
-            config::scan_model_client_configs,
+            config_model_runtime::test_model,
+            config_model_runtime::test_model_verbose,
+            config_model_runtime::list_remote_models,
+            config_model_runtime::get_assistant_default_model_config,
+            config_model_runtime::assistant_call_model,
+            config_model_scan::scan_model_client_configs,
             model_tools::list_model_tools,
             model_tools::apply_model_to_tool,
             model_tools::restore_tool_model_config,
@@ -210,24 +216,24 @@ pub fn run() {
             messaging::save_messaging_platform,
             messaging::remove_messaging_platform,
             messaging::toggle_messaging_platform,
-            messaging::verify_bot_token,
-            messaging::diagnose_channel,
-            messaging::repair_qqbot_channel_setup,
-            messaging::list_configured_platforms,
-            messaging::get_channel_plugin_status,
-            messaging::list_all_plugins,
-            messaging::toggle_plugin,
-            messaging::install_plugin,
-            messaging::install_channel_plugin,
-            messaging::install_qqbot_plugin,
-            messaging::run_channel_action,
-            messaging::check_weixin_plugin_status,
+            messaging_verify::verify_bot_token,
+            messaging_diagnose::diagnose_channel,
+            messaging_plugins::repair_qqbot_channel_setup,
+            messaging_diagnose::list_configured_platforms,
+            messaging_plugins::get_channel_plugin_status,
+            messaging_plugins::list_all_plugins,
+            messaging_plugins::toggle_plugin,
+            messaging_plugins::install_plugin,
+            messaging_plugins::install_channel_plugin,
+            messaging_plugins::install_qqbot_plugin,
+            messaging_channel_actions::run_channel_action,
+            messaging_channel_actions::check_weixin_plugin_status,
             // Agent 渠道绑定管理
-            messaging::get_agent_bindings,
-            messaging::list_all_bindings,
-            messaging::save_agent_binding,
-            messaging::delete_agent_binding,
-            messaging::delete_agent_all_bindings,
+            messaging_bindings::get_agent_bindings,
+            messaging_bindings::list_all_bindings,
+            messaging_bindings::save_agent_binding,
+            messaging_bindings::delete_agent_binding,
+            messaging_bindings::delete_agent_all_bindings,
             // Skills 管理
             skills::skills_list,
             skills::skills_info,
@@ -259,14 +265,14 @@ pub fn run() {
             hermes::hermes_run_status,
             hermes::hermes_session_export,
             hermes::hermes_dashboard_api_proxy,
-            hermes::hermes_multi_gateway_list,
-            hermes::hermes_multi_gateway_add,
-            hermes::hermes_multi_gateway_remove,
-            hermes::hermes_multi_gateway_start,
-            hermes::hermes_multi_gateway_stop,
-            hermes::hermes_fs_list,
-            hermes::hermes_fs_read,
-            hermes::hermes_fs_write,
+            hermes_multi_gateway::hermes_multi_gateway_list,
+            hermes_multi_gateway::hermes_multi_gateway_add,
+            hermes_multi_gateway::hermes_multi_gateway_remove,
+            hermes_multi_gateway::hermes_multi_gateway_start,
+            hermes_multi_gateway::hermes_multi_gateway_stop,
+            hermes_fs::hermes_fs_list,
+            hermes_fs::hermes_fs_read,
+            hermes_fs::hermes_fs_write,
             hermes::hermes_read_config,
             hermes::hermes_read_config_full,
             hermes::hermes_channel_config_read,
@@ -357,19 +363,19 @@ pub fn run() {
             hermes::hermes_tts_voice_config_save,
             hermes::hermes_terminal_config_read,
             hermes::hermes_terminal_config_save,
-            hermes::hermes_lazy_deps_features,
-            hermes::hermes_lazy_deps_status,
-            hermes::hermes_lazy_deps_ensure,
+            hermes_lazy_deps::hermes_lazy_deps_features,
+            hermes_lazy_deps::hermes_lazy_deps_status,
+            hermes_lazy_deps::hermes_lazy_deps_ensure,
             hermes::hermes_fetch_models,
             hermes::hermes_update_model,
             hermes::hermes_detect_environments,
             hermes_providers::hermes_list_providers,
-            hermes::hermes_env_read_unmanaged,
-            hermes::hermes_env_set,
-            hermes::hermes_env_delete,
-            hermes::hermes_env_reveal,
-            hermes::hermes_config_raw_read,
-            hermes::hermes_config_raw_write,
+            hermes_env_config::hermes_env_read_unmanaged,
+            hermes_env_config::hermes_env_set,
+            hermes_env_config::hermes_env_delete,
+            hermes_env_config::hermes_env_reveal,
+            hermes_env_config::hermes_config_raw_read,
+            hermes_env_config::hermes_config_raw_write,
             hermes::hermes_set_gateway_url,
             hermes::update_hermes,
             hermes::uninstall_hermes,
@@ -379,28 +385,28 @@ pub fn run() {
             hermes::hermes_session_detail,
             hermes::hermes_session_delete,
             hermes::hermes_session_rename,
-            hermes::hermes_profiles_list,
-            hermes::hermes_profile_use,
-            hermes::hermes_logs_list,
-            hermes::hermes_logs_read,
-            hermes::hermes_skills_list,
-            hermes::hermes_skill_detail,
-            hermes::hermes_skill_toggle,
-            hermes::hermes_skill_files,
-            hermes::hermes_skill_write,
-            hermes::hermes_memory_read,
-            hermes::hermes_memory_write,
-            hermes::hermes_memory_read_all,
-            hermes::hermes_logs_download,
-            hermes::hermes_dashboard_themes,
-            hermes::hermes_dashboard_theme_set,
-            hermes::hermes_dashboard_plugins,
-            hermes::hermes_dashboard_plugins_rescan,
-            hermes::hermes_dashboard_probe,
-            hermes::hermes_dashboard_start,
-            hermes::hermes_dashboard_stop,
-            hermes::hermes_toolsets_list,
-            hermes::hermes_cron_jobs_list,
+            hermes_workspace_assets::hermes_profiles_list,
+            hermes_workspace_assets::hermes_profile_use,
+            hermes_workspace_assets::hermes_logs_list,
+            hermes_workspace_assets::hermes_logs_read,
+            hermes_workspace_assets::hermes_skills_list,
+            hermes_workspace_assets::hermes_skill_detail,
+            hermes_workspace_assets::hermes_skill_toggle,
+            hermes_workspace_assets::hermes_skill_files,
+            hermes_workspace_assets::hermes_skill_write,
+            hermes_workspace_assets::hermes_memory_read,
+            hermes_workspace_assets::hermes_memory_write,
+            hermes_workspace_assets::hermes_memory_read_all,
+            hermes_workspace_assets::hermes_logs_download,
+            hermes_dashboard_assets::hermes_dashboard_themes,
+            hermes_dashboard_assets::hermes_dashboard_theme_set,
+            hermes_dashboard_assets::hermes_dashboard_plugins,
+            hermes_dashboard_assets::hermes_dashboard_plugins_rescan,
+            hermes_dashboard::hermes_dashboard_probe,
+            hermes_dashboard::hermes_dashboard_start,
+            hermes_dashboard::hermes_dashboard_stop,
+            hermes_dashboard_assets::hermes_toolsets_list,
+            hermes_dashboard_assets::hermes_cron_jobs_list,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -408,9 +414,17 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .build(tauri::generate_context!())
-        .expect("启动智爪平台失败")
-        .run(|_app, _event| {});
+        .build({
+            #[allow(clippy::disallowed_methods)]
+            {
+                tauri::generate_context!()
+            }
+        });
+
+    match app_result {
+        Ok(app) => app.run(|_app, _event| {}),
+        Err(error) => eprintln!("启动智爪平台失败: {error}"),
+    }
 }
 
 /// 启动时清理落后版本的热更新目录（issue #261）。

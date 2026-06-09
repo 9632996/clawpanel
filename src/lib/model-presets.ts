@@ -19,7 +19,7 @@ export const API_TYPES = [
 
 // 服务商快捷预设
 export const PROVIDER_PRESETS = [
-  { key: 'aizuopin', label: 'AI作品模型服务', badge: '推荐', baseUrl: ZHIZHUA_MODEL_BASE_URL, api: 'openai-completions', site: ZHIZHUA_SERVICE_URL, desc: '智爪工具入口内置的模型服务，支持构建器注入客户授权额度' },
+  { key: 'aizuopin', label: 'AI作品模型服务', badge: '推荐', baseUrl: ZHIZHUA_MODEL_BASE_URL, api: 'openai-completions', site: ZHIZHUA_SERVICE_URL, desc: '智爪工具入口提供的模型服务，可使用内置授权或你自己的 API Key' },
   { key: 'shengsuanyun', label: '胜算云', baseUrl: 'https://router.shengsuanyun.com/api/v1', api: 'openai-completions', site: 'https://www.shengsuanyun.com/?from=CH_4BVI0BM2', desc: '国内知名 AI 模型聚合平台，支持多种主流模型' },
   { key: 'siliconflow', label: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', api: 'openai-completions', site: 'https://cloud.siliconflow.cn/i/PFrw2an5', desc: '高性价比推理平台，支持 DeepSeek、Qwen 等开源模型' },
   { key: 'volcengine', label: '火山引擎', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', api: 'openai-completions', site: 'https://volcengine.com/L/Ph1OP5I3_GY', desc: '字节跳动旗下云平台，支持豆包等模型' },

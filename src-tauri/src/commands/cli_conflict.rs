@@ -90,9 +90,10 @@ struct PortableCliAllowlist {
 impl PortableCliAllowlist {
     fn is_allowed(&self, canon: &str) -> bool {
         self.files.contains(canon)
-            || self.dirs.iter().any(|dir| {
-                !dir.is_empty() && (canon == dir || canon.starts_with(&format!("{dir}/")))
-            })
+            || self
+                .dirs
+                .iter()
+                .any(|dir| !dir.is_empty() && (canon == dir || canon.starts_with(&format!("{dir}/"))))
     }
 }
 
@@ -122,10 +123,7 @@ fn portable_cli_allowlist() -> PortableCliAllowlist {
         }
     }
 
-    if let Some(entries) = config
-        .get("openclawSearchPaths")
-        .and_then(|value| value.as_array())
-    {
+    if let Some(entries) = config.get("openclawSearchPaths").and_then(|value| value.as_array()) {
         for raw in entries
             .iter()
             .filter_map(|value| value.as_str())
@@ -143,11 +141,7 @@ fn portable_cli_allowlist() -> PortableCliAllowlist {
 fn executable_candidates(dir: &Path) -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
-        vec![
-            dir.join("openclaw.exe"),
-            dir.join("openclaw.cmd"),
-            dir.join("openclaw.bat"),
-        ]
+        vec![dir.join("openclaw.exe"), dir.join("openclaw.cmd"), dir.join("openclaw.bat")]
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -162,11 +156,7 @@ fn detect_source(path: &Path) -> (&'static str, &'static str) {
         ("cherrystudio", "Cherry Studio 内嵌")
     } else if s.contains("/.cursor/") || s.contains("/cursor/") {
         ("cursor", "Cursor 内嵌")
-    } else if s.contains("/node_modules/.bin/")
-        || s.contains("/npm/")
-        || s.contains("\\npm\\")
-        || s.contains("/.npm-global/")
-    {
+    } else if s.contains("/node_modules/.bin/") || s.contains("/npm/") || s.contains("\\npm\\") || s.contains("/.npm-global/") {
         ("npm-global", "npm 全局安装")
     } else {
         ("unknown", "未识别来源")
@@ -181,12 +171,7 @@ fn try_get_version(path: &Path) -> Option<String> {
     if let Some(parent) = dir.parent() {
         candidates.push(parent.join("package.json"));
         // 常见 npm 全局：xxx/openclaw 包目录在 node_modules/openclaw 下
-        candidates.push(
-            parent
-                .join("node_modules")
-                .join("openclaw")
-                .join("package.json"),
-        );
+        candidates.push(parent.join("node_modules").join("openclaw").join("package.json"));
         candidates.push(
             parent
                 .join("node_modules")
@@ -205,7 +190,7 @@ fn try_get_version(path: &Path) -> Option<String> {
         };
         // 必须是 openclaw 相关的包
         let name = json.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        let is_openclaw_pkg = name == "openclaw" || name == "openclaw" || name.contains("openclaw");
+        let is_openclaw_pkg = name.contains("openclaw");
         if !is_openclaw_pkg {
             continue;
         }
@@ -252,9 +237,7 @@ pub async fn scan_openclaw_path_conflicts() -> Result<Vec<CliConflict>, String> 
             }
 
             // 跳过 standalone 目录下的（这是当前在用的合法版本）
-            let is_standalone = standalone_canon
-                .iter()
-                .any(|sa| !sa.is_empty() && canon.starts_with(sa));
+            let is_standalone = standalone_canon.iter().any(|sa| !sa.is_empty() && canon.starts_with(sa));
             if is_standalone {
                 continue;
             }
@@ -313,16 +296,11 @@ pub async fn quarantine_openclaw_path(path: String) -> Result<QuarantineRecord, 
 
     let ts = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
     let new_name = format!("{file_name}{QUARANTINE_MARKER}{ts}.bak");
-    let parent = original
-        .parent()
-        .ok_or_else(|| "无法解析父目录".to_string())?;
+    let parent = original.parent().ok_or_else(|| "无法解析父目录".to_string())?;
     let new_path = parent.join(&new_name);
 
     if new_path.exists() {
-        return Err(format!(
-            "目标文件已存在，请稍后再试: {}",
-            new_path.display()
-        ));
+        return Err(format!("目标文件已存在，请稍后再试: {}", new_path.display()));
     }
 
     std::fs::rename(&original, &new_path).map_err(|e| format!("重命名失败: {}", e))?;
@@ -339,9 +317,7 @@ pub async fn quarantine_openclaw_path(path: String) -> Result<QuarantineRecord, 
 
 /// 一键隔离多个冲突路径。即使部分失败，已成功的不会回滚。
 #[tauri::command]
-pub async fn quarantine_openclaw_paths_bulk(
-    paths: Vec<String>,
-) -> Result<BulkQuarantineResult, String> {
+pub async fn quarantine_openclaw_paths_bulk(paths: Vec<String>) -> Result<BulkQuarantineResult, String> {
     let mut records = Vec::new();
     let mut failed = Vec::new();
 
@@ -448,17 +424,14 @@ pub async fn restore_quarantined_openclaw(quarantined_path: String) -> Result<St
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| "无效的文件名".to_string())?;
-    let original_name = parse_quarantined_name(file_name)
-        .ok_or_else(|| format!("不是智爪平台隔离文件，无法恢复: {}", file_name))?;
+    let original_name =
+        parse_quarantined_name(file_name).ok_or_else(|| format!("不是智爪平台隔离文件，无法恢复: {}", file_name))?;
 
     let parent = qpath.parent().ok_or_else(|| "无法解析父目录".to_string())?;
     let original_path = parent.join(original_name);
 
     if original_path.exists() {
-        return Err(format!(
-            "目标位置已存在文件，无法恢复: {}",
-            original_path.display()
-        ));
+        return Err(format!("目标位置已存在文件，无法恢复: {}", original_path.display()));
     }
 
     std::fs::rename(&qpath, &original_path).map_err(|e| format!("恢复失败: {}", e))?;
@@ -474,9 +447,7 @@ mod tests {
     #[test]
     fn parse_quarantined_name_basic() {
         assert_eq!(
-            parse_quarantined_name(
-                "openclaw.exe.disabled-by-zhizhua-workbench-20260507-153012.bak"
-            ),
+            parse_quarantined_name("openclaw.exe.disabled-by-zhizhua-workbench-20260507-153012.bak"),
             Some("openclaw.exe")
         );
         assert_eq!(
@@ -489,10 +460,7 @@ mod tests {
     fn parse_quarantined_name_invalid() {
         assert_eq!(parse_quarantined_name("openclaw.exe"), None);
         assert_eq!(parse_quarantined_name("openclaw.exe.bak"), None);
-        assert_eq!(
-            parse_quarantined_name("openclaw.exe.disabled-by-zhizhua-workbench-.bak"),
-            None
-        );
+        assert_eq!(parse_quarantined_name("openclaw.exe.disabled-by-zhizhua-workbench-.bak"), None);
         assert_eq!(parse_quarantined_name("not-related.bak"), None);
     }
 

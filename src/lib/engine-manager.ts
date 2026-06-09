@@ -7,6 +7,7 @@ import { api, invalidate } from './tauri-api.ts'
 import { registerRoute, setDefaultRoute } from '../router.ts'
 
 const _engines = {}
+let _enabledEngineIds = null
 let _activeEngine = null
 let _listeners = []
 let _needsInitialEngineChoice = false
@@ -19,12 +20,16 @@ export function registerEngine(engine) {
 
 /** 获取所有已注册引擎 */
 export function listEngines() {
-  return Object.values(_engines).map(e => ({
+  return Object.values(_engines).filter(e => isEngineEnabled(e.id)).map(e => ({
     id: e.id,
     name: e.name,
     icon: e.icon || '',
     description: e.description || '',
   }))
+}
+
+function isEngineEnabled(id) {
+  return !_enabledEngineIds || _enabledEngineIds.includes(id)
 }
 
 /** 获取当前激活的引擎 */
@@ -66,12 +71,18 @@ export async function initEngineManager() {
   let hasChoice = false
   try {
     const cfg = await api.readPanelConfig()
+    _enabledEngineIds = Array.isArray(cfg?.enabledEngines)
+      ? cfg.enabledEngines.filter((id, idx, arr) => _engines[id] && arr.indexOf(id) === idx)
+      : null
+    if (_enabledEngineIds && !_enabledEngineIds.includes('openclaw')) {
+      _enabledEngineIds.unshift('openclaw')
+    }
     hasChoice = !!cfg?.engineSetupChoice
     if (cfg?.engineMode === 'deferred') {
       _engineSetupDeferred = true
     } else if (cfg?.engineMode === 'both') {
       mode = 'openclaw'
-    } else if (cfg?.engineMode && _engines[cfg.engineMode]) {
+    } else if (cfg?.engineMode && _engines[cfg.engineMode] && isEngineEnabled(cfg.engineMode)) {
       mode = cfg.engineMode
     }
   } catch {}
@@ -86,6 +97,9 @@ export async function applyEngineSelection({ activeEngineId = 'openclaw', enable
   const mode = deferred ? 'openclaw' : activeEngineId
   if (!_engines[mode]) {
     throw new Error(`unknown engine: ${mode}`)
+  }
+  if (!isEngineEnabled(mode)) {
+    throw new Error(`engine disabled by product build: ${mode}`)
   }
   const enabled = Array.isArray(enabledEngineIds)
     ? enabledEngineIds.filter((id, idx, arr) => _engines[id] && arr.indexOf(id) === idx)
@@ -136,6 +150,10 @@ export async function activateEngine(id, persist = true) {
   const engine = _engines[id]
   if (!engine) {
     console.error(`[engine-manager] 未知引擎: ${id}`)
+    return
+  }
+  if (!isEngineEnabled(id)) {
+    console.error(`[engine-manager] 引擎未包含在当前产物中: ${id}`)
     return
   }
 

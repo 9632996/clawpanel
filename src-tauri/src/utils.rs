@@ -44,10 +44,7 @@ fn push_windows_cli_files(
     push_unique_candidate(
         candidates,
         seen,
-        base.join("node_modules")
-            .join("openclaw")
-            .join("bin")
-            .join("openclaw.js"),
+        base.join("node_modules").join("openclaw").join("bin").join("openclaw.js"),
     );
 }
 
@@ -66,11 +63,7 @@ fn common_windows_cli_candidates() -> Vec<std::path::PathBuf> {
     }
 
     if let Ok(appdata) = std::env::var("APPDATA") {
-        push_windows_cli_files(
-            &mut candidates,
-            &mut seen,
-            std::path::PathBuf::from(appdata).join("npm"),
-        );
+        push_windows_cli_files(&mut candidates, &mut seen, std::path::PathBuf::from(appdata).join("npm"));
     }
     if let Some(prefix) = crate::commands::windows_npm_global_prefix() {
         push_windows_cli_files(&mut candidates, &mut seen, std::path::PathBuf::from(prefix));
@@ -80,17 +73,9 @@ fn common_windows_cli_candidates() -> Vec<std::path::PathBuf> {
     }
     if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
         let localappdata = std::path::PathBuf::from(localappdata);
-        push_windows_cli_files(
-            &mut candidates,
-            &mut seen,
-            localappdata.join("Programs").join("OpenClaw"),
-        );
+        push_windows_cli_files(&mut candidates, &mut seen, localappdata.join("Programs").join("OpenClaw"));
         push_windows_cli_files(&mut candidates, &mut seen, localappdata.join("OpenClaw"));
-        push_windows_cli_files(
-            &mut candidates,
-            &mut seen,
-            localappdata.join("Programs").join("nodejs"),
-        );
+        push_windows_cli_files(&mut candidates, &mut seen, localappdata.join("Programs").join("nodejs"));
     }
     if let Ok(program_files) = std::env::var("ProgramFiles") {
         let program_files = std::path::PathBuf::from(program_files);
@@ -98,30 +83,14 @@ fn common_windows_cli_candidates() -> Vec<std::path::PathBuf> {
         push_windows_cli_files(&mut candidates, &mut seen, program_files.join("OpenClaw"));
     }
     if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
-        push_windows_cli_files(
-            &mut candidates,
-            &mut seen,
-            std::path::PathBuf::from(program_files_x86).join("nodejs"),
-        );
+        push_windows_cli_files(&mut candidates, &mut seen, std::path::PathBuf::from(program_files_x86).join("nodejs"));
     }
     if let Ok(profile) = std::env::var("USERPROFILE") {
-        push_windows_cli_files(
-            &mut candidates,
-            &mut seen,
-            std::path::PathBuf::from(profile).join(".openclaw-bin"),
-        );
+        push_windows_cli_files(&mut candidates, &mut seen, std::path::PathBuf::from(profile).join(".openclaw-bin"));
     }
     for drive in ["C", "D", "E", "F", "G"] {
-        push_windows_cli_files(
-            &mut candidates,
-            &mut seen,
-            std::path::PathBuf::from(format!(r"{drive}:\OpenClaw")),
-        );
-        push_windows_cli_files(
-            &mut candidates,
-            &mut seen,
-            std::path::PathBuf::from(format!(r"{drive}:\AI\OpenClaw")),
-        );
+        push_windows_cli_files(&mut candidates, &mut seen, std::path::PathBuf::from(format!(r"{drive}:\OpenClaw")));
+        push_windows_cli_files(&mut candidates, &mut seen, std::path::PathBuf::from(format!(r"{drive}:\AI\OpenClaw")));
     }
 
     const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -134,11 +103,7 @@ fn common_windows_cli_candidates() -> Vec<std::path::PathBuf> {
             for line in String::from_utf8_lossy(&output.stdout).lines() {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() {
-                    push_unique_candidate(
-                        &mut candidates,
-                        &mut seen,
-                        std::path::PathBuf::from(trimmed),
-                    );
+                    push_unique_candidate(&mut candidates, &mut seen, std::path::PathBuf::from(trimmed));
                 }
             }
         }
@@ -221,18 +186,10 @@ fn load_model_credentials_env(config_dir: &std::path::Path) -> Vec<(String, Stri
             continue;
         };
         let key = key.trim();
-        if key.is_empty()
-            || !key
-                .chars()
-                .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
-        {
+        if key.is_empty() || !key.chars().all(|ch| ch == '_' || ch.is_ascii_alphanumeric()) {
             continue;
         }
-        let value = raw_value
-            .trim()
-            .trim_matches('"')
-            .trim_matches('\'')
-            .to_string();
+        let value = raw_value.trim().trim_matches('"').trim_matches('\'').to_string();
         values.push((key.to_string(), value));
     }
     values
@@ -253,25 +210,16 @@ fn ensure_runtime_dirs(envs: &OpenClawRuntimeEnv) {
 fn apply_openclaw_dir_env(cmd: &mut std::process::Command) {
     let envs = openclaw_runtime_env();
     ensure_runtime_dirs(&envs);
-    cmd.env(
-        "OPENCLAW_CONFIG_PATH",
-        envs.config_dir.join("openclaw.json"),
-    );
+    cmd.env("OPENCLAW_CONFIG_PATH", envs.config_dir.join("openclaw.json"));
     cmd.env("OPENCLAW_HOME", &envs.home_dir);
     cmd.env("OPENCLAW_STATE_DIR", &envs.state_dir);
     cmd.env("OPENCLAW_CACHE_DIR", &envs.cache_dir);
     cmd.env("OPENCLAW_LOG_DIR", &envs.log_dir);
     cmd.env("OPENCLAW_WORKSPACE_DIR", &envs.workspace_dir);
-    cmd.env(
-        "OPENCLAW_GATEWAY_PORT",
-        crate::commands::gateway_listen_port().to_string(),
-    );
+    cmd.env("OPENCLAW_GATEWAY_PORT", crate::commands::gateway_listen_port().to_string());
     cmd.env("OPENCLAW_SHOW_SECRETS", "0");
     cmd.env("OPENCLAW_PORTABLE", "1");
-    cmd.env(
-        "NODE_COMPILE_CACHE",
-        envs.cache_dir.join("node-compile-cache"),
-    );
+    cmd.env("NODE_COMPILE_CACHE", envs.cache_dir.join("node-compile-cache"));
     cmd.env("TEMP", &envs.temp_dir);
     cmd.env("TMP", &envs.temp_dir);
     cmd.env("OPENCLAW_WRAPPER_LOG_REDIRECT", "0");
@@ -283,25 +231,16 @@ fn apply_openclaw_dir_env(cmd: &mut std::process::Command) {
 fn apply_openclaw_dir_env_tokio(cmd: &mut tokio::process::Command) {
     let envs = openclaw_runtime_env();
     ensure_runtime_dirs(&envs);
-    cmd.env(
-        "OPENCLAW_CONFIG_PATH",
-        envs.config_dir.join("openclaw.json"),
-    );
+    cmd.env("OPENCLAW_CONFIG_PATH", envs.config_dir.join("openclaw.json"));
     cmd.env("OPENCLAW_HOME", &envs.home_dir);
     cmd.env("OPENCLAW_STATE_DIR", &envs.state_dir);
     cmd.env("OPENCLAW_CACHE_DIR", &envs.cache_dir);
     cmd.env("OPENCLAW_LOG_DIR", &envs.log_dir);
     cmd.env("OPENCLAW_WORKSPACE_DIR", &envs.workspace_dir);
-    cmd.env(
-        "OPENCLAW_GATEWAY_PORT",
-        crate::commands::gateway_listen_port().to_string(),
-    );
+    cmd.env("OPENCLAW_GATEWAY_PORT", crate::commands::gateway_listen_port().to_string());
     cmd.env("OPENCLAW_SHOW_SECRETS", "0");
     cmd.env("OPENCLAW_PORTABLE", "1");
-    cmd.env(
-        "NODE_COMPILE_CACHE",
-        envs.cache_dir.join("node-compile-cache"),
-    );
+    cmd.env("NODE_COMPILE_CACHE", envs.cache_dir.join("node-compile-cache"));
     cmd.env("TEMP", &envs.temp_dir);
     cmd.env("TMP", &envs.temp_dir);
     cmd.env("OPENCLAW_WRAPPER_LOG_REDIRECT", "0");
@@ -395,16 +334,11 @@ pub fn resolve_openclaw_cli_path() -> Option<String> {
 pub fn classify_cli_source(cli_path: &str) -> String {
     let lower = cli_path.replace('\\', "/").to_lowercase();
     // standalone 安装
-    if lower.contains("/programs/openclaw/")
-        || lower.contains("/openclaw-bin/")
-        || lower.contains("/opt/openclaw/")
-    {
+    if lower.contains("/programs/openclaw/") || lower.contains("/openclaw-bin/") || lower.contains("/opt/openclaw/") {
         return "standalone".into();
     }
     // npm 中文增强版
-    if lower.contains(&format!("openclaw-{}", "zh"))
-        || lower.contains(&format!("@{}cloud", "qingchen"))
-    {
+    if lower.contains(&format!("openclaw-{}", "zh")) || lower.contains(&format!("@{}cloud", "qingchen")) {
         return "npm-zh".into();
     }
     // npm 全局（大概率官方版）

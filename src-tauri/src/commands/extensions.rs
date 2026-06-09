@@ -30,10 +30,7 @@ fn parse_cftunnel_status(output: &str) -> serde_json::Map<String, Value> {
             let running = rest.contains("运行中");
             map.insert("running".into(), Value::Bool(running));
             // 匹配英文和全角 'PID:' / 'PID：'
-            let pid_rest = rest
-                .split("PID:")
-                .nth(1)
-                .or_else(|| rest.split("PID：").nth(1));
+            let pid_rest = rest.split("PID:").nth(1).or_else(|| rest.split("PID：").nth(1));
             if let Some(pid_str) = pid_rest {
                 let pid = pid_str.trim().trim_end_matches(')').trim();
                 if let Ok(p) = pid.parse::<u64>() {
@@ -75,10 +72,7 @@ fn cftunnel_bin() -> String {
         let candidates = [
             home.join("bin").join("cftunnel.exe"),
             home.join(".cftunnel").join("cftunnel.exe"),
-            home.join("AppData")
-                .join("Local")
-                .join("cftunnel")
-                .join("cftunnel.exe"),
+            home.join("AppData").join("Local").join("cftunnel").join("cftunnel.exe"),
         ];
         for path in &candidates {
             if path.exists() {
@@ -155,16 +149,10 @@ fn check_cftunnel_process() -> Option<(Option<u64>, bool)> {
     #[cfg(target_os = "linux")]
     {
         // Linux: 通过 pgrep 检测
-        let output = Command::new("pgrep")
-            .args(["-f", "cftunnel"])
-            .output()
-            .ok()?;
+        let output = Command::new("pgrep").args(["-f", "cftunnel"]).output().ok()?;
         if output.status.success() {
             let text = String::from_utf8_lossy(&output.stdout);
-            let pid = text
-                .lines()
-                .next()
-                .and_then(|s| s.trim().parse::<u64>().ok());
+            let pid = text.lines().next().and_then(|s| s.trim().parse::<u64>().ok());
             return Some((pid, true));
         }
         None
@@ -202,10 +190,7 @@ pub fn get_cftunnel_status() -> Result<Value, String> {
     }
 
     // 仅当 status 报未运行时才做进程检测补充
-    let reported_running = result
-        .get("running")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let reported_running = result.get("running").and_then(|v| v.as_bool()).unwrap_or(false);
     if !reported_running {
         if let Some((pid, running)) = check_cftunnel_process() {
             if running {
@@ -271,21 +256,18 @@ pub fn get_clawapp_status() -> Result<Value, String> {
     result.insert("installed".into(), Value::Bool(installed));
 
     // 跨平台方式：尝试连接端口检测是否在运行
-    let running = std::net::TcpStream::connect_timeout(
-        &"127.0.0.1:3210".parse().unwrap(),
-        std::time::Duration::from_millis(150),
-    )
-    .is_ok();
+    let running = "127.0.0.1:3210"
+        .parse()
+        .ok()
+        .and_then(|addr| std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(150)).ok())
+        .is_some();
 
     result.insert("running".into(), Value::Bool(running));
 
     // macOS: 用 lsof 获取 PID
     #[cfg(target_os = "macos")]
     if running {
-        if let Ok(out) = Command::new("lsof")
-            .args(["-i", ":3210", "-P", "-t"])
-            .output()
-        {
+        if let Ok(out) = Command::new("lsof").args(["-i", ":3210", "-P", "-t"]).output() {
             let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if let Ok(pid) = text.lines().next().unwrap_or("").parse::<u64>() {
                 result.insert("pid".into(), Value::Number(pid.into()));
@@ -344,7 +326,8 @@ pub async fn install_cftunnel(app: tauri::AppHandle) -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     let mut child = {
-        let install_script = format!(r#"
+        let install_script = format!(
+            r#"
 #!/bin/bash
 set -e
 cd /tmp
@@ -354,7 +337,8 @@ chmod +x cftunnel-install.sh
 echo "执行安装..."
 ./cftunnel-install.sh
 echo "安装完成"
-"#);
+"#
+        );
         Command::new("bash")
             .arg("-c")
             .arg(install_script)
@@ -366,7 +350,8 @@ echo "安装完成"
 
     #[cfg(target_os = "windows")]
     let mut child = {
-        let install_script = format!(r#"
+        let install_script = format!(
+            r#"
 $ErrorActionPreference = 'Stop'
 Write-Output '通过官方安装脚本安装 cftunnel...'
 $tmp = Join-Path $env:TEMP 'install-cftunnel.ps1'
@@ -376,24 +361,14 @@ Write-Output '执行安装脚本...'
 & $tmp
 Remove-Item $tmp -ErrorAction SilentlyContinue
 Write-Output '安装完成'
-"#);
+"#
+        );
         // 使用完整路径调用 PowerShell，避免 MSYS2/Git Bash 环境下找不到
         let ps_path = std::env::var("SystemRoot")
-            .map(|root| {
-                format!(
-                    "{}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-                    root
-                )
-            })
+            .map(|root| format!("{}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", root))
             .unwrap_or_else(|_| "powershell.exe".to_string());
         Command::new(&ps_path)
-            .args([
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                &install_script,
-            ])
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &install_script])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -457,13 +432,15 @@ pub async fn install_clawapp(app: tauri::AppHandle) -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     let mut child = {
-        let install_script = format!(r#"
+        let install_script = format!(
+            r#"
 #!/bin/bash
 set -e
 echo "通过官方安装脚本安装 ClawApp..."
 curl -fsSL {clawapp_sh_url} | bash
 echo "安装完成"
-"#);
+"#
+        );
         Command::new("bash")
             .arg("-c")
             .arg(install_script)
@@ -475,7 +452,8 @@ echo "安装完成"
 
     #[cfg(target_os = "windows")]
     let mut child = {
-        let install_script = format!(r#"
+        let install_script = format!(
+            r#"
 $ErrorActionPreference = 'Stop'
 Write-Output '通过官方安装脚本安装 ClawApp...'
 $tmp = Join-Path $env:TEMP 'install-clawapp.ps1'
@@ -485,23 +463,13 @@ Write-Output '执行安装脚本...'
 & $tmp -Auto
 Remove-Item $tmp -ErrorAction SilentlyContinue
 Write-Output '安装完成'
-"#);
+"#
+        );
         let ps_path = std::env::var("SystemRoot")
-            .map(|root| {
-                format!(
-                    "{}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-                    root
-                )
-            })
+            .map(|root| format!("{}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", root))
             .unwrap_or_else(|_| "powershell.exe".to_string());
         let mut cmd = Command::new(&ps_path);
-        cmd.args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            &install_script,
-        ]);
+        cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &install_script]);
         cmd.creation_flags(0x08000000);
         cmd.stdout(Stdio::piped())
             .stderr(Stdio::piped())

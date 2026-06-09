@@ -58,10 +58,7 @@ static INDEX_CACHE: Mutex<Option<(Instant, Vec<SkillHubItem>)>> = Mutex::new(Non
 // ── HTTP 客户端 ──────────────────────────────────────────
 
 fn client() -> Result<reqwest::Client, String> {
-    super::build_http_client(
-        Duration::from_secs(30),
-        Some("ZhizhuaWorkbench-SkillHub/1.0"),
-    )
+    super::build_http_client(Duration::from_secs(30), Some("ZhizhuaWorkbench-SkillHub/1.0"))
 }
 
 // ── 公开接口 ──────────────────────────────────────────────
@@ -72,12 +69,7 @@ pub async fn search(query: &str, limit: u32) -> Result<Vec<SkillHubItem>, String
     if q.is_empty() {
         return Ok(vec![]);
     }
-    let url = format!(
-        "{}/search?q={}&limit={}",
-        API_BASE,
-        urlencoding::encode(q),
-        limit
-    );
+    let url = format!("{}/search?q={}&limit={}", API_BASE, urlencoding::encode(q), limit);
     let resp = client()?
         .get(&url)
         .send()
@@ -86,10 +78,7 @@ pub async fn search(query: &str, limit: u32) -> Result<Vec<SkillHubItem>, String
     if !resp.status().is_success() {
         return Err(format!("SkillHub 搜索失败: HTTP {}", resp.status()));
     }
-    let data: SearchResponse = resp
-        .json()
-        .await
-        .map_err(|e| format!("SkillHub 搜索结果解析失败: {e}"))?;
+    let data: SearchResponse = resp.json().await.map_err(|e| format!("SkillHub 搜索结果解析失败: {e}"))?;
     Ok(data.results)
 }
 
@@ -113,10 +102,7 @@ pub async fn fetch_index() -> Result<Vec<SkillHubItem>, String> {
     if !resp.status().is_success() {
         return Err(format!("拉取技能索引失败: HTTP {}", resp.status()));
     }
-    let data: IndexResponse = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析技能索引失败: {e}"))?;
+    let data: IndexResponse = resp.json().await.map_err(|e| format!("解析技能索引失败: {e}"))?;
     let items = data.skills;
     // 写入缓存
     if let Ok(mut guard) = INDEX_CACHE.lock() {
@@ -142,11 +128,7 @@ pub async fn download_zip(slug: &str) -> Result<Vec<u8>, String> {
     }
     // 2. 回退主站 API
     let api_url = format!("{}/download?slug={}", API_BASE, urlencoding::encode(slug));
-    let resp = c
-        .get(&api_url)
-        .send()
-        .await
-        .map_err(|e| format!("主站下载请求失败: {e}"))?;
+    let resp = c.get(&api_url).send().await.map_err(|e| format!("主站下载请求失败: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("下载失败: HTTP {}", resp.status()));
     }
@@ -199,9 +181,7 @@ fn extract_zip(zip_bytes: &[u8], target_dir: &Path) -> Result<(), String> {
     let strip_prefix = detect_single_root_dir(&names);
 
     for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
-            .map_err(|e| format!("读取 zip 条目失败: {e}"))?;
+        let mut file = archive.by_index(i).map_err(|e| format!("读取 zip 条目失败: {e}"))?;
 
         let raw_name = file.name().to_string();
         // 安全检查：防止路径穿越
@@ -230,10 +210,8 @@ fn extract_zip(zip_bytes: &[u8], target_dir: &Path) -> Result<(), String> {
             if let Some(parent) = out_path.parent() {
                 std::fs::create_dir_all(parent).ok();
             }
-            let mut outfile = std::fs::File::create(&out_path)
-                .map_err(|e| format!("创建文件失败 {relative}: {e}"))?;
-            std::io::copy(&mut file, &mut outfile)
-                .map_err(|e| format!("写入文件失败 {relative}: {e}"))?;
+            let mut outfile = std::fs::File::create(&out_path).map_err(|e| format!("创建文件失败 {relative}: {e}"))?;
+            std::io::copy(&mut file, &mut outfile).map_err(|e| format!("写入文件失败 {relative}: {e}"))?;
         }
     }
     Ok(())

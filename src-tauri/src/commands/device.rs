@@ -20,8 +20,7 @@ pub(crate) fn get_or_create_key() -> Result<(String, String, SigningKey), String
 
     if path.exists() {
         let content = fs::read_to_string(&path).map_err(|e| format!("读取设备密钥失败: {e}"))?;
-        let json: Value =
-            serde_json::from_str(&content).map_err(|e| format!("解析设备密钥失败: {e}"))?;
+        let json: Value = serde_json::from_str(&content).map_err(|e| format!("解析设备密钥失败: {e}"))?;
 
         let device_id = json["deviceId"].as_str().unwrap_or("").to_string();
         let pub_b64 = json["publicKey"].as_str().unwrap_or("").to_string();
@@ -52,15 +51,15 @@ pub(crate) fn get_or_create_key() -> Result<(String, String, SigningKey), String
     let pub_b64 = base64_url_encode(&pub_bytes);
     let secret_hex = hex::encode(signing_key.to_bytes());
 
-    let json = serde_json::json!({
+    let json = crate::jv!({
         "deviceId": device_id,
         "publicKey": pub_b64,
         "secretKey": secret_hex,
     });
 
     let _ = fs::create_dir_all(&dir);
-    fs::write(&path, serde_json::to_string_pretty(&json).unwrap())
-        .map_err(|e| format!("保存设备密钥失败: {e}"))?;
+    let serialized = serde_json::to_string_pretty(&json).map_err(|e| format!("序列化设备密钥失败: {e}"))?;
+    fs::write(&path, serialized).map_err(|e| format!("保存设备密钥失败: {e}"))?;
 
     Ok((device_id, pub_b64, signing_key))
 }
@@ -91,15 +90,11 @@ mod hex {
 /// gateway_token: token 模式认证凭据（可为空）
 /// gateway_password: password 模式认证凭据（可为空，新增）
 #[tauri::command]
-pub fn create_connect_frame(
-    nonce: String,
-    gateway_token: String,
-    gateway_password: Option<String>,
-) -> Result<Value, String> {
+pub fn create_connect_frame(nonce: String, gateway_token: String, gateway_password: Option<String>) -> Result<Value, String> {
     let (device_id, pub_b64, signing_key) = get_or_create_key()?;
     let signed_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .map_err(|e| format!("设备握手序列化失败: {e}"))?
         .as_millis();
 
     let platform = std::env::consts::OS; // "windows" | "macos" | "linux"
@@ -131,42 +126,42 @@ pub fn create_connect_frame(
     // 构建 auth 对象：根据有无 token/password 选择填充字段
     let password = gateway_password.unwrap_or_default();
     let auth = if !gateway_token.is_empty() {
-        serde_json::json!({ "token": gateway_token })
+        crate::jv!({ "token": gateway_token })
     } else if !password.is_empty() {
-        serde_json::json!({ "password": password })
+        crate::jv!({ "password": password })
     } else {
-        serde_json::json!({})
+        crate::jv!({})
     };
 
-    let frame = serde_json::json!({
+    let frame = crate::jv!({
         "type": "req",
         "id": format!("connect-{:08x}-{:04x}", signed_at as u32, rand::random::<u16>()),
         "method": "connect",
-        "params": {
+        "params": crate::jv!({
             // 协议握手范围声明：下限 3 用于继续兼容历史内核，上限 4 启用新版增量 delta 协议。
             "minProtocol": 3,
             "maxProtocol": 4,
-            "client": {
+            "client": crate::jv!({
                 "id": "openclaw-control-ui",
                 "version": env!("CARGO_PKG_VERSION"),
                 "platform": platform,
                 "deviceFamily": device_family,
                 "mode": "ui"
-            },
+            }),
             "role": "operator",
             "scopes": SCOPES,
             "caps": ["tool-events"],
             "auth": auth,
-            "device": {
+            "device": crate::jv!({
                 "id": device_id,
                 "publicKey": pub_b64,
                 "signedAt": signed_at as u64,
                 "nonce": nonce,
                 "signature": sig_b64,
-            },
+            }),
             "locale": "zh-CN",
             "userAgent": format!("ZhizhuaWorkbench/{}", env!("CARGO_PKG_VERSION")),
-        }
+        })
     });
 
     Ok(frame)

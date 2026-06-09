@@ -89,7 +89,7 @@ export async function render() {
     // 技能数量
     page.querySelector('[data-codex-skills]').innerHTML = `<div>${status?.skillCount ?? 0} 个编码技能已预置</div>`
   } catch {
-    page.querySelector('[data-codex-bin]').textContent = '等待构建器注入'
+    page.querySelector('[data-codex-bin]').textContent = '未检测到内置 Codex 可执行文件'
   }
 
   return page

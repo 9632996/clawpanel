@@ -39,7 +39,7 @@ fn is_unsafe_path(path: &str) -> bool {
 async fn agent_workspace(agent_id: &str) -> Result<PathBuf, String> {
     // 先查缓存
     {
-        let cache = WORKSPACE_CACHE.lock().unwrap();
+        let cache = WORKSPACE_CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if cache.is_fresh() {
             if let Some(ws) = cache.map.get(agent_id) {
                 return Ok(ws.clone());
@@ -52,10 +52,8 @@ async fn agent_workspace(agent_id: &str) -> Result<PathBuf, String> {
 
     // 缓存过期或为空，从 openclaw.json 读取
     let config_path = super::openclaw_dir().join("openclaw.json");
-    let content =
-        fs::read_to_string(&config_path).map_err(|e| format!("读取 openclaw.json 失败: {e}"))?;
-    let config: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("解析 JSON 失败: {e}"))?;
+    let content = fs::read_to_string(&config_path).map_err(|e| format!("读取 openclaw.json 失败: {e}"))?;
+    let config: serde_json::Value = serde_json::from_str(&content).map_err(|e| format!("解析 JSON 失败: {e}"))?;
 
     let default_workspace = config
         .get("agents")
@@ -71,11 +69,7 @@ async fn agent_workspace(agent_id: &str) -> Result<PathBuf, String> {
     // main agent 使用默认 workspace
     new_map.insert("main".to_string(), default_workspace);
 
-    if let Some(arr) = config
-        .get("agents")
-        .and_then(|a| a.get("list"))
-        .and_then(|l| l.as_array())
-    {
+    if let Some(arr) = config.get("agents").and_then(|a| a.get("list")).and_then(|l| l.as_array()) {
         for a in arr {
             let id = a.get("id").and_then(|v| v.as_str()).unwrap_or("");
             if id.is_empty() {
@@ -89,10 +83,7 @@ async fn agent_workspace(agent_id: &str) -> Result<PathBuf, String> {
                     if id == "main" {
                         super::openclaw_dir().join("workspace")
                     } else {
-                        super::openclaw_dir()
-                            .join("agents")
-                            .join(id)
-                            .join("workspace")
+                        super::openclaw_dir().join("agents").join(id).join("workspace")
                     }
                 });
             // 解析符号链接，确保软连接的 workspace 也能正确访问
@@ -108,7 +99,7 @@ async fn agent_workspace(agent_id: &str) -> Result<PathBuf, String> {
 
     let result = new_map.get(agent_id).cloned();
     {
-        let mut cache = WORKSPACE_CACHE.lock().unwrap();
+        let mut cache = WORKSPACE_CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         cache.map = new_map;
         cache.fetched_at = now;
     }
@@ -136,10 +127,7 @@ async fn memory_dir_for_agent(agent_id: &str, category: &str) -> Result<PathBuf,
 }
 
 #[tauri::command]
-pub async fn list_memory_files(
-    category: String,
-    agent_id: Option<String>,
-) -> Result<Vec<String>, String> {
+pub async fn list_memory_files(category: String, agent_id: Option<String>) -> Result<Vec<String>, String> {
     let aid = agent_id.as_deref().unwrap_or("main");
     let dir = memory_dir_for_agent(aid, &category).await?;
     if !dir.exists() {
@@ -152,12 +140,7 @@ pub async fn list_memory_files(
     Ok(files)
 }
 
-fn collect_files(
-    base: &PathBuf,
-    dir: &PathBuf,
-    files: &mut Vec<String>,
-    category: &str,
-) -> Result<(), String> {
+fn collect_files(base: &PathBuf, dir: &PathBuf, files: &mut Vec<String>, category: &str) -> Result<(), String> {
     let entries = fs::read_dir(dir).map_err(|e| format!("读取目录失败: {e}"))?;
 
     for entry in entries.flatten() {
@@ -250,10 +233,7 @@ pub async fn delete_memory_file(path: String, agent_id: Option<String>) -> Resul
 }
 
 #[tauri::command]
-pub async fn export_memory_zip(
-    category: String,
-    agent_id: Option<String>,
-) -> Result<String, String> {
+pub async fn export_memory_zip(category: String, agent_id: Option<String>) -> Result<String, String> {
     let aid = agent_id.as_deref().unwrap_or("main");
     let dir = memory_dir_for_agent(aid, &category).await?;
     if !dir.exists() {
@@ -267,26 +247,18 @@ pub async fn export_memory_zip(
     }
 
     let tmp_dir = std::env::temp_dir();
-    let zip_name = format!(
-        "openclaw-{}-{}.zip",
-        category,
-        chrono::Local::now().format("%Y%m%d-%H%M%S")
-    );
+    let zip_name = format!("openclaw-{}-{}.zip", category, chrono::Local::now().format("%Y%m%d-%H%M%S"));
     let zip_path = tmp_dir.join(&zip_name);
 
     let file = fs::File::create(&zip_path).map_err(|e| format!("创建 zip 失败: {e}"))?;
     let mut zip = zip::ZipWriter::new(file);
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     for rel_path in &files {
         let full_path = dir.join(rel_path);
-        let content =
-            fs::read_to_string(&full_path).map_err(|e| format!("读取 {rel_path} 失败: {e}"))?;
-        zip.start_file(rel_path, options)
-            .map_err(|e| format!("写入 zip 失败: {e}"))?;
-        zip.write_all(content.as_bytes())
-            .map_err(|e| format!("写入内容失败: {e}"))?;
+        let content = fs::read_to_string(&full_path).map_err(|e| format!("读取 {rel_path} 失败: {e}"))?;
+        zip.start_file(rel_path, options).map_err(|e| format!("写入 zip 失败: {e}"))?;
+        zip.write_all(content.as_bytes()).map_err(|e| format!("写入内容失败: {e}"))?;
     }
 
     zip.finish().map_err(|e| format!("完成 zip 失败: {e}"))?;
